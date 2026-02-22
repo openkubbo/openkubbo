@@ -408,14 +408,105 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("GITHUB")
             settingsCard {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Under Construction")
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Connect your GitHub account")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Text("GitHub settings are under construction.")
+                    Text("Use a GitHub OAuth App Client ID to sign in with Device Flow.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
+
+                    TextField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
+                        .textFieldStyle(.roundedBorder)
+
+                    if viewModel.isGitHubConnected {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Connected")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                                Text(viewModel.githubDisplayName)
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(primaryTextColor)
+                            }
+
+                            Spacer()
+
+                            Button("Disconnect") {
+                                viewModel.logoutGitHub()
+                            }
+                        }
+                    } else {
+                        Button {
+                            Task {
+                                await viewModel.loginWithGitHub()
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                if viewModel.isGitHubAuthenticating {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                }
+                                Text(viewModel.isGitHubAuthenticating ? "Authorizing..." : "Login with GitHub")
+                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            }
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(
+                            viewModel.isGitHubAuthenticating ||
+                            viewModel.githubClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        )
+
+                        if viewModel.githubClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("Paste your GitHub OAuth App Client ID to enable login.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(tertiaryTextColor)
+                        }
+                    }
+
+                    if viewModel.isGitHubAuthenticating || viewModel.githubUserCode != nil {
+                        Button("Open GitHub Verification Page") {
+                            let fallbackURL = URL(string: "https://github.com/login/device")
+                            if let verificationURL = viewModel.githubVerificationURL ?? fallbackURL {
+                                NSWorkspace.shared.open(verificationURL)
+                            }
+                        }
+                    }
+
+                    if let userCode = viewModel.githubUserCode {
+                        HStack(spacing: 8) {
+                            Text("Code:")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+
+                            Text(userCode)
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                .foregroundStyle(primaryTextColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(cardFillColor)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .stroke(cardStrokeColor, lineWidth: 1)
+                                        )
+                                )
+                        }
+                    }
+
+                    Text(viewModel.githubStatusMessage)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    if let githubErrorMessage = viewModel.githubErrorMessage {
+                        Text(githubErrorMessage)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color.red.opacity(0.85))
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)

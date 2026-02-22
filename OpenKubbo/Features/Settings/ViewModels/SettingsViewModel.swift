@@ -27,6 +27,14 @@ final class SettingsViewModel: ObservableObject {
     @Published var automaticErrorAnalysis: Bool { didSet { persist() } }
     @Published var syncProfilesEnabled: Bool { didSet { persist() } }
 
+    @Published var githubClientID: String { didSet { persist() } }
+    @Published private(set) var isGitHubAuthenticating = false
+    @Published private(set) var githubStatusMessage = "Not connected."
+    @Published private(set) var githubErrorMessage: String?
+    @Published private(set) var githubUserCode: String?
+    @Published private(set) var githubVerificationURL: URL?
+    @Published private(set) var githubAuthenticatedUser: GitHubAuthenticatedUser?
+
     let executablePath = "/usr/local/bin/codex"
     let apiKeyMasked = "••••••••••••••••"
     let models = ["Gemini 1.5 Pro", "GPT-4.1", "Claude 3.7 Sonnet"]
@@ -35,14 +43,20 @@ final class SettingsViewModel: ObservableObject {
 
     private let repository: SettingsRepository
     private let themeStore: AppThemeStore
+    private let gitHubOAuthService: GitHubOAuthServicing
+    private let gitHubTokenStore: GitHubTokenStoring
 
     init(
         repository: SettingsRepository,
         themeStore: AppThemeStore,
+        gitHubOAuthService: GitHubOAuthServicing,
+        gitHubTokenStore: GitHubTokenStoring,
         shortcutGroups: [ShortcutGroup]? = nil
     ) {
         self.repository = repository
         self.themeStore = themeStore
+        self.gitHubOAuthService = gitHubOAuthService
+        self.gitHubTokenStore = gitHubTokenStore
         self.shortcutGroups = shortcutGroups ?? ShortcutGroup.defaults
 
         let snapshot = repository.load()
@@ -63,7 +77,10 @@ final class SettingsViewModel: ObservableObject {
         self.automaticErrorAnalysis = snapshot.automaticErrorAnalysis
         self.syncProfilesEnabled = snapshot.syncProfilesEnabled
 
+        self.githubClientID = snapshot.githubClientID ?? ""
+
         themeStore.apply(snapshot.selectedTheme)
+        restoreGitHubSessionIfPossible()
     }
 
     var visibleTabs: [SettingsTab] {
@@ -82,6 +99,19 @@ final class SettingsViewModel: ObservableObject {
         }
 
         return visibleTabs.first ?? .general
+    }
+
+    var isGitHubConnected: Bool {
+        githubAuthenticatedUser != nil
+    }
+
+    var githubDisplayName: String {
+        if let name = githubAuthenticatedUser?.name,
+           !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return name
+        }
+
+        return githubAuthenticatedUser?.login ?? ""
     }
 
     func selectTab(_ tab: SettingsTab) {
@@ -103,7 +133,103 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    func loginWithGitHub() async {
+        let clientID = githubClientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clientID.isEmpty else {
+            githubErrorMessage = "Enter your GitHub OAuth App Client ID."
+            return
+        }
+
+        if isGitHubAuthenticating {
+            return
+        }
+
+        githubErrorMessage = nil
+        githubUserCode = nil
+        githubVerificationURL = nil
+        githubStatusMessage = "Requesting GitHub device code..."
+        isGitHubAuthenticating = true
+
+        defer {
+            isGitHubAuthenticating = false
+        }
+
+        do {
+            let deviceCode = try await gitHubOAuthService.requestDeviceCode(
+                clientID: clientID,
+                scope: "read:user user:email"
+            )
+
+            githubUserCode = deviceCode.userCode
+            githubVerificationURL = URL(string: deviceCode.verificationURI)
+            githubStatusMessage = "Open GitHub and enter the code to continue."
+
+            let accessToken = try await gitHubOAuthService.pollAccessToken(
+                clientID: clientID,
+                deviceCode: deviceCode.deviceCode,
+                interval: deviceCode.interval,
+                expiresIn: deviceCode.expiresIn
+            )
+
+            gitHubTokenStore.save(token: accessToken)
+
+            let user = try await gitHubOAuthService.fetchViewer(accessToken: accessToken)
+            githubAuthenticatedUser = user
+            githubUserCode = nil
+            githubVerificationURL = nil
+            githubStatusMessage = "Connected as \(user.login)."
+        } catch {
+            gitHubTokenStore.clear()
+            githubAuthenticatedUser = nil
+            githubStatusMessage = "Not connected."
+
+            if let oauthError = error as? GitHubOAuthError {
+                githubErrorMessage = oauthError.errorDescription
+            } else {
+                githubErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    func logoutGitHub() {
+        gitHubTokenStore.clear()
+        githubAuthenticatedUser = nil
+        githubUserCode = nil
+        githubVerificationURL = nil
+        githubErrorMessage = nil
+        githubStatusMessage = "Not connected."
+    }
+
+    private func restoreGitHubSessionIfPossible() {
+        guard let token = gitHubTokenStore.token(), !token.isEmpty else {
+            return
+        }
+
+        githubStatusMessage = "Restoring GitHub session..."
+
+        Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                let user = try await self.gitHubOAuthService.fetchViewer(accessToken: token)
+                await MainActor.run {
+                    self.githubAuthenticatedUser = user
+                    self.githubStatusMessage = "Connected as \(user.login)."
+                }
+            } catch {
+                self.gitHubTokenStore.clear()
+                await MainActor.run {
+                    self.githubAuthenticatedUser = nil
+                    self.githubStatusMessage = "Not connected."
+                }
+            }
+        }
+    }
+
     private func persist() {
+        let normalizedGitHubClientID = githubClientID
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
         repository.save(
             SettingsSnapshot(
                 selectedTheme: selectedThemeMode.appTheme,
@@ -117,7 +243,8 @@ final class SettingsViewModel: ObservableObject {
                 temperature: temperature,
                 terminalSuggestionsEnabled: terminalSuggestionsEnabled,
                 automaticErrorAnalysis: automaticErrorAnalysis,
-                syncProfilesEnabled: syncProfilesEnabled
+                syncProfilesEnabled: syncProfilesEnabled,
+                githubClientID: normalizedGitHubClientID.isEmpty ? nil : normalizedGitHubClientID
             )
         )
     }

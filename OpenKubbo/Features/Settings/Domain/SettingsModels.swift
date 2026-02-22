@@ -125,6 +125,8 @@ struct SettingsSnapshot: Codable, Equatable {
     var automaticErrorAnalysis: Bool
     var syncProfilesEnabled: Bool
 
+    var githubClientID: String? = nil
+
     static let defaultValue = SettingsSnapshot(
         selectedTheme: .automatic,
         launchAtLogin: false,
