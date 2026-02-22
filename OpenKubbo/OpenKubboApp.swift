@@ -61,7 +61,7 @@ struct OpenKubboApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Settings", id: "settings") {
-            SettingsWindowView()
+            Text("Open Kubbo")
         }
         .defaultSize(width: 720, height: 520)
         .windowResizability(.contentSize)
