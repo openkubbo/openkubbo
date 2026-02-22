@@ -389,34 +389,13 @@ struct RepositoryPanelView: View {
     // MARK: - Heatmap
 
     private var heatmapSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("last 12 months")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(secondaryTextColor)
-
-                Spacer()
-            }
-
+        VStack(alignment: .leading, spacing: 0) {
             ContributionHeatmap(isDarkTheme: isDarkTheme)
                 .frame(maxWidth: .infinity)
-                .frame(height: 100)
-
-            HStack {
-                Text("Nov 2024")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(secondaryTextColor)
-
-                Spacer()
-
-                Text("Dec 2025")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundStyle(secondaryTextColor)
-            }
-            .padding(.top, 2)
+                .frame(height: 116)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(cardFillColor)
@@ -745,61 +724,225 @@ struct RepositoryPanelView: View {
 private struct ContributionHeatmap: View {
     var isDarkTheme: Bool
 
-    private let weeks = 53
-    private let days = 7
+    static let weeks = 28
+    static let days = 7
+    static let dateRange: (start: Date, end: Date) = {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = calendar.startOfDay(for: Date())
+        let weekday = calendar.component(.weekday, from: today)
+        let daysSinceSunday = weekday - 1
+        let thisWeekStart = calendar.date(byAdding: .day, value: -daysSinceSunday, to: today) ?? today
+        let firstWeekStart = calendar.date(byAdding: .day, value: -((weeks - 1) * 7), to: thisWeekStart) ?? thisWeekStart
+        return (start: firstWeekStart, end: today)
+    }()
 
-    private func intensity(week: Int, day: Int) -> Double {
-        let seed = (week * 7 + day + 17) % 13
-        let isWeekend = day >= 5
-        let base: [Double] = [0, 0, 0, 0.25, 0.5, 0.75, 1.0, 0.5, 0.25, 0, 0, 0.75, 0.5]
-        var value = base[seed]
-        if isWeekend {
-            value *= 0.5
-        }
-        if week % 6 == 2 {
-            value = min(1.0, value + 0.4)
-        }
-        if week % 11 == 5 {
-            value = min(1.0, value + 0.6)
-        }
-        return value
+    private let calendar = Calendar(identifier: .gregorian)
+
+    private var weeks: Int { Self.weeks }
+    private var days: Int { Self.days }
+    private var firstDate: Date { Self.dateRange.start }
+    private var lastDate: Date { Self.dateRange.end }
+    private let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM"
+        return formatter
+    }()
+
+    private let lightPalette: [Color] = [
+        Color(red: 0.92, green: 0.93, blue: 0.94),
+        Color(red: 0.61, green: 0.91, blue: 0.66),
+        Color(red: 0.25, green: 0.77, blue: 0.39),
+        Color(red: 0.19, green: 0.63, blue: 0.31),
+        Color(red: 0.13, green: 0.43, blue: 0.22)
+    ]
+
+    private let darkPalette: [Color] = [
+        Color(red: 0.09, green: 0.11, blue: 0.13),
+        Color(red: 0.05, green: 0.27, blue: 0.16),
+        Color(red: 0.00, green: 0.43, blue: 0.20),
+        Color(red: 0.15, green: 0.65, blue: 0.25),
+        Color(red: 0.22, green: 0.83, blue: 0.33)
+    ]
+
+    private struct MonthMarker: Identifiable {
+        let id: Int
+        let week: Int
+        let label: String
     }
 
-    private func cellColor(intensity: Double) -> Color {
-        guard intensity > 0 else {
-            return isDarkTheme
-                ? Color(red: 0.20, green: 0.21, blue: 0.26)
-                : Color(red: 0.91, green: 0.91, blue: 0.93)
+    private func dateFor(week: Int, day: Int) -> Date {
+        let offset = (week * 7) + day
+        return calendar.date(byAdding: .day, value: offset, to: firstDate) ?? firstDate
+    }
+
+    private func contributionCount(for date: Date) -> Int {
+        if date > lastDate {
+            return 0
         }
-        let red = 0.39 + intensity * 0.08
-        let green = 0.25 - intensity * 0.05
-        let blue = 0.95 - intensity * 0.12
-        return Color(red: red, green: green, blue: blue).opacity(0.55 + intensity * 0.45)
+
+        let weekday = calendar.component(.weekday, from: date)
+        let month = calendar.component(.month, from: date)
+        let weekOfYear = calendar.component(.weekOfYear, from: date)
+        let ordinal = calendar.ordinality(of: .day, in: .era, for: date) ?? 0
+
+        let weekdayWeight: [Double] = [0.45, 0.92, 1.0, 1.0, 0.95, 0.82, 0.52] // Sun...Sat
+        let monthWeight: [Int: Double] = [
+            1: 0.82, 2: 0.86, 3: 0.95, 4: 1.03, 5: 1.08, 6: 1.0,
+            7: 0.92, 8: 0.88, 9: 1.0, 10: 1.06, 11: 0.98, 12: 0.84
+        ]
+
+        var seed = UInt64(truncatingIfNeeded: (ordinal * 110_351_524 + weekOfYear * 97) &+ 12_345)
+        func randomUnit() -> Double {
+            seed = seed &* 6_364_136_223_846_793_005 &+ 1
+            return Double((seed >> 33) % 1000) / 1000.0
+        }
+
+        let weekdayIndex = max(0, min(6, weekday - 1))
+        let base = weekdayWeight[weekdayIndex] * (monthWeight[month] ?? 1.0)
+        var activity = base * (0.48 + randomUnit() * 0.82)
+
+        if weekOfYear % 7 == 3 {
+            activity += 0.28
+        }
+        if weekOfYear % 11 == 6 {
+            activity += 0.38
+        }
+
+        if randomUnit() < 0.34 {
+            return 0
+        }
+
+        var count = Int((activity * 9.0).rounded())
+
+        if randomUnit() > 0.93 {
+            count += Int(6 + randomUnit() * 12)
+        }
+
+        return max(0, min(count, 24))
+    }
+
+    private func level(for count: Int) -> Int {
+        switch count {
+        case 0:
+            return 0
+        case 1...2:
+            return 1
+        case 3...5:
+            return 2
+        case 6...9:
+            return 3
+        default:
+            return 4
+        }
+    }
+
+    private func cellColor(level: Int) -> Color {
+        let palette = isDarkTheme ? darkPalette : lightPalette
+        let safeIndex = max(0, min(palette.count - 1, level))
+        return palette[safeIndex]
+    }
+
+    private var monthMarkers: [MonthMarker] {
+        var markers: [MonthMarker] = []
+        var previousMonth: Int?
+        var lastWeekPlaced = -10
+
+        for week in 0..<weeks {
+            let date = dateFor(week: week, day: 0)
+            let month = calendar.component(.month, from: date)
+            if month != previousMonth {
+                if week - lastWeekPlaced >= 4 {
+                    markers.append(
+                        MonthMarker(
+                            id: week,
+                            week: week,
+                            label: monthFormatter.string(from: date)
+                        )
+                    )
+                    lastWeekPlaced = week
+                }
+                previousMonth = month
+            }
+        }
+
+        return markers
+    }
+
+    private func squareCellSize(for size: CGSize, gap: CGFloat) -> CGFloat {
+        let widthBased = (size.width - CGFloat(weeks - 1) * gap) / CGFloat(weeks)
+        let heightBased = (size.height - CGFloat(days - 1) * gap) / CGFloat(days)
+        return max(0, min(widthBased, heightBased))
+    }
+
+    private func offsetX(forWeek week: Int, size: CGSize, gap: CGFloat) -> CGFloat {
+        let cellSize = squareCellSize(for: size, gap: gap)
+        let proposed = CGFloat(week) * (cellSize + gap)
+        return min(max(0, proposed), max(0, size.width - 22))
     }
 
     var body: some View {
-        GeometryReader { geometry in
-            let cellWidth = geometry.size.width / CGFloat(weeks)
-            let cellHeight = geometry.size.height / CGFloat(days)
-            let gap: CGFloat = 2
-
-            Canvas { context, _ in
-                for week in 0..<weeks {
-                    for day in 0..<days {
-                        let value = intensity(week: week, day: day)
-                        let color = cellColor(intensity: value)
-                        let x = CGFloat(week) * cellWidth
-                        let y = CGFloat(day) * cellHeight
-                        let rect = CGRect(
-                            x: x + gap / 2,
-                            y: y + gap / 2,
-                            width: cellWidth - gap,
-                            height: cellHeight - gap
-                        )
-                        let path = Path(roundedRect: rect, cornerRadius: 2)
-                        context.fill(path, with: .color(color))
+        VStack(alignment: .leading, spacing: 6) {
+            GeometryReader { geometry in
+                let monthGap: CGFloat = 2
+                ZStack(alignment: .leading) {
+                    ForEach(monthMarkers) { marker in
+                        Text(marker.label)
+                            .font(.system(size: 10, weight: .medium, design: .rounded))
+                            .foregroundStyle(isDarkTheme ? .white.opacity(0.56) : .black.opacity(0.48))
+                            .offset(x: offsetX(forWeek: marker.week, size: geometry.size, gap: monthGap))
                     }
                 }
+            }
+            .frame(height: 13)
+
+            GeometryReader { geometry in
+                let gap: CGFloat = 2
+                let cellSize = squareCellSize(for: geometry.size, gap: gap)
+                let gridWidth = (cellSize * CGFloat(weeks)) + (CGFloat(weeks - 1) * gap)
+                let gridHeight = (cellSize * CGFloat(days)) + (CGFloat(days - 1) * gap)
+                let originX: CGFloat = 0
+                let originY = max(0, (geometry.size.height - gridHeight) / 2)
+
+                Canvas { context, _ in
+                    for week in 0..<weeks {
+                        for day in 0..<days {
+                            let date = dateFor(week: week, day: day)
+                            let count = contributionCount(for: date)
+                            let color = cellColor(level: level(for: count))
+                            let x = originX + CGFloat(week) * (cellSize + gap)
+                            let y = originY + CGFloat(day) * (cellSize + gap)
+                            let rect = CGRect(
+                                x: x,
+                                y: y,
+                                width: cellSize,
+                                height: cellSize
+                            )
+                            let path = Path(roundedRect: rect, cornerRadius: 2)
+                            context.fill(path, with: .color(color))
+                        }
+                    }
+                }
+                .frame(width: gridWidth, height: geometry.size.height, alignment: .leading)
+            }
+            .frame(height: 74)
+
+            HStack(spacing: 6) {
+                Spacer()
+
+                Text("Less")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(isDarkTheme ? .white.opacity(0.56) : .black.opacity(0.48))
+
+                ForEach(0..<5, id: \.self) { level in
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
+                        .fill(cellColor(level: level))
+                        .frame(width: 12, height: 12)
+                }
+
+                Text("More")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(isDarkTheme ? .white.opacity(0.56) : .black.opacity(0.48))
             }
         }
     }
