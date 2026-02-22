@@ -11,6 +11,7 @@ private enum SettingsSection: String, CaseIterable {
     case geral = "Geral"
     case aparência = "Aparência"
     case codexCLI = "Codex CLI"
+    case github = "GitHub"
     case atalhos = "Atalhos"
 }
 
@@ -127,6 +128,7 @@ struct SettingsView: View {
         case .geral:      return "Geral"
         case .aparência:  return "Aparência"
         case .codexCLI:   return "Codex CLI"
+        case .github:     return "Conectar com GitHub"
         case .atalhos:    return "Atalhos de Teclado"
         }
     }
@@ -134,7 +136,7 @@ struct SettingsView: View {
     @ViewBuilder
     private var sectionContent: some View {
         switch selectedSection {
-        case .geral, .aparência, .codexCLI, .atalhos:
+        case .geral, .aparência, .codexCLI, .github, .atalhos:
             Color.clear
         }
     }
@@ -154,6 +156,7 @@ private struct SettingsNavItem: View {
         case .geral:      return "slider.horizontal.3"
         case .aparência:  return "display"
         case .codexCLI:   return "terminal"
+        case .github:     return "link.circle"
         case .atalhos:    return "command"
         }
     }
