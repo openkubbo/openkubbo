@@ -90,16 +90,52 @@ struct SettingsView: View {
 
     private var fakeTrafficLights: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(Color(red: 1.0, green: 0.37, blue: 0.34))
-                .frame(width: 12, height: 12)
-            Circle()
-                .fill(Color(red: 1.0, green: 0.75, blue: 0.18))
-                .frame(width: 12, height: 12)
-            Circle()
-                .fill(Color(red: 0.19, green: 0.78, blue: 0.35))
-                .frame(width: 12, height: 12)
+            Button(action: closeCurrentWindow) {
+                Circle()
+                    .fill(Color(red: 1.0, green: 0.37, blue: 0.34))
+                    .frame(width: 12, height: 12)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: minimizeCurrentWindow) {
+                Circle()
+                    .fill(Color(red: 1.0, green: 0.75, blue: 0.18))
+                    .frame(width: 12, height: 12)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: zoomCurrentWindow) {
+                Circle()
+                    .fill(Color(red: 0.19, green: 0.78, blue: 0.35))
+                    .frame(width: 12, height: 12)
+            }
+            .buttonStyle(.plain)
+
             Spacer(minLength: 0)
+        }
+    }
+
+    private func withCurrentWindow(_ action: (NSWindow) -> Void) {
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            action(window)
+        }
+    }
+
+    private func closeCurrentWindow() {
+        withCurrentWindow { window in
+            window.performClose(nil)
+        }
+    }
+
+    private func minimizeCurrentWindow() {
+        withCurrentWindow { window in
+            window.miniaturize(nil)
+        }
+    }
+
+    private func zoomCurrentWindow() {
+        withCurrentWindow { window in
+            window.performZoom(nil)
         }
     }
 
