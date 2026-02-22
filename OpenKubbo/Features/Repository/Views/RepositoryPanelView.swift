@@ -34,8 +34,8 @@ private struct RepoMetric: Identifiable {
 
 struct RepositoryPanelView: View {
     private let collapsedPanelWidth: CGFloat = 340
-    private let expandedPanelHeight: CGFloat = 760
-    private let expandedRightColumnWidth: CGFloat = 540
+    private let expandedPanelHeight: CGFloat = 704
+    private let expandedRightColumnWidth: CGFloat = 420
 
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
@@ -531,7 +531,7 @@ struct RepositoryPanelView: View {
 
     private func detailsColumn(for repo: RepoItem) -> some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 12) {
                 detailActionSection(for: repo)
 
                 branchStatusSection(for: repo)
@@ -540,13 +540,13 @@ struct RepositoryPanelView: View {
 
                 metricsSection(for: repo)
             }
-            .padding(.top, 8)
-            .padding(.bottom, 8)
+            .padding(.top, 4)
+            .padding(.bottom, 4)
         }
     }
 
     private func detailActionSection(for repo: RepoItem) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 9) {
             detailNavigationRow(
                 icon: "arrow.up.right.square",
                 title: "Open \(repo.name) in GitHub"
@@ -565,27 +565,27 @@ struct RepositoryPanelView: View {
     }
 
     private func branchStatusSection(for repo: RepoItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Rectangle()
                 .fill(dividerColor)
                 .frame(height: 1)
 
             HStack(spacing: 8) {
                 Image(systemName: "arrow.triangle.branch")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(primaryTextColor)
 
                 Text(repo.branch)
-                    .font(.system(size: 36 / 2, weight: .semibold, design: .rounded))
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(primaryTextColor)
 
                 Text("Up to date")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(secondaryTextColor)
             }
 
             Text("Upstream origin/\(repo.branch) - Fetched 1 min. ago")
-                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(secondaryTextColor)
 
             HStack(spacing: 12) {
@@ -618,22 +618,23 @@ struct RepositoryPanelView: View {
             ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
                 HStack(spacing: 10) {
                     Image(systemName: metric.icon)
-                        .font(.system(size: 18, weight: .medium))
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(secondaryTextColor)
-                        .frame(width: 24, alignment: .center)
+                        .frame(width: 18, alignment: .center)
 
                     Text(metric.title)
-                        .font(.system(size: 38 / 2, weight: .semibold, design: .rounded))
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
+                        .lineLimit(1)
 
                     Spacer()
 
                     if let value = metric.value {
                         Text(formatBadgeValue(value))
-                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .foregroundStyle(primaryTextColor)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
                             .background(
                                 Capsule()
                                     .fill(actionCardFillColor)
@@ -644,7 +645,7 @@ struct RepositoryPanelView: View {
                             )
                     }
                 }
-                .padding(.vertical, 9)
+                .padding(.vertical, 7)
 
                 if index < metrics.count - 1 {
                     Rectangle()
@@ -662,23 +663,24 @@ struct RepositoryPanelView: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 17, weight: .medium))
+                    .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(isAccent ? accentColor : secondaryTextColor)
-                    .frame(width: 24, alignment: .center)
+                    .frame(width: 20, alignment: .center)
 
                 Text(title)
-                    .font(.system(size: 36 / 2, weight: .semibold, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
                     .foregroundStyle(isAccent ? accentColor : primaryTextColor)
+                    .lineLimit(1)
 
                 Spacer(minLength: 10)
 
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(secondaryTextColor)
             }
-            .padding(.vertical, 2)
+            .padding(.vertical, 1)
         }
         .buttonStyle(.plain)
         .repoCursorOnHover()
@@ -688,13 +690,13 @@ struct RepositoryPanelView: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Text(title)
-                    .font(.system(size: 33 / 2, weight: .semibold, design: .rounded))
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
             }
             .foregroundStyle(primaryTextColor)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(
                 Capsule()
                     .fill(actionCardFillColor)
