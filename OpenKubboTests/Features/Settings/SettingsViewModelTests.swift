@@ -28,6 +28,7 @@ struct SettingsViewModelTests {
             repository: repository,
             themeStore: themeStore,
             gitHubOAuthService: StubGitHubOAuthService(),
+            gitHubAPIService: StubGitHubAPIService(),
             gitHubTokenStore: tokenStore
         )
 
@@ -48,6 +49,7 @@ struct SettingsViewModelTests {
             repository: repository,
             themeStore: themeStore,
             gitHubOAuthService: StubGitHubOAuthService(),
+            gitHubAPIService: StubGitHubAPIService(),
             gitHubTokenStore: tokenStore
         )
         viewModel.selectedThemeMode = .light
@@ -70,6 +72,7 @@ struct SettingsViewModelTests {
             repository: repository,
             themeStore: themeStore,
             gitHubOAuthService: StubGitHubOAuthService(),
+            gitHubAPIService: StubGitHubAPIService(),
             gitHubTokenStore: tokenStore
         )
         viewModel.searchText = "Codex"
@@ -88,6 +91,7 @@ struct SettingsViewModelTests {
             repository: repository,
             themeStore: themeStore,
             gitHubOAuthService: StubGitHubOAuthService(),
+            gitHubAPIService: StubGitHubAPIService(),
             gitHubTokenStore: tokenStore
         )
 
@@ -126,6 +130,7 @@ struct SettingsViewModelTests {
             repository: repository,
             themeStore: themeStore,
             gitHubOAuthService: oauthService,
+            gitHubAPIService: StubGitHubAPIService(),
             gitHubTokenStore: tokenStore
         )
         viewModel.githubClientID = "client-id"
@@ -136,6 +141,43 @@ struct SettingsViewModelTests {
         #expect(viewModel.githubAuthenticatedUser?.login == "octocat")
         #expect(tokenStore.token() == "access-token")
         #expect(viewModel.githubErrorMessage == nil)
+        #expect(!viewModel.githubRepositories.isEmpty)
+        #expect(viewModel.githubTargetRepository == "octocat/openkubbo")
+    }
+
+    @Test
+    func createGitHubIssue_createsIssue_whenConnectedAndDataIsValid() async {
+        let repository = InMemorySettingsRepository(snapshot: .defaultValue)
+        let themeStore = AppThemeStore()
+        let tokenStore = InMemoryGitHubTokenStore()
+        let apiService = StubGitHubAPIService(
+            issueResult: .success(
+                GitHubIssueSummary(
+                    number: 42,
+                    title: "Issue Title",
+                    htmlURL: nil
+                )
+            )
+        )
+
+        let viewModel = SettingsViewModel(
+            repository: repository,
+            themeStore: themeStore,
+            gitHubOAuthService: StubGitHubOAuthService(),
+            gitHubAPIService: apiService,
+            gitHubTokenStore: tokenStore
+        )
+        viewModel.githubClientID = "client-id"
+        await viewModel.loginWithGitHub()
+
+        viewModel.githubTargetRepository = "octocat/openkubbo"
+        viewModel.githubIssueTitle = "Issue Title"
+        viewModel.githubIssueBody = "Issue body"
+
+        await viewModel.createGitHubIssue()
+
+        #expect(viewModel.githubActionErrorMessage == nil)
+        #expect(viewModel.githubActionStatusMessage?.contains("Issue #42") == true)
     }
 }
 
@@ -186,6 +228,73 @@ private struct StubGitHubOAuthService: GitHubOAuthServicing {
 
     func fetchViewer(accessToken: String) async throws -> GitHubAuthenticatedUser {
         try viewerResult.get()
+    }
+}
+
+private struct StubGitHubAPIService: GitHubAPIServicing {
+    var repositoriesResult: Result<[GitHubRepository], Error> = .success(
+        [
+            GitHubRepository(
+                id: "octocat/openkubbo",
+                name: "openkubbo",
+                fullName: "octocat/openkubbo",
+                ownerLogin: "octocat",
+                isPrivate: false,
+                defaultBranch: "main",
+                htmlURL: nil
+            )
+        ]
+    )
+    var issueResult: Result<GitHubIssueSummary, Error> = .success(
+        GitHubIssueSummary(
+            number: 1,
+            title: "Issue",
+            htmlURL: nil
+        )
+    )
+    var pullRequestResult: Result<GitHubPullRequestSummary, Error> = .success(
+        GitHubPullRequestSummary(
+            number: 1,
+            title: "PR",
+            htmlURL: nil
+        )
+    )
+    var commitResult: Result<GitHubCommitSummary, Error> = .success(
+        GitHubCommitSummary(
+            sha: "abcdef123456",
+            message: "Commit",
+            htmlURL: nil
+        )
+    )
+
+    func fetchRepositories(accessToken: String) async throws -> [GitHubRepository] {
+        try repositoriesResult.get()
+    }
+
+    func createIssue(accessToken: String, repositoryFullName: String, title: String, body: String?) async throws -> GitHubIssueSummary {
+        try issueResult.get()
+    }
+
+    func createPullRequest(
+        accessToken: String,
+        repositoryFullName: String,
+        title: String,
+        body: String?,
+        head: String,
+        base: String
+    ) async throws -> GitHubPullRequestSummary {
+        try pullRequestResult.get()
+    }
+
+    func commitFile(
+        accessToken: String,
+        repositoryFullName: String,
+        path: String,
+        branch: String,
+        message: String,
+        content: String
+    ) async throws -> GitHubCommitSummary {
+        try commitResult.get()
     }
 }
 

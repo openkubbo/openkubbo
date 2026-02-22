@@ -13,6 +13,7 @@ final class AppContainer: ObservableObject {
         let themeStore = AppThemeStore()
         let repository = UserDefaultsSettingsRepository()
         let gitHubOAuthService = GitHubOAuthService()
+        let gitHubAPIService = GitHubAPIService()
         let gitHubTokenStore = KeychainGitHubTokenStore()
 
         self.themeStore = themeStore
@@ -20,6 +21,7 @@ final class AppContainer: ObservableObject {
             repository: repository,
             themeStore: themeStore,
             gitHubOAuthService: gitHubOAuthService,
+            gitHubAPIService: gitHubAPIService,
             gitHubTokenStore: gitHubTokenStore
         )
         self.menuBarViewModel = MenuBarViewModel()
