@@ -37,10 +37,12 @@ struct OpenKubboApp: App {
                             MenuItemIcon(systemName: item.systemImage, fallback: item.fallbackIcon)
                             Text(item.title)
                         }
+                        .contentShape(Rectangle())
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.plain)
                     .padding(.vertical, 4)
+                    .pointingHandCursor()
                 }
 
                 Divider()
@@ -52,6 +54,7 @@ struct OpenKubboApp: App {
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 4)
+                .pointingHandCursor()
             }
             .padding(10)
             .frame(width: 220)
@@ -87,5 +90,23 @@ private struct MenuItemIcon: View {
             }
         }
         .frame(width: 14, height: 14)
+    }
+}
+
+private struct PointingHandCursorModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { isHovering in
+            if isHovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+}
+
+private extension View {
+    func pointingHandCursor() -> some View {
+        modifier(PointingHandCursorModifier())
     }
 }
