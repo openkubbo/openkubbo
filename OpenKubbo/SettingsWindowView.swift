@@ -16,47 +16,40 @@ struct SettingsWindowView: View {
     @State private var selectedScrollbarBehavior: ScrollbarBehavior = .automatic
 
     var body: some View {
-        ZStack {
-            SettingsPalette.outerBackground
-                .ignoresSafeArea()
+        HStack(spacing: 0) {
+            SettingsSidebar(selectedSection: $selectedSection)
+                .frame(width: 470)
+                .background(SettingsPalette.sidebarBackground)
 
-            HStack(spacing: 0) {
-                SettingsSidebar(selectedSection: $selectedSection)
-                    .frame(width: 470)
-                    .background(SettingsPalette.sidebarBackground)
+            Divider()
+                .overlay(SettingsPalette.divider)
+
+            VStack(spacing: 0) {
+                HStack {
+                    Text(selectedSection.windowTitle)
+                        .font(.system(size: 22, weight: .semibold))
+                        .kerning(-0.6)
+                        .foregroundStyle(SettingsPalette.primaryText)
+
+                    Spacer()
+                }
+                .padding(.horizontal, 42)
+                .padding(.vertical, 34)
 
                 Divider()
                     .overlay(SettingsPalette.divider)
 
-                VStack(spacing: 0) {
-                    HStack {
-                        Text(selectedSection.windowTitle)
-                            .font(.system(size: 22, weight: .semibold))
-                            .kerning(-0.6)
-                            .foregroundStyle(SettingsPalette.primaryText)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal, 42)
-                    .padding(.vertical, 34)
-
-                    Divider()
-                        .overlay(SettingsPalette.divider)
-
-                    mainPane
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-                .background(SettingsPalette.contentBackground)
+                mainPane
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .background(SettingsPalette.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 54, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 54, style: .continuous)
-                    .stroke(SettingsPalette.shellBorder, lineWidth: 1.5)
-            )
-            .padding(10)
+            .background(SettingsPalette.contentBackground)
         }
+        .background(SettingsPalette.surface)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(
+            SettingsWindowChromeConfigurator()
+                .allowsHitTesting(false)
+        )
     }
 
     @ViewBuilder
@@ -283,6 +276,9 @@ private struct AppearancePane: View {
                             Text("Automática")
                                 .font(.system(size: 22, weight: selectedAppearance == .automatic ? .semibold : .medium))
                                 .foregroundStyle(selectedAppearance == .automatic ? SettingsPalette.primaryText : SettingsPalette.secondaryLabel)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .layoutPriority(1)
                                 .padding(.top, 52)
                         }
                         .buttonStyle(.plain)
@@ -646,6 +642,37 @@ private struct ShortcutItem {
     let keys: [String]
 }
 
+private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            configureWindow(for: view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configureWindow(for: nsView)
+        }
+    }
+
+    private func configureWindow(for view: NSView) {
+        guard let window = view.window else { return }
+
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        window.isMovableByWindowBackground = true
+        window.isOpaque = true
+        window.backgroundColor = SettingsPalette.surfaceNSColor
+
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
+    }
+}
+
 private enum SettingsSidebarSection: String, CaseIterable, Identifiable {
     case general = "Geral"
     case appearance = "Aparência"
@@ -743,8 +770,8 @@ private enum ScrollbarBehavior {
 }
 
 private enum SettingsPalette {
-    static let outerBackground = Color(red: 0.86, green: 0.80, blue: 0.90)
     static let surface = Color(red: 0.94, green: 0.95, blue: 0.97)
+    static let surfaceNSColor = NSColor(red: 0.94, green: 0.95, blue: 0.97, alpha: 1.0)
     static let sidebarBackground = Color(red: 0.92, green: 0.93, blue: 0.95)
     static let contentBackground = Color(red: 0.95, green: 0.95, blue: 0.97)
     static let cardBackground = Color(red: 0.94, green: 0.94, blue: 0.96)

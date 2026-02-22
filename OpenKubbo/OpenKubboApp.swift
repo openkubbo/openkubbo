@@ -64,6 +64,7 @@ struct OpenKubboApp: App {
             SettingsWindowView()
         }
         .defaultSize(width: 1400, height: 1020)
+        .windowStyle(.hiddenTitleBar)
     }
 
     private func handleMenuSelection(_ itemID: String) {
