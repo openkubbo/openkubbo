@@ -23,11 +23,167 @@ private struct RepoItem: Identifiable, Equatable {
     let openCommits: Int
 }
 
+private enum RepoDetailDestination: String, Identifiable {
+    case switchWorktree
+    case issues
+    case pullRequests
+    case releases
+    case ciRuns
+    case discussions
+    case tags
+    case branches
+    case contributors
+    case openCommits
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .switchWorktree:
+            return "Switch Worktree"
+        case .issues:
+            return "Issues"
+        case .pullRequests:
+            return "Pull Requests"
+        case .releases:
+            return "Releases"
+        case .ciRuns:
+            return "CI Runs"
+        case .discussions:
+            return "Discussions"
+        case .tags:
+            return "Tags"
+        case .branches:
+            return "Branches"
+        case .contributors:
+            return "Contributors"
+        case .openCommits:
+            return "Open Commits"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .switchWorktree:
+            return "arrow.left.arrow.right"
+        case .issues:
+            return "exclamationmark.circle"
+        case .pullRequests:
+            return "arrow.triangle.pull"
+        case .releases:
+            return "shippingbox"
+        case .ciRuns:
+            return "bolt"
+        case .discussions:
+            return "bubble.left"
+        case .tags:
+            return "tag"
+        case .branches:
+            return "arrow.triangle.branch"
+        case .contributors:
+            return "person.2"
+        case .openCommits:
+            return "clock.arrow.circlepath"
+        }
+    }
+
+    var helperText: String {
+        switch self {
+        case .switchWorktree:
+            return "Choose a worktree"
+        case .issues:
+            return "Issue overview"
+        case .pullRequests:
+            return "Pull request overview"
+        case .releases:
+            return "Release summary"
+        case .ciRuns:
+            return "Recent CI activity"
+        case .discussions:
+            return "Discussion overview"
+        case .tags:
+            return "Tag summary"
+        case .branches:
+            return "Branch summary"
+        case .contributors:
+            return "Contributors overview"
+        case .openCommits:
+            return "Open commit activity"
+        }
+    }
+
+    func mockEntries(repoName: String, branch: String) -> [String] {
+        switch self {
+        case .switchWorktree:
+            return [
+                "Use \(repoName) • \(branch) (active)",
+                "Use \(repoName) • develop",
+                "Create new worktree"
+            ]
+        case .issues:
+            return [
+                "Issue #128 - Improve onboarding copy",
+                "Issue #127 - Adjust light mode contrast",
+                "Issue #122 - Add repository interactions"
+            ]
+        case .pullRequests:
+            return [
+                "PR #91 - Repository third panel",
+                "PR #88 - OAuth flow improvements",
+                "PR #83 - Sidebar text updates"
+            ]
+        case .releases:
+            return [
+                "v1.6.2 - UI adjustments",
+                "v1.6.1 - GitHub integration polish",
+                "v1.6.0 - Repository panel"
+            ]
+        case .ciRuns:
+            return [
+                "macOS Build - Success",
+                "SwiftLint - Success",
+                "Unit Tests - Success"
+            ]
+        case .discussions:
+            return [
+                "Feature request: Workspace presets",
+                "Feedback: OAuth connect flow",
+                "Question: Repository default branch"
+            ]
+        case .tags:
+            return [
+                "latest",
+                "stable",
+                "preview"
+            ]
+        case .branches:
+            return [
+                branch,
+                "develop",
+                "feature/repository-panel"
+            ]
+        case .contributors:
+            return [
+                "Tarik Villalobos",
+                "OpenKubbo Team",
+                "Community Contributors"
+            ]
+        case .openCommits:
+            return [
+                "feat: repository overlay interactions",
+                "style: improve light theme contrast",
+                "fix: github device flow copy"
+            ]
+        }
+    }
+}
+
 private struct RepoMetric: Identifiable {
     let id: String
     let icon: String
     let title: String
     let value: Int?
+    let destination: RepoDetailDestination
 }
 
 // MARK: - Main View
@@ -45,6 +201,7 @@ struct RepositoryPanelView: View {
     @State private var hostWindow: NSWindow?
     @State private var selectedFilter: RepoFilter = .all
     @State private var selectedRepoID: String?
+    @State private var selectedDetailDestination: RepoDetailDestination?
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -340,6 +497,9 @@ struct RepositoryPanelView: View {
         .onChange(of: selectedFilter, initial: false) { _, _ in
             synchronizeSelectedRepo()
         }
+        .onChange(of: selectedRepoID, initial: false) { _, _ in
+            selectedDetailDestination = nil
+        }
     }
 
     // MARK: - Left Column
@@ -471,6 +631,7 @@ struct RepositoryPanelView: View {
                         showDivider: index < filteredRepos.count - 1
                     ) {
                         withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedDetailDestination = nil
                             selectedRepoID = repo.id
                         }
                     }
@@ -509,19 +670,38 @@ struct RepositoryPanelView: View {
     // MARK: - Details Column
 
     private func detailsColumn(for repo: RepoItem) -> some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 12) {
-                detailActionSection(for: repo)
+        ZStack(alignment: .topLeading) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 12) {
+                    detailActionSection(for: repo)
 
-                branchStatusSection(for: repo)
+                    branchStatusSection(for: repo)
 
-                detailNavigationRow(icon: "arrow.left.arrow.right", title: "Switch Worktree") {}
+                    detailNavigationRow(icon: "arrow.left.arrow.right", title: "Switch Worktree") {
+                        openDetailPanel(.switchWorktree)
+                    }
 
-                metricsSection(for: repo)
+                    metricsSection(for: repo)
+                }
+                .padding(.top, 4)
+                .padding(.bottom, 4)
             }
-            .padding(.top, 4)
-            .padding(.bottom, 4)
+            .allowsHitTesting(selectedDetailDestination == nil)
+
+            if let destination = selectedDetailDestination {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(isDarkTheme ? Color.black.opacity(0.22) : Color.black.opacity(0.08))
+                    .padding(.top, 4)
+                    .padding(.bottom, 4)
+                    .transition(.opacity)
+
+                detailOverlayPanel(for: repo, destination: destination)
+                    .padding(.top, 4)
+                    .padding(.bottom, 4)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.18), value: selectedDetailDestination)
     }
 
     private func detailActionSection(for repo: RepoItem) -> some View {
@@ -557,6 +737,7 @@ struct RepositoryPanelView: View {
 
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) {
+                    selectedDetailDestination = nil
                     selectedRepoID = nil
                 }
             } label: {
@@ -606,15 +787,15 @@ struct RepositoryPanelView: View {
 
     private func metricsSection(for repo: RepoItem) -> some View {
         let metrics = [
-            RepoMetric(id: "issues", icon: "exclamationmark.circle", title: "Issues", value: repo.issues),
-            RepoMetric(id: "prs", icon: "arrow.triangle.pull", title: "Pull Requests", value: repo.prs),
-            RepoMetric(id: "releases", icon: "shippingbox", title: "Releases", value: repo.releases),
-            RepoMetric(id: "ci", icon: "bolt", title: "CI Runs", value: repo.ciRuns),
-            RepoMetric(id: "discussions", icon: "bubble.left", title: "Discussions", value: repo.discussions),
-            RepoMetric(id: "tags", icon: "tag", title: "Tags", value: repo.tags),
-            RepoMetric(id: "branches", icon: "arrow.triangle.branch", title: "Branches", value: repo.branches),
-            RepoMetric(id: "contributors", icon: "person.2", title: "Contributors", value: repo.contributors),
-            RepoMetric(id: "commits", icon: "clock.arrow.circlepath", title: "Open Commits", value: repo.openCommits)
+            RepoMetric(id: "issues", icon: "exclamationmark.circle", title: "Issues", value: repo.issues, destination: .issues),
+            RepoMetric(id: "prs", icon: "arrow.triangle.pull", title: "Pull Requests", value: repo.prs, destination: .pullRequests),
+            RepoMetric(id: "releases", icon: "shippingbox", title: "Releases", value: repo.releases, destination: .releases),
+            RepoMetric(id: "ci", icon: "bolt", title: "CI Runs", value: repo.ciRuns, destination: .ciRuns),
+            RepoMetric(id: "discussions", icon: "bubble.left", title: "Discussions", value: repo.discussions, destination: .discussions),
+            RepoMetric(id: "tags", icon: "tag", title: "Tags", value: repo.tags, destination: .tags),
+            RepoMetric(id: "branches", icon: "arrow.triangle.branch", title: "Branches", value: repo.branches, destination: .branches),
+            RepoMetric(id: "contributors", icon: "person.2", title: "Contributors", value: repo.contributors, destination: .contributors),
+            RepoMetric(id: "commits", icon: "clock.arrow.circlepath", title: "Open Commits", value: repo.openCommits, destination: .openCommits)
         ]
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -624,36 +805,43 @@ struct RepositoryPanelView: View {
                 .padding(.bottom, 6)
 
             ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
-                HStack(spacing: 10) {
-                    Image(systemName: metric.icon)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(secondaryTextColor)
-                        .frame(width: 18, alignment: .center)
+                Button {
+                    openDetailPanel(metric.destination)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: metric.icon)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 18, alignment: .center)
 
-                    Text(metric.title)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(primaryTextColor)
-                        .lineLimit(1)
-
-                    Spacer()
-
-                    if let value = metric.value {
-                        Text(formatBadgeValue(value))
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        Text(metric.title)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(primaryTextColor)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                Capsule()
-                                    .fill(actionCardFillColor)
-                                    .overlay(
-                                        Capsule()
-                                            .stroke(actionCardStrokeColor, lineWidth: 1)
-                                    )
-                            )
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        if let value = metric.value {
+                            Text(formatBadgeValue(value))
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(
+                                    Capsule()
+                                        .fill(actionCardFillColor)
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(actionCardStrokeColor, lineWidth: 1)
+                                        )
+                                )
+                        }
                     }
+                    .padding(.vertical, 7)
+                    .contentShape(Rectangle())
                 }
-                .padding(.vertical, 7)
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
 
                 if index < metrics.count - 1 {
                     Rectangle()
@@ -662,6 +850,111 @@ struct RepositoryPanelView: View {
                 }
             }
         }
+    }
+
+    private func detailOverlayPanel(for repo: RepoItem, destination: RepoDetailDestination) -> some View {
+        let entries = destination.mockEntries(repoName: repo.name, branch: repo.branch)
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: destination.icon)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(width: 20, alignment: .center)
+
+                Text(destination.title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Button(action: closeDetailPanel) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 24, height: 24)
+                        .background(
+                            Circle()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Circle()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+            }
+
+            Text("\(destination.helperText) for \(repo.name).")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+
+            VStack(spacing: 0) {
+                ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(accentColor)
+                            .frame(width: 6, height: 6)
+
+                        Text(entry)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .lineLimit(1)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 10)
+
+                    if index < entries.count - 1 {
+                        Rectangle()
+                            .fill(dividerColor)
+                            .frame(height: 1)
+                            .padding(.horizontal, 10)
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(actionCardFillColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                    )
+            )
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Text(repo.name)
+                Spacer()
+                Text("Level 3")
+            }
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(secondaryTextColor)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+        .shadow(
+            color: isDarkTheme ? .black.opacity(0.34) : .black.opacity(0.10),
+            radius: 14,
+            x: 0,
+            y: 8
+        )
     }
 
     private func detailNavigationRow(
@@ -724,10 +1017,23 @@ struct RepositoryPanelView: View {
         hostWindow?.close()
     }
 
+    private func openDetailPanel(_ destination: RepoDetailDestination) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            selectedDetailDestination = destination
+        }
+    }
+
+    private func closeDetailPanel() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            selectedDetailDestination = nil
+        }
+    }
+
     private func synchronizeSelectedRepo() {
         guard let selectedRepoID else { return }
         if !filteredRepos.contains(where: { $0.id == selectedRepoID }) {
             withAnimation(.easeInOut(duration: 0.18)) {
+                self.selectedDetailDestination = nil
                 self.selectedRepoID = nil
             }
         }
