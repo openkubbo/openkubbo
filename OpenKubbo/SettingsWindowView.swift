@@ -42,11 +42,6 @@ struct SettingsWindowView: View {
             .background(SettingsPalette.contentBackground)
         }
         .background(SettingsPalette.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .stroke(SettingsPalette.shellBorder, lineWidth: 1)
-        )
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(
             SettingsWindowChromeConfigurator()
@@ -251,6 +246,8 @@ private struct SettingsPanePlaceholder: View {
 }
 
 private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+    private static let fixedWindowSize = NSSize(width: 860, height: 640)
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
         DispatchQueue.main.async {
@@ -271,9 +268,15 @@ private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
+        window.styleMask.remove(.resizable)
         window.isMovableByWindowBackground = true
         window.isOpaque = true
         window.backgroundColor = SettingsPalette.surfaceNSColor
+        window.minSize = Self.fixedWindowSize
+        window.maxSize = Self.fixedWindowSize
+        if window.frame.size != Self.fixedWindowSize {
+            window.setContentSize(Self.fixedWindowSize)
+        }
 
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
