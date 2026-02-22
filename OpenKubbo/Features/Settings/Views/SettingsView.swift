@@ -77,6 +77,46 @@ struct SettingsView: View {
         Color(red: 0.39, green: 0.41, blue: 0.93).opacity(0.45)
     }
 
+    private var githubSectionFillColor: Color {
+        isDarkTheme ? Color.white.opacity(0.03) : Color(red: 0.96, green: 0.97, blue: 0.99)
+    }
+
+    private var githubSectionStrokeColor: Color {
+        isDarkTheme ? Color.white.opacity(0.12) : Color.black.opacity(0.11)
+    }
+
+    private var githubInputFillColor: Color {
+        isDarkTheme ? Color(red: 0.12, green: 0.14, blue: 0.18) : .white
+    }
+
+    private var githubInputStrokeColor: Color {
+        isDarkTheme ? Color.white.opacity(0.16) : Color.black.opacity(0.12)
+    }
+
+    private var githubPrimaryButtonTint: Color {
+        isDarkTheme
+        ? Color(red: 0.34, green: 0.72, blue: 0.31)
+        : Color(red: 0.19, green: 0.53, blue: 0.88)
+    }
+
+    private var githubSecondaryButtonFillColor: Color {
+        isDarkTheme
+        ? Color(red: 0.26, green: 0.28, blue: 0.34)
+        : Color(red: 0.86, green: 0.90, blue: 0.96)
+    }
+
+    private var githubSecondaryButtonTextColor: Color {
+        isDarkTheme
+        ? Color.white.opacity(0.90)
+        : Color(red: 0.15, green: 0.24, blue: 0.37)
+    }
+
+    private var githubSecondaryButtonStrokeColor: Color {
+        isDarkTheme
+        ? Color.white.opacity(0.16)
+        : Color(red: 0.69, green: 0.75, blue: 0.84)
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -420,167 +460,239 @@ struct SettingsView: View {
 
                     githubClientIDInput
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("How to connect")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
+                    githubSectionCard {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("How to connect")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
 
-                        Text("1. Click Login with GitHub.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(secondaryTextColor)
+                            Text("1. Click Login with GitHub.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
 
-                        Text("2. Click Open GitHub Device Page.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(secondaryTextColor)
+                            Text("2. Click Open GitHub Device Page.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
 
-                        Text("3. Enter the code shown below and authorize.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(secondaryTextColor)
+                            Text("3. Enter the code shown below and authorize.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                        }
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Device URL")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
+                    githubSectionCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Device URL")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
 
-                        Text(gitHubDeviceURLString)
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(primaryTextColor)
-                            .textSelection(.enabled)
+                            Text(gitHubDeviceURLString)
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(primaryTextColor)
+                                .textSelection(.enabled)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .fill(githubInputFillColor)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .stroke(githubInputStrokeColor, lineWidth: 1)
+                                        )
+                                )
 
-                        HStack(spacing: 10) {
-                            Button("Open Device URL") {
-                                openGitHubDevicePage()
-                            }
+                            HStack(spacing: 10) {
+                                githubSecondaryButton("Open Device URL") {
+                                    openGitHubDevicePage()
+                                }
 
-                            Button("Copy Device URL") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(gitHubDeviceURLString, forType: .string)
+                                githubSecondaryButton("Copy Device URL") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(gitHubDeviceURLString, forType: .string)
+                                }
                             }
                         }
                     }
 
                     if viewModel.isGitHubConnected {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Connected")
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(secondaryTextColor)
-                                Text(viewModel.githubDisplayName)
-                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(primaryTextColor)
-                            }
-
-                            Spacer()
-
-                            VStack(alignment: .trailing, spacing: 8) {
-                                Button("Disconnect") {
-                                    viewModel.logoutGitHub()
+                        githubSectionCard {
+                            HStack(alignment: .top) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Connected")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(secondaryTextColor)
+                                    Text(viewModel.githubDisplayName)
+                                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(primaryTextColor)
                                 }
 
-                                Button("Open GitHub Device Page") {
-                                    openGitHubDevicePage()
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 8) {
+                                    githubSecondaryButton("Disconnect") {
+                                        viewModel.logoutGitHub()
+                                    }
+
+                                    githubSecondaryButton("Open GitHub Device Page") {
+                                        openGitHubDevicePage()
+                                    }
                                 }
                             }
                         }
 
-                        rowDivider
-                        githubRepositoriesSection
-                        rowDivider
-                        githubIssueSection
-                        rowDivider
-                        githubPullRequestSection
-                        rowDivider
-                        githubCommitSection
+                        githubSectionCard {
+                            githubRepositoriesSection
+                        }
+
+                        githubSectionCard {
+                            githubIssueSection
+                        }
+
+                        githubSectionCard {
+                            githubPullRequestSection
+                        }
+
+                        githubSectionCard {
+                            githubCommitSection
+                        }
                     } else {
-                        Button {
-                            Task {
-                                await viewModel.loginWithGitHub()
-                            }
-                        } label: {
-                            HStack(spacing: 8) {
-                                if viewModel.isGitHubAuthenticating {
-                                    ProgressView()
-                                        .controlSize(.small)
+                        githubSectionCard {
+                            Button {
+                                Task {
+                                    await viewModel.loginWithGitHub()
                                 }
-                                Text(viewModel.isGitHubAuthenticating ? "Authorizing..." : "Login with GitHub")
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if viewModel.isGitHubAuthenticating {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                    }
+                                    Text(viewModel.isGitHubAuthenticating ? "Authorizing..." : "Login with GitHub")
+                                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                }
+                                .frame(maxWidth: .infinity, alignment: .center)
                             }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.large)
-                        .disabled(
-                            viewModel.isGitHubAuthenticating ||
-                            viewModel.githubClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                        )
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.large)
+                            .tint(githubPrimaryButtonTint)
+                            .disabled(
+                                viewModel.isGitHubAuthenticating ||
+                                viewModel.githubClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            )
 
-                        if viewModel.githubClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Paste your GitHub OAuth App Client ID to enable login.")
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(tertiaryTextColor)
-                        }
+                            if viewModel.githubClientID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                Text("Paste your GitHub OAuth App Client ID to enable login.")
+                                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                                    .foregroundStyle(tertiaryTextColor)
+                            }
 
-                        Button("Open GitHub Device Page") {
-                            openGitHubDevicePage()
+                            githubSecondaryButton("Open GitHub Device Page") {
+                                openGitHubDevicePage()
+                            }
                         }
                     }
 
                     if let userCode = viewModel.githubUserCode {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack(spacing: 8) {
-                                Text("Code:")
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(secondaryTextColor)
+                        githubSectionCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Text("Code:")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(secondaryTextColor)
 
-                                Text(userCode)
-                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                    .foregroundStyle(primaryTextColor)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .fill(cardFillColor)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                    .stroke(cardStrokeColor, lineWidth: 1)
-                                            )
-                                    )
-                            }
+                                    Text(userCode)
+                                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                        .foregroundStyle(primaryTextColor)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                .fill(githubInputFillColor)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                        .stroke(githubInputStrokeColor, lineWidth: 1)
+                                                )
+                                        )
+                                }
 
-                            Button("Copy Code") {
-                                NSPasteboard.general.clearContents()
-                                NSPasteboard.general.setString(userCode, forType: .string)
+                                githubSecondaryButton("Copy Code") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString(userCode, forType: .string)
+                                }
                             }
                         }
                     }
 
-                    Text(viewModel.githubStatusMessage)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(secondaryTextColor)
-
-                    if let githubErrorMessage = viewModel.githubErrorMessage {
-                        Text(githubErrorMessage)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.red.opacity(0.85))
-                    }
-
-                    if let githubActionStatusMessage = viewModel.githubActionStatusMessage {
-                        Text(githubActionStatusMessage)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(viewModel.githubStatusMessage)
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
-                    }
 
-                    if let githubActionErrorMessage = viewModel.githubActionErrorMessage {
-                        Text(githubActionErrorMessage)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(Color.red.opacity(0.85))
+                        if let githubErrorMessage = viewModel.githubErrorMessage {
+                            Text(githubErrorMessage)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.red.opacity(0.85))
+                        }
+
+                        if let githubActionStatusMessage = viewModel.githubActionStatusMessage {
+                            Text(githubActionStatusMessage)
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                        }
+
+                        if let githubActionErrorMessage = viewModel.githubActionErrorMessage {
+                            Text(githubActionErrorMessage)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.red.opacity(0.85))
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
         }
+    }
+
+    private func githubSectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(githubSectionFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(githubSectionStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func githubSecondaryButton(
+        _ title: String,
+        isDisabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .lineLimit(1)
+                .foregroundStyle(githubSecondaryButtonTextColor.opacity(isDisabled ? 0.65 : 1))
+                .padding(.horizontal, 12)
+                .frame(height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(githubSecondaryButtonFillColor.opacity(isDisabled ? (isDarkTheme ? 0.65 : 0.72) : 1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(githubSecondaryButtonStrokeColor.opacity(isDisabled ? 0.6 : 1), lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
     }
 
     private var githubRepositoriesSection: some View {
@@ -590,12 +702,11 @@ struct SettingsView: View {
                 .foregroundStyle(primaryTextColor)
 
             HStack(spacing: 10) {
-                Button("Load Repositories") {
+                githubSecondaryButton("Load Repositories", isDisabled: viewModel.isGitHubLoadingRepositories) {
                     Task {
                         await viewModel.loadGitHubRepositories()
                     }
                 }
-                .disabled(viewModel.isGitHubLoadingRepositories)
 
                 if viewModel.isGitHubLoadingRepositories {
                     ProgressView()
@@ -609,13 +720,32 @@ struct SettingsView: View {
                 .textFieldStyle(.roundedBorder)
 
             if !viewModel.githubRepositorySuggestions.isEmpty {
-                Menu("Use loaded repository") {
+                Menu {
                     ForEach(viewModel.githubRepositorySuggestions, id: \.self) { repository in
                         Button(repository) {
                             viewModel.githubTargetRepository = repository
                         }
                     }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text("Use loaded repository")
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(githubSecondaryButtonTextColor)
+                    .padding(.horizontal, 12)
+                    .frame(height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(githubSecondaryButtonFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(githubSecondaryButtonStrokeColor, lineWidth: 1)
+                            )
+                    )
                 }
+                .menuStyle(.borderlessButton)
 
                 Text("Loaded \(viewModel.githubRepositorySuggestions.count) repositories.")
                     .font(.system(size: 11, weight: .medium, design: .rounded))
@@ -651,6 +781,7 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(githubPrimaryButtonTint)
             .disabled(viewModel.isGitHubCreatingIssue || viewModel.githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
@@ -688,6 +819,7 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(githubPrimaryButtonTint)
             .disabled(viewModel.isGitHubCreatingPR || viewModel.githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
@@ -735,6 +867,7 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
+            .tint(githubPrimaryButtonTint)
             .disabled(viewModel.isGitHubCommittingFile || viewModel.githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
@@ -773,10 +906,10 @@ struct SettingsView: View {
         .frame(height: 34)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(cardFillColor)
+                .fill(githubInputFillColor)
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(cardStrokeColor, lineWidth: 1)
+                        .stroke(githubInputStrokeColor, lineWidth: 1)
                 )
         )
     }
@@ -846,13 +979,6 @@ struct SettingsView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-    }
-
-    private var rowDivider: some View {
-        Rectangle()
-            .fill(dividerColor)
-            .frame(height: 1)
-            .padding(.horizontal, 12)
     }
 
     private func themePreviewBackground(for mode: ThemeMode) -> AnyShapeStyle {
