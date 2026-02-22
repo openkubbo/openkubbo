@@ -18,34 +18,46 @@ struct SettingsView: View {
     @State private var selectedSection: SettingsSection = .atalhos
     @State private var searchText = ""
 
-    /// Barra lateral ~25–30% da janela (720 → ~220pt)
+    /// Barra lateral ~220pt
     private let sidebarWidth: CGFloat = 220
-    /// Item selecionado: lilás/roxo claro (#F2EDF8)
-    private let selectedBackground = Color(red: 242/255, green: 237/255, blue: 248/255)
-    /// Ícone e texto do item selecionado: mais escuro/contraste sobre o lilás
-    private let selectedForeground = Color(white: 0.22)
-    /// Fundos: barra lateral e área de conteúdo branco sólido
+    /// Item selecionado: lilás/roxo claro (#EDE9F8)
+    private let selectedBackground = Color(red: 237/255, green: 233/255, blue: 248/255)
+    /// Ícone e texto do item selecionado
+    private let selectedForeground = Color(white: 0.18)
+    /// Fundo da sidebar: cinza muito suave
+    private let sidebarGray = Color(red: 246/255, green: 246/255, blue: 247/255)
+    /// Fundo do conteúdo: branco puro
     private let contentWhite = Color.white
-    /// Borda sutil do campo de busca
-    private let searchBorderGray = Color(white: 0.88)
+    /// Borda do campo de busca
+    private let searchBorderGray = Color(white: 0.86)
+    /// Divisor
+    private let dividerColor = Color(white: 0.88)
 
     var body: some View {
         HStack(spacing: 0) {
             sidebar
+
+            // Divisor vertical
+            Rectangle()
+                .fill(dividerColor)
+                .frame(width: 1)
+
             mainContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(contentWhite)
     }
 
+    // MARK: - Sidebar
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             searchField
                 .padding(.horizontal, 12)
                 .padding(.top, 16)
-                .padding(.bottom, 14)
+                .padding(.bottom, 16)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 ForEach(SettingsSection.allCases, id: \.self) { section in
                     SettingsNavItem(
                         section: section,
@@ -57,30 +69,39 @@ struct SettingsView: View {
                     }
                 }
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
 
             Spacer(minLength: 0)
 
+            // Divisor acima do usuário
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+                .padding(.horizontal, 0)
+
             userArea
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
         }
         .frame(width: sidebarWidth, alignment: .leading)
-        .background(contentWhite)
+        .background(sidebarGray)
     }
 
     private var searchField: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(Color(white: 0.55))
-                .font(.system(size: 14))
+                .foregroundStyle(Color(white: 0.58))
+                .font(.system(size: 13))
             TextField("Buscar", text: $searchText)
                 .textFieldStyle(.plain)
+                .font(.system(size: 13))
+                .foregroundStyle(Color(white: 0.3))
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(contentWhite)
+                .fill(Color.white)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -94,36 +115,41 @@ struct SettingsView: View {
                 Circle()
                     .fill(selectedBackground)
                     .frame(width: 36, height: 36)
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(selectedForeground)
+                Image(systemName: "gearshape")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color(red: 0.45, green: 0.35, blue: 0.72))
             }
-            .fixedSize()
             VStack(alignment: .leading, spacing: 2) {
                 Text("GlassUser")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color(white: 0.25))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(white: 0.18))
                 Text("PRO ACCOUNT")
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Color(white: 0.55))
+                    .tracking(0.3)
             }
             Spacer(minLength: 0)
         }
-        .padding(8)
     }
+
+    // MARK: - Main Content
 
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(sectionTitle)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(Color(white: 0.15))
-                .padding(.top, 20)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Color(white: 0.12))
+                .padding(.top, 22)
                 .padding(.leading, 28)
-                .padding(.bottom, 20)
+                .padding(.bottom, 18)
+
+            // Linha horizontal sob o título
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
 
             sectionContent
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(contentWhite)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(contentWhite)
@@ -131,10 +157,10 @@ struct SettingsView: View {
 
     private var sectionTitle: String {
         switch selectedSection {
-        case .geral: return "Geral"
-        case .aparência: return "Aparência"
-        case .codexCLI: return "Codex CLI"
-        case .atalhos: return "Atalhos de Teclado"
+        case .geral:      return "Geral"
+        case .aparência:  return "Aparência"
+        case .codexCLI:   return "Codex CLI"
+        case .atalhos:    return "Atalhos de Teclado"
         }
     }
 
@@ -142,10 +168,12 @@ struct SettingsView: View {
     private var sectionContent: some View {
         switch selectedSection {
         case .geral, .aparência, .codexCLI, .atalhos:
-            contentWhite
+            Color.clear
         }
     }
 }
+
+// MARK: - Nav Item
 
 private struct SettingsNavItem: View {
     let section: SettingsSection
@@ -154,44 +182,34 @@ private struct SettingsNavItem: View {
     let selectedForeground: Color
     let action: () -> Void
 
-    /// Ícones: Geral = layout/gráfico, Aparência = monitor, Codex CLI = prompt, Atalhos = ⌘
     private var iconName: String {
         switch section {
-        case .geral: return "rectangle.split.2x2"
-        case .aparência: return "display"
-        case .codexCLI: return "terminal"
-        case .atalhos: return "command"
+        case .geral:      return "slider.horizontal.3"
+        case .aparência:  return "display"
+        case .codexCLI:   return "terminal"
+        case .atalhos:    return "command"
         }
-    }
-
-    /// Cantos arredondados só à direita no item selecionado
-    private var selectedShape: UnevenRoundedRectangle {
-        UnevenRoundedRectangle(
-            topLeadingRadius: 0,
-            bottomLeadingRadius: 0,
-            bottomTrailingRadius: 8,
-            topTrailingRadius: 8
-        )
     }
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Image(systemName: iconName)
-                    .font(.system(size: 16))
-                    .foregroundStyle(isSelected ? selectedForeground : Color(white: 0.35))
+                    .font(.system(size: 15))
+                    .foregroundStyle(isSelected ? Color(red: 0.42, green: 0.32, blue: 0.70) : Color(white: 0.38))
                     .frame(width: 20, height: 20)
 
                 Text(section.rawValue)
-                    .font(.system(size: 14))
-                    .foregroundStyle(isSelected ? selectedForeground : Color(white: 0.25))
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? selectedForeground : Color(white: 0.22))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .background {
                 if isSelected {
-                    selectedShape.fill(selectedBackground)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(selectedBackground)
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
