@@ -186,6 +186,40 @@ private struct RepoMetric: Identifiable {
     let destination: RepoDetailDestination
 }
 
+private enum RepoIssuesScope: String, CaseIterable, Identifiable {
+    case all = "All"
+    case mine = "Mine"
+    case open = "Open"
+    case closed = "Closed"
+
+    var id: String { rawValue }
+}
+
+private enum RepoIssueLabelKind {
+    case bug
+    case enhancement
+    case helpWanted
+    case goodFirstIssue
+}
+
+private struct RepoIssueLabel: Identifiable {
+    let id: String
+    let title: String
+    let kind: RepoIssueLabelKind
+}
+
+private struct RepoIssueItem: Identifiable {
+    let id: String
+    let number: Int
+    let title: String
+    let labels: [RepoIssueLabel]
+    let author: String
+    let updatedAgo: String
+    let comments: Int
+    let isOpen: Bool
+    let isMine: Bool
+}
+
 // MARK: - Main View
 
 struct RepositoryPanelView: View {
@@ -202,6 +236,7 @@ struct RepositoryPanelView: View {
     @State private var selectedFilter: RepoFilter = .all
     @State private var selectedRepoID: String?
     @State private var selectedDetailDestination: RepoDetailDestination?
+    @State private var selectedIssuesScope: RepoIssuesScope = .open
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -689,12 +724,6 @@ struct RepositoryPanelView: View {
             .allowsHitTesting(selectedDetailDestination == nil)
 
             if let destination = selectedDetailDestination {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isDarkTheme ? Color.black.opacity(0.22) : Color.black.opacity(0.08))
-                    .padding(.top, 4)
-                    .padding(.bottom, 4)
-                    .transition(.opacity)
-
                 detailOverlayPanel(for: repo, destination: destination)
                     .padding(.top, 4)
                     .padding(.bottom, 4)
@@ -852,94 +881,55 @@ struct RepositoryPanelView: View {
         }
     }
 
+    @ViewBuilder
     private func detailOverlayPanel(for repo: RepoItem, destination: RepoDetailDestination) -> some View {
-        let entries = destination.mockEntries(repoName: repo.name, branch: repo.branch)
-
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: destination.icon)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(secondaryTextColor)
-                    .frame(width: 20, alignment: .center)
-
-                Text(destination.title)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(primaryTextColor)
-                    .lineLimit(1)
-
-                Spacer()
-
-                Button(action: closeDetailPanel) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(secondaryTextColor)
-                        .frame(width: 24, height: 24)
-                        .background(
-                            Circle()
-                                .fill(actionCardFillColor)
-                                .overlay(
-                                    Circle()
-                                        .stroke(actionCardStrokeColor, lineWidth: 1)
-                                )
-                        )
-                }
-                .buttonStyle(.plain)
-                .repoCursorOnHover()
-            }
-
-            Text("\(destination.helperText) for \(repo.name).")
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(secondaryTextColor)
-
-            VStack(spacing: 0) {
-                ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(accentColor)
-                            .frame(width: 6, height: 6)
-
-                        Text(entry)
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
-                            .lineLimit(1)
-
-                        Spacer()
-
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(secondaryTextColor)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 10)
-
-                    if index < entries.count - 1 {
-                        Rectangle()
-                            .fill(dividerColor)
-                            .frame(height: 1)
-                            .padding(.horizontal, 10)
-                    }
-                }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(actionCardFillColor)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(actionCardStrokeColor, lineWidth: 1)
-                    )
-            )
-
-            Spacer(minLength: 0)
-
-            HStack {
-                Text(repo.name)
-                Spacer()
-                Text("Level 3")
-            }
-            .font(.system(size: 11, weight: .semibold, design: .rounded))
-            .foregroundStyle(secondaryTextColor)
+        switch destination {
+        case .issues:
+            issuesOverlayPanel(for: repo)
+        default:
+            genericDetailOverlayPanel(for: repo, destination: destination)
         }
-        .padding(12)
+    }
+
+    private func issuesOverlayPanel(for repo: RepoItem) -> some View {
+        let issues = filteredIssues(mockIssues(for: repo))
+
+        return VStack(spacing: 0) {
+            overlayTopBar(title: "Open Issues")
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            HStack(spacing: 10) {
+                ForEach(RepoIssuesScope.allCases) { scope in
+                    issuesFilterPill(scope)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    if issues.isEmpty {
+                        Text("No issues for this filter.")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                    } else {
+                        ForEach(Array(issues.enumerated()), id: \.element.id) { index, issue in
+                            issueRow(issue, showDivider: index < issues.count - 1)
+                        }
+                    }
+                }
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -949,12 +939,302 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .shadow(
-            color: isDarkTheme ? .black.opacity(0.34) : .black.opacity(0.10),
-            radius: 14,
-            x: 0,
-            y: 8
+    }
+
+    private func genericDetailOverlayPanel(for repo: RepoItem, destination: RepoDetailDestination) -> some View {
+        let entries = destination.mockEntries(repoName: repo.name, branch: repo.branch)
+
+        return VStack(spacing: 0) {
+            overlayTopBar(title: "Open \(destination.title)")
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(accentColor)
+                                .frame(width: 6, height: 6)
+
+                            Text(entry)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
+                                .lineLimit(1)
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(secondaryTextColor)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+
+                        if index < entries.count - 1 {
+                            Rectangle()
+                                .fill(dividerColor)
+                                .frame(height: 1)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
         )
+    }
+
+    private func overlayTopBar(title: String) -> some View {
+        HStack(spacing: 10) {
+            Button(action: closeDetailPanel) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(width: 28, height: 28)
+                    .background(
+                        Circle()
+                            .fill(actionCardFillColor)
+                            .overlay(
+                                Circle()
+                                    .stroke(actionCardStrokeColor, lineWidth: 1)
+                            )
+                    )
+            }
+            .buttonStyle(.plain)
+            .repoCursorOnHover()
+
+            Text(title)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .lineLimit(1)
+
+            Spacer()
+
+            overlayHeaderIconButton(symbol: "line.3.horizontal.decrease")
+            overlayHeaderIconButton(symbol: "arrow.clockwise")
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+    }
+
+    private func overlayHeaderIconButton(symbol: String) -> some View {
+        Button {} label: {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(secondaryTextColor)
+                .frame(width: 28, height: 28)
+                .background(
+                    Circle()
+                        .fill(actionCardFillColor)
+                        .overlay(
+                            Circle()
+                                .stroke(actionCardStrokeColor, lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func issuesFilterPill(_ scope: RepoIssuesScope) -> some View {
+        let isActive = selectedIssuesScope == scope
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.14)) {
+                selectedIssuesScope = scope
+            }
+        } label: {
+            Text(scope.rawValue)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(isActive ? .white : secondaryTextColor)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(isActive ? accentColor : .clear)
+                        .overlay(
+                            Capsule()
+                                .stroke(isActive ? accentColor.opacity(0.65) : actionCardStrokeColor, lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func issueRow(_ issue: RepoIssueItem, showDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: issue.isOpen ? "exclamationmark.circle" : "checkmark.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                        .frame(width: 18, alignment: .center)
+
+                    Text(issue.title)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 8)
+
+                    if issue.comments > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "bubble.left")
+                                .font(.system(size: 11, weight: .medium))
+                            Text("\(issue.comments)")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundStyle(secondaryTextColor)
+                    }
+                }
+
+                HStack(spacing: 8) {
+                    ForEach(issue.labels) { label in
+                        issueLabelPill(label)
+                    }
+                }
+
+                Text("#\(issue.number) \(issue.author) \(issue.updatedAgo)")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+
+            if showDivider {
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+            }
+        }
+    }
+
+    private func issueLabelPill(_ label: RepoIssueLabel) -> some View {
+        Text(label.title)
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(issueLabelTextColor(label.kind))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(issueLabelBackgroundColor(label.kind))
+            )
+    }
+
+    private func issueLabelBackgroundColor(_ kind: RepoIssueLabelKind) -> Color {
+        switch kind {
+        case .bug:
+            return isDarkTheme ? Color.red.opacity(0.20) : Color.red.opacity(0.17)
+        case .enhancement:
+            return isDarkTheme ? Color.blue.opacity(0.23) : Color.blue.opacity(0.18)
+        case .helpWanted:
+            return isDarkTheme ? Color.green.opacity(0.20) : Color.green.opacity(0.16)
+        case .goodFirstIssue:
+            return isDarkTheme ? Color.purple.opacity(0.20) : Color.purple.opacity(0.16)
+        }
+    }
+
+    private func issueLabelTextColor(_ kind: RepoIssueLabelKind) -> Color {
+        switch kind {
+        case .bug:
+            return isDarkTheme ? Color(red: 1.0, green: 0.74, blue: 0.74) : Color(red: 0.79, green: 0.21, blue: 0.21)
+        case .enhancement:
+            return isDarkTheme ? Color(red: 0.72, green: 0.84, blue: 1.0) : Color(red: 0.19, green: 0.45, blue: 0.89)
+        case .helpWanted:
+            return isDarkTheme ? Color(red: 0.72, green: 0.92, blue: 0.74) : Color(red: 0.15, green: 0.55, blue: 0.20)
+        case .goodFirstIssue:
+            return isDarkTheme ? Color(red: 0.87, green: 0.79, blue: 1.0) : Color(red: 0.50, green: 0.30, blue: 0.78)
+        }
+    }
+
+    private func filteredIssues(_ issues: [RepoIssueItem]) -> [RepoIssueItem] {
+        switch selectedIssuesScope {
+        case .all:
+            return issues
+        case .mine:
+            return issues.filter(\.isMine)
+        case .open:
+            return issues.filter(\.isOpen)
+        case .closed:
+            return issues.filter { !$0.isOpen }
+        }
+    }
+
+    private func mockIssues(for repo: RepoItem) -> [RepoIssueItem] {
+        [
+            RepoIssueItem(
+                id: "\(repo.id)-26",
+                number: 26,
+                title: "Refactor: Glass effect performance",
+                labels: [RepoIssueLabel(id: "enhancement-26", title: "enhancement", kind: .enhancement)],
+                author: "tarikvillalobos",
+                updatedAgo: "20 min. ago",
+                comments: 0,
+                isOpen: true,
+                isMine: true
+            ),
+            RepoIssueItem(
+                id: "\(repo.id)-25",
+                number: 25,
+                title: "Chat UI doesn't disappear if disabled in settings.",
+                labels: [RepoIssueLabel(id: "bug-25", title: "bug", kind: .bug)],
+                author: "tarikvillalobos",
+                updatedAgo: "21 min. ago",
+                comments: 0,
+                isOpen: true,
+                isMine: true
+            ),
+            RepoIssueItem(
+                id: "\(repo.id)-24",
+                number: 24,
+                title: "Build fails on Windows: 'rm' command not recognized in clean scripts",
+                labels: [
+                    RepoIssueLabel(id: "bug-24", title: "bug", kind: .bug),
+                    RepoIssueLabel(id: "help-24", title: "help wanted", kind: .helpWanted),
+                    RepoIssueLabel(id: "good-24", title: "good first issue", kind: .goodFirstIssue)
+                ],
+                author: "Ehtz",
+                updatedAgo: "1 hr. ago",
+                comments: 1,
+                isOpen: true,
+                isMine: false
+            ),
+            RepoIssueItem(
+                id: "\(repo.id)-21",
+                number: 21,
+                title: "Mozila extension",
+                labels: [
+                    RepoIssueLabel(id: "help-21", title: "help wanted", kind: .helpWanted),
+                    RepoIssueLabel(id: "good-21", title: "good first issue", kind: .goodFirstIssue)
+                ],
+                author: "vlnd0",
+                updatedAgo: "1 day ago",
+                comments: 1,
+                isOpen: true,
+                isMine: false
+            ),
+            RepoIssueItem(
+                id: "\(repo.id)-17",
+                number: 17,
+                title: "Legacy parser fallback cleanup",
+                labels: [RepoIssueLabel(id: "enhancement-17", title: "enhancement", kind: .enhancement)],
+                author: "openkubbo-bot",
+                updatedAgo: "2 days ago",
+                comments: 2,
+                isOpen: false,
+                isMine: false
+            )
+        ]
     }
 
     private func detailNavigationRow(
@@ -1019,6 +1299,9 @@ struct RepositoryPanelView: View {
 
     private func openDetailPanel(_ destination: RepoDetailDestination) {
         withAnimation(.easeInOut(duration: 0.18)) {
+            if destination == .issues {
+                selectedIssuesScope = .open
+            }
             selectedDetailDestination = destination
         }
     }
