@@ -4,8 +4,8 @@ import SwiftUI
 
 // MARK: - Data Model
 
-private struct RepoItem: Identifiable {
-    let id = UUID()
+private struct RepoItem: Identifiable, Equatable {
+    let id: String
     let name: String
     let issues: Int
     let prs: Int
@@ -14,12 +14,29 @@ private struct RepoItem: Identifiable {
     let updatedAgo: String
     let isPinned: Bool
     let isWork: Bool
+    let releases: Int
+    let ciRuns: Int
+    let discussions: Int
+    let tags: Int
+    let branches: Int
+    let contributors: Int
+    let openCommits: Int
+}
+
+private struct RepoMetric: Identifiable {
+    let id: String
+    let icon: String
+    let title: String
+    let value: Int?
 }
 
 // MARK: - Main View
 
 struct RepositoryPanelView: View {
-    private let panelWidth: CGFloat = 340
+    private let collapsedPanelWidth: CGFloat = 340
+    private let expandedPanelHeight: CGFloat = 760
+    private let expandedRightColumnWidth: CGFloat = 540
+
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
     private let windowEdgePaddingX: CGFloat = 10
@@ -27,6 +44,7 @@ struct RepositoryPanelView: View {
 
     @State private var hostWindow: NSWindow?
     @State private var selectedFilter: RepoFilter = .all
+    @State private var selectedRepoID: String?
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -40,6 +58,7 @@ struct RepositoryPanelView: View {
 
     private let repos: [RepoItem] = [
         RepoItem(
+            id: "tarikvillalobos/postme",
             name: "tarikvillalobos/postme",
             issues: 2,
             prs: 1,
@@ -47,9 +66,17 @@ struct RepositoryPanelView: View {
             branch: "main",
             updatedAgo: "1 min. ago",
             isPinned: true,
-            isWork: false
+            isWork: false,
+            releases: 12,
+            ciRuns: 1232,
+            discussions: 0,
+            tags: 13,
+            branches: 1,
+            contributors: 3,
+            openCommits: 24
         ),
         RepoItem(
+            id: "tarikvillalobos/rentify",
             name: "tarikvillalobos/rentify",
             issues: 4,
             prs: 5,
@@ -57,9 +84,17 @@ struct RepositoryPanelView: View {
             branch: "main",
             updatedAgo: "14 min. ago",
             isPinned: true,
-            isWork: true
+            isWork: true,
+            releases: 9,
+            ciRuns: 761,
+            discussions: 3,
+            tags: 18,
+            branches: 4,
+            contributors: 6,
+            openCommits: 42
         ),
         RepoItem(
+            id: "tarikvillalobos/time-zones",
             name: "tarikvillalobos/time-zones",
             issues: 1,
             prs: 0,
@@ -67,9 +102,17 @@ struct RepositoryPanelView: View {
             branch: "dev",
             updatedAgo: "13 min. ago",
             isPinned: false,
-            isWork: false
+            isWork: false,
+            releases: 4,
+            ciRuns: 188,
+            discussions: 1,
+            tags: 7,
+            branches: 3,
+            contributors: 2,
+            openCommits: 11
         ),
         RepoItem(
+            id: "tarikvillalobos/squaddy",
             name: "tarikvillalobos/squaddy",
             issues: 0,
             prs: 2,
@@ -77,9 +120,17 @@ struct RepositoryPanelView: View {
             branch: "master",
             updatedAgo: "1 hr. ago",
             isPinned: false,
-            isWork: true
+            isWork: true,
+            releases: 2,
+            ciRuns: 43,
+            discussions: 0,
+            tags: 3,
+            branches: 2,
+            contributors: 2,
+            openCommits: 7
         ),
         RepoItem(
+            id: "tarikvillalobos/api-kit",
             name: "tarikvillalobos/api-kit",
             issues: 3,
             prs: 1,
@@ -87,9 +138,17 @@ struct RepositoryPanelView: View {
             branch: "feature/v2",
             updatedAgo: "30 min. ago",
             isPinned: true,
-            isWork: true
+            isWork: true,
+            releases: 21,
+            ciRuns: 3011,
+            discussions: 7,
+            tags: 25,
+            branches: 8,
+            contributors: 11,
+            openCommits: 63
         ),
         RepoItem(
+            id: "tarikvillalobos/mnemonic",
             name: "tarikvillalobos/mnemonic",
             issues: 0,
             prs: 0,
@@ -97,9 +156,17 @@ struct RepositoryPanelView: View {
             branch: "main",
             updatedAgo: "2 hr. ago",
             isPinned: false,
-            isWork: false
+            isWork: false,
+            releases: 1,
+            ciRuns: 17,
+            discussions: 0,
+            tags: 1,
+            branches: 1,
+            contributors: 1,
+            openCommits: 4
         ),
         RepoItem(
+            id: "tarikvillalobos/open-tasks",
             name: "tarikvillalobos/open-tasks",
             issues: 5,
             prs: 3,
@@ -107,7 +174,14 @@ struct RepositoryPanelView: View {
             branch: "main",
             updatedAgo: "4 min. ago",
             isPinned: true,
-            isWork: true
+            isWork: true,
+            releases: 14,
+            ciRuns: 942,
+            discussions: 5,
+            tags: 16,
+            branches: 5,
+            contributors: 8,
+            openCommits: 38
         )
     ]
 
@@ -120,6 +194,15 @@ struct RepositoryPanelView: View {
         case .work:
             return repos.filter { $0.isWork }
         }
+    }
+
+    private var selectedRepo: RepoItem? {
+        guard let selectedRepoID else { return nil }
+        return filteredRepos.first { $0.id == selectedRepoID }
+    }
+
+    private var isDetailsVisible: Bool {
+        selectedRepo != nil
     }
 
     // MARK: - Theme colors
@@ -160,18 +243,44 @@ struct RepositoryPanelView: View {
         Color(red: 0.39, green: 0.44, blue: 0.99)
     }
 
-    // MARK: - Panel height
+    private var actionCardFillColor: Color {
+        isDarkTheme ? Color(red: 0.18, green: 0.19, blue: 0.23) : .white
+    }
+
+    private var actionCardStrokeColor: Color {
+        isDarkTheme ? .white.opacity(0.13) : .black.opacity(0.10)
+    }
+
+    // MARK: - Dynamic Size
 
     private var repoListHeight: CGFloat {
         let rowHeight: CGFloat = 72
-        let spacing: CGFloat = 0
         let count = CGFloat(min(filteredRepos.count, 5))
-        return count * rowHeight + max(count - 1, 0) * spacing
+        return count * rowHeight
+    }
+
+    private var basePanelHeight: CGFloat {
+        // header + heatmap + filters + list + footer + vertical paddings
+        56 + 158 + 44 + repoListHeight + 46 + 40
     }
 
     private var panelHeight: CGFloat {
-        // header(56) + heatmap section(158) + filter(44) + list + footer(46) + paddings
-        56 + 158 + 44 + repoListHeight + 46 + 40
+        isDetailsVisible ? max(basePanelHeight, expandedPanelHeight) : basePanelHeight
+    }
+
+    private var panelWidth: CGFloat {
+        if isDetailsVisible {
+            return collapsedContentWidth + 16 + 1 + expandedRightColumnWidth + horizontalContentPadding
+        }
+        return collapsedPanelWidth
+    }
+
+    private var horizontalContentPadding: CGFloat {
+        (18 + panelHorizontalInset) * 2
+    }
+
+    private var collapsedContentWidth: CGFloat {
+        collapsedPanelWidth - horizontalContentPadding
     }
 
     // MARK: - Body
@@ -187,21 +296,19 @@ struct RepositoryPanelView: View {
                 .padding(.horizontal, panelHorizontalInset)
                 .padding(.vertical, panelVerticalInset)
 
-            VStack(spacing: 0) {
-                header
-                    .padding(.bottom, 14)
+            HStack(alignment: .top, spacing: 16) {
+                leftColumn
+                    .frame(width: collapsedContentWidth)
 
-                heatmapSection
-                    .padding(.bottom, 14)
+                if let selectedRepo {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(width: 1)
+                        .padding(.vertical, 8)
 
-                filterTabs
-                    .padding(.bottom, 10)
-
-                repoList
-
-                Spacer(minLength: 0)
-
-                footerBar
+                    detailsColumn(for: selectedRepo)
+                        .frame(width: expandedRightColumnWidth)
+                }
             }
             .padding(.horizontal, 18)
             .padding(.top, 20)
@@ -214,6 +321,7 @@ struct RepositoryPanelView: View {
                     .frame(height: 12)
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: isDetailsVisible)
         .frame(width: panelWidth, height: panelHeight)
         .padding(.horizontal, windowEdgePaddingX)
         .padding(.vertical, windowEdgePaddingY)
@@ -229,6 +337,30 @@ struct RepositoryPanelView: View {
                 }
             }
         )
+        .onChange(of: selectedFilter, initial: false) { _, _ in
+            synchronizeSelectedRepo()
+        }
+    }
+
+    // MARK: - Left Column
+
+    private var leftColumn: some View {
+        VStack(spacing: 0) {
+            header
+                .padding(.bottom, 14)
+
+            heatmapSection
+                .padding(.bottom, 14)
+
+            filterTabs
+                .padding(.bottom, 10)
+
+            repoList
+
+            Spacer(minLength: 0)
+
+            footerBar
+        }
     }
 
     // MARK: - Header
@@ -295,7 +427,7 @@ struct RepositoryPanelView: View {
         )
     }
 
-    // MARK: - Filter tabs
+    // MARK: - Filter Tabs
 
     private var filterTabs: some View {
         HStack(spacing: 6) {
@@ -343,20 +475,26 @@ struct RepositoryPanelView: View {
         .repoCursorOnHover()
     }
 
-    // MARK: - Repo list
+    // MARK: - Repo List
 
     private var repoList: some View {
         ScrollView(showsIndicators: false) {
             LazyVStack(spacing: 0) {
-                ForEach(filteredRepos) { repo in
+                ForEach(Array(filteredRepos.enumerated()), id: \.element.id) { index, repo in
                     RepoRow(
                         repo: repo,
                         isDarkTheme: isDarkTheme,
                         primaryColor: primaryTextColor,
                         secondaryColor: secondaryTextColor,
                         accentColor: accentColor,
-                        dividerColor: dividerColor
-                    )
+                        dividerColor: dividerColor,
+                        isSelected: selectedRepoID == repo.id,
+                        showDivider: index < filteredRepos.count - 1
+                    ) {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedRepoID = repo.id
+                        }
+                    }
                 }
             }
         }
@@ -389,10 +527,214 @@ struct RepositoryPanelView: View {
         }
     }
 
+    // MARK: - Details Column
+
+    private func detailsColumn(for repo: RepoItem) -> some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                detailActionSection(for: repo)
+
+                branchStatusSection(for: repo)
+
+                detailNavigationRow(icon: "arrow.left.arrow.right", title: "Switch Worktree") {}
+
+                metricsSection(for: repo)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private func detailActionSection(for repo: RepoItem) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            detailNavigationRow(
+                icon: "arrow.up.right.square",
+                title: "Open \(repo.name) in GitHub"
+            ) {
+                openRepositoryOnGitHub(repo)
+            }
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            detailNavigationRow(icon: "folder", title: "Open in Finder") {}
+            detailNavigationRow(icon: "terminal", title: "Open in Terminal") {}
+            detailNavigationRow(icon: "wand.and.stars", title: "Open TARS Agent", isAccent: true) {}
+        }
+    }
+
+    private func branchStatusSection(for repo: RepoItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            HStack(spacing: 8) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(primaryTextColor)
+
+                Text(repo.branch)
+                    .font(.system(size: 36 / 2, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                Text("Up to date")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+            }
+
+            Text("Upstream origin/\(repo.branch) - Fetched 1 min. ago")
+                .font(.system(size: 14, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+
+            HStack(spacing: 12) {
+                secondaryPillButton(icon: "arrow.clockwise", title: "Sync") {}
+                secondaryPillButton(icon: "arrow.triangle.branch", title: "Rebase") {}
+                secondaryPillButton(icon: "arrow.uturn.backward", title: "Reset") {}
+            }
+        }
+    }
+
+    private func metricsSection(for repo: RepoItem) -> some View {
+        let metrics = [
+            RepoMetric(id: "issues", icon: "exclamationmark.circle", title: "Issues", value: repo.issues),
+            RepoMetric(id: "prs", icon: "arrow.triangle.pull", title: "Pull Requests", value: repo.prs),
+            RepoMetric(id: "releases", icon: "shippingbox", title: "Releases", value: repo.releases),
+            RepoMetric(id: "ci", icon: "bolt", title: "CI Runs", value: repo.ciRuns),
+            RepoMetric(id: "discussions", icon: "bubble.left", title: "Discussions", value: repo.discussions),
+            RepoMetric(id: "tags", icon: "tag", title: "Tags", value: repo.tags),
+            RepoMetric(id: "branches", icon: "arrow.triangle.branch", title: "Branches", value: repo.branches),
+            RepoMetric(id: "contributors", icon: "person.2", title: "Contributors", value: repo.contributors),
+            RepoMetric(id: "commits", icon: "clock.arrow.circlepath", title: "Open Commits", value: repo.openCommits)
+        ]
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+                .padding(.bottom, 6)
+
+            ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
+                HStack(spacing: 10) {
+                    Image(systemName: metric.icon)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 24, alignment: .center)
+
+                    Text(metric.title)
+                        .font(.system(size: 38 / 2, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+
+                    Spacer()
+
+                    if let value = metric.value {
+                        Text(formatBadgeValue(value))
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(
+                                Capsule()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    }
+                }
+                .padding(.vertical, 9)
+
+                if index < metrics.count - 1 {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
+            }
+        }
+    }
+
+    private func detailNavigationRow(
+        icon: String,
+        title: String,
+        isAccent: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(isAccent ? accentColor : secondaryTextColor)
+                    .frame(width: 24, alignment: .center)
+
+                Text(title)
+                    .font(.system(size: 36 / 2, weight: .semibold, design: .rounded))
+                    .foregroundStyle(isAccent ? accentColor : primaryTextColor)
+
+                Spacer(minLength: 10)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+            }
+            .padding(.vertical, 2)
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func secondaryPillButton(icon: String, title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 33 / 2, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(primaryTextColor)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(
+                Capsule()
+                    .fill(actionCardFillColor)
+                    .overlay(
+                        Capsule()
+                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
     // MARK: - Actions
 
     private func closeWindow() {
         hostWindow?.close()
+    }
+
+    private func synchronizeSelectedRepo() {
+        guard let selectedRepoID else { return }
+        if !filteredRepos.contains(where: { $0.id == selectedRepoID }) {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                self.selectedRepoID = nil
+            }
+        }
+    }
+
+    private func openRepositoryOnGitHub(_ repo: RepoItem) {
+        guard let repositoryURL = URL(string: "https://github.com/\(repo.name)") else { return }
+        NSWorkspace.shared.open(repositoryURL)
+    }
+
+    private func formatBadgeValue(_ value: Int) -> String {
+        if value >= 1000 {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        }
+        return "\(value)"
     }
 }
 
@@ -401,21 +743,17 @@ struct RepositoryPanelView: View {
 private struct ContributionHeatmap: View {
     var isDarkTheme: Bool
 
-    // 53 columns × 7 rows (≈ 1 year of weeks)
     private let weeks = 53
     private let days = 7
 
-    // Seeded pseudo-random intensity for a realistic-looking pattern
     private func intensity(week: Int, day: Int) -> Double {
         let seed = (week * 7 + day + 17) % 13
-        // Weekend (sat/sun index 5,6) slightly less activity
         let isWeekend = day >= 5
         let base: [Double] = [0, 0, 0, 0.25, 0.5, 0.75, 1.0, 0.5, 0.25, 0, 0, 0.75, 0.5]
         var value = base[seed]
         if isWeekend {
             value *= 0.5
         }
-        // Burst weeks
         if week % 6 == 2 {
             value = min(1.0, value + 0.4)
         }
@@ -431,7 +769,6 @@ private struct ContributionHeatmap: View {
                 ? Color(red: 0.20, green: 0.21, blue: 0.26)
                 : Color(red: 0.91, green: 0.91, blue: 0.93)
         }
-        // Indigo-purple gradient
         let red = 0.39 + intensity * 0.08
         let green = 0.25 - intensity * 0.05
         let blue = 0.95 - intensity * 0.12
@@ -475,57 +812,85 @@ private struct RepoRow: View {
     var secondaryColor: Color
     var accentColor: Color
     var dividerColor: Color
+    var isSelected: Bool
+    var showDivider: Bool
+    var onTap: () -> Void
 
     @State private var isHovered = false
 
+    private var rowFillColor: Color {
+        if isSelected {
+            return isDarkTheme
+                ? accentColor.opacity(0.30)
+                : accentColor.opacity(0.16)
+        }
+        if isHovered {
+            return isDarkTheme
+                ? Color.white.opacity(0.05)
+                : Color.black.opacity(0.03)
+        }
+        return .clear
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
-                // Bullet
+        Button(action: onTap) {
+            VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 10) {
                 Circle()
                     .fill(accentColor)
                     .frame(width: 8, height: 8)
                     .padding(.top, 5)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(repo.name)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .foregroundStyle(primaryColor)
-                        .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(repo.name)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundStyle(primaryColor)
+                                .lineLimit(1)
 
-                    HStack(spacing: 8) {
-                        repoStat(icon: "exclamationmark.circle", value: "\(repo.issues) Issues")
-                        repoStat(icon: "arrow.triangle.pull", value: "\(repo.prs) PRs")
-                        repoStat(icon: "star", value: "\(starsFormatted(repo.stars)) Stars")
-                    }
+                            Spacer(minLength: 8)
 
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(secondaryColor)
-                        Text(repo.branch)
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
-                            .foregroundStyle(secondaryColor)
-                        Spacer()
-                        Text(repo.updatedAgo)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .foregroundStyle(secondaryColor)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(isSelected ? primaryColor : secondaryColor)
+                        }
+
+                        HStack(spacing: 8) {
+                            repoStat(icon: "exclamationmark.circle", value: "\(repo.issues) Issues")
+                            repoStat(icon: "arrow.triangle.pull", value: "\(repo.prs) PRs")
+                            repoStat(icon: "star", value: "\(starsFormatted(repo.stars)) Stars")
+                        }
+
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(secondaryColor)
+
+                            Text(repo.branch)
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryColor)
+
+                            Spacer()
+
+                            Text(repo.updatedAgo)
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryColor)
+                        }
                     }
                 }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(
-                isHovered
-                    ? (isDarkTheme ? Color.white.opacity(0.05) : Color.black.opacity(0.03))
-                    : Color.clear
-            )
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(rowFillColor)
 
-            Rectangle()
-                .fill(dividerColor)
-                .frame(height: 1)
-                .padding(.horizontal, 12)
+                if showDivider {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                        .padding(.horizontal, 12)
+                }
+            }
         }
+        .buttonStyle(.plain)
         .onHover { hovering in
             isHovered = hovering
             if hovering {
@@ -605,7 +970,7 @@ private extension View {
     }
 }
 
-// MARK: - Window infrastructure
+// MARK: - Window Infrastructure
 
 private struct RepoWindowDragRegion: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView {
@@ -632,6 +997,7 @@ private struct RepoWindowDragRegion: NSViewRepresentable {
 private struct RepoWindowConfigurator: NSViewRepresentable {
     let targetSize: CGSize
     let onResolve: (NSWindow) -> Void
+
     private static var patchedClasses: Set<ObjectIdentifier> = []
 
     init(targetSize: CGSize, onResolve: @escaping (NSWindow) -> Void) {
@@ -669,6 +1035,7 @@ private struct RepoWindowConfigurator: NSViewRepresentable {
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
+
         let size = NSSize(width: targetSize.width, height: targetSize.height)
         window.setContentSize(size)
         window.center()
@@ -696,7 +1063,6 @@ private struct RepoWindowConfigurator: NSViewRepresentable {
             "B@:"
         )
 
-        // Keep explicit drag handling via drag-region view.
         let canMove: @convention(block) (AnyObject) -> Bool = { _ in false }
         if let method = class_getInstanceMethod(windowClass, NSSelectorFromString("isMovable")) {
             method_setImplementation(method, imp_implementationWithBlock(canMove))
