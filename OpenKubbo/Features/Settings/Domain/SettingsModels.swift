@@ -1,11 +1,11 @@
 import Foundation
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "Geral"
-    case appearance = "Aparência"
-    case codexCLI = "Codex CLI"
+    case general = "General"
+    case appearance = "Appearance"
+    case codexCLI = "API Keys"
     case github = "GitHub"
-    case shortcuts = "Atalhos"
+    case shortcuts = "Shortcuts"
 
     var id: String { rawValue }
 
