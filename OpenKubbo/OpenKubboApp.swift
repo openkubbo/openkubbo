@@ -10,6 +10,8 @@ import AppKit
 
 @main
 struct OpenKubboApp: App {
+    @Environment(\.openWindow) private var openWindow
+
     private struct TopMenuItem: Identifiable {
         let id: String
         let title: String
@@ -35,7 +37,7 @@ struct OpenKubboApp: App {
                         systemImage: item.systemImage,
                         fallbackIcon: item.fallbackIcon
                     ) {
-                        handleMenuSelection(item.title)
+                        handleMenuSelection(item.id)
                     }
                 }
 
@@ -57,10 +59,21 @@ struct OpenKubboApp: App {
                 .accessibilityLabel("OpenKubbo")
         }
         .menuBarExtraStyle(.window)
+
+        Window("Settings", id: "settings") {
+            SettingsWindowView()
+        }
+        .defaultSize(width: 1020, height: 680)
     }
 
-    private func handleMenuSelection(_ item: String) {
-        // Wire each option to its destination as features are implemented.
+    private func handleMenuSelection(_ itemID: String) {
+        switch itemID {
+        case "settings":
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "settings")
+        default:
+            break
+        }
     }
 }
 
