@@ -98,10 +98,6 @@ private struct TrafficLightsRow: View {
                 .fill(Color(red: 1.0, green: 0.75, blue: 0.18))
                 .frame(width: 12, height: 12)
 
-            Circle()
-                .fill(Color(red: 0.17, green: 0.79, blue: 0.32))
-                .frame(width: 12, height: 12)
-
             Spacer(minLength: 0)
         }
     }
@@ -248,39 +244,58 @@ private struct SettingsPanePlaceholder: View {
 private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
     private static let fixedWindowSize = NSSize(width: 720, height: 520)
 
+    final class Coordinator: NSObject, NSWindowDelegate {
+        func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+            SettingsWindowChromeConfigurator.fixedWindowSize
+        }
+
+        func windowShouldZoom(_ window: NSWindow, toFrame newFrame: NSRect) -> Bool {
+            false
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
         DispatchQueue.main.async {
-            configureWindow(for: view)
+            configureWindow(for: view, coordinator: context.coordinator)
         }
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async {
-            configureWindow(for: nsView)
+            configureWindow(for: nsView, coordinator: context.coordinator)
         }
     }
 
-    private func configureWindow(for view: NSView) {
+    private func configureWindow(for view: NSView, coordinator: Coordinator) {
         guard let window = view.window else { return }
 
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
-        window.styleMask.remove(.resizable)
+        window.styleMask.remove([.resizable, .miniaturizable, .fullScreen])
         window.isMovableByWindowBackground = true
         window.isOpaque = true
         window.backgroundColor = SettingsPalette.surfaceNSColor
+        window.collectionBehavior.remove([.fullScreenPrimary, .fullScreenAuxiliary])
         window.minSize = Self.fixedWindowSize
         window.maxSize = Self.fixedWindowSize
         if window.frame.size != Self.fixedWindowSize {
             window.setContentSize(Self.fixedWindowSize)
         }
+        if window.delegate !== coordinator {
+            window.delegate = coordinator
+        }
 
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
         window.standardWindowButton(.zoomButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 }
 
