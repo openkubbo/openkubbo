@@ -742,12 +742,6 @@ private struct ContributionHeatmap: View {
     private var days: Int { Self.days }
     private var firstDate: Date { Self.dateRange.start }
     private var lastDate: Date { Self.dateRange.end }
-    private let monthFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "MMM"
-        return formatter
-    }()
 
     private let lightPalette: [Color] = [
         Color(red: 0.92, green: 0.93, blue: 0.94),
@@ -764,12 +758,6 @@ private struct ContributionHeatmap: View {
         Color(red: 0.15, green: 0.65, blue: 0.25),
         Color(red: 0.22, green: 0.83, blue: 0.33)
     ]
-
-    private struct MonthMarker: Identifiable {
-        let id: Int
-        let week: Int
-        let label: String
-    }
 
     private func dateFor(week: Int, day: Int) -> Date {
         let offset = (week * 7) + day
@@ -843,56 +831,19 @@ private struct ContributionHeatmap: View {
         return palette[safeIndex]
     }
 
-    private var monthMarkers: [MonthMarker] {
-        var markers: [MonthMarker] = []
-        var previousMonth: Int?
-        var lastWeekPlaced = -10
-
-        for week in 0..<weeks {
-            let date = dateFor(week: week, day: 0)
-            let month = calendar.component(.month, from: date)
-            if month != previousMonth {
-                if week - lastWeekPlaced >= 4 {
-                    markers.append(
-                        MonthMarker(
-                            id: week,
-                            week: week,
-                            label: monthFormatter.string(from: date)
-                        )
-                    )
-                    lastWeekPlaced = week
-                }
-                previousMonth = month
-            }
-        }
-
-        return markers
-    }
-
     private func squareCellSize(for size: CGSize, gap: CGFloat) -> CGFloat {
         let widthBased = (size.width - CGFloat(weeks - 1) * gap) / CGFloat(weeks)
         let heightBased = (size.height - CGFloat(days - 1) * gap) / CGFloat(days)
         return max(0, min(widthBased, heightBased))
     }
 
-    private func offsetX(forWeek week: Int, size: CGSize, gap: CGFloat) -> CGFloat {
-        let cellSize = squareCellSize(for: size, gap: gap)
-        let proposed = CGFloat(week) * (cellSize + gap)
-        return min(max(0, proposed), max(0, size.width - 22))
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            GeometryReader { geometry in
-                let monthGap: CGFloat = 2
-                ZStack(alignment: .leading) {
-                    ForEach(monthMarkers) { marker in
-                        Text(marker.label)
-                            .font(.system(size: 10, weight: .medium, design: .rounded))
-                            .foregroundStyle(isDarkTheme ? .white.opacity(0.56) : .black.opacity(0.48))
-                            .offset(x: offsetX(forWeek: marker.week, size: geometry.size, gap: monthGap))
-                    }
-                }
+            HStack {
+                Spacer()
+                Text("last 12 months")
+                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                    .foregroundStyle(isDarkTheme ? .white.opacity(0.56) : .black.opacity(0.48))
             }
             .frame(height: 13)
 
