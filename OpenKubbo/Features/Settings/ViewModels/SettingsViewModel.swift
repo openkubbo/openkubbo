@@ -162,7 +162,7 @@ final class SettingsViewModel: ObservableObject {
 
             githubUserCode = deviceCode.userCode
             githubVerificationURL = URL(string: deviceCode.verificationURI)
-            githubStatusMessage = "Open GitHub and enter the code to continue."
+            githubStatusMessage = "Click 'Open GitHub Device Page' and enter the code to continue."
 
             let accessToken = try await gitHubOAuthService.pollAccessToken(
                 clientID: clientID,

@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     @State private var hostWindow: NSWindow?
+    @State private var isGitHubClientIDVisible = false
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
@@ -417,8 +418,67 @@ struct SettingsView: View {
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    TextField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
+                    HStack(spacing: 8) {
+                        Group {
+                            if isGitHubClientIDVisible {
+                                TextField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
+                            } else {
+                                SecureField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
+                            }
+                        }
                         .textFieldStyle(.roundedBorder)
+
+                        Button {
+                            isGitHubClientIDVisible.toggle()
+                        } label: {
+                            Image(systemName: isGitHubClientIDVisible ? "eye.slash" : "eye")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(secondaryTextColor)
+                                .frame(width: 24, height: 24)
+                        }
+                        .buttonStyle(.plain)
+                        .help(isGitHubClientIDVisible ? "Hide client ID" : "Show client ID")
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("How to connect")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+
+                        Text("1. Click Login with GitHub.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+
+                        Text("2. Click Open GitHub Device Page.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+
+                        Text("3. Enter the code shown below and authorize.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Device URL")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+
+                        Text(gitHubDeviceURLString)
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(primaryTextColor)
+                            .textSelection(.enabled)
+
+                        HStack(spacing: 10) {
+                            Button("Open Device URL") {
+                                openGitHubDevicePage()
+                            }
+
+                            Button("Copy Device URL") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(gitHubDeviceURLString, forType: .string)
+                            }
+                        }
+                    }
 
                     if viewModel.isGitHubConnected {
                         HStack {
@@ -433,8 +493,14 @@ struct SettingsView: View {
 
                             Spacer()
 
-                            Button("Disconnect") {
-                                viewModel.logoutGitHub()
+                            VStack(alignment: .trailing, spacing: 8) {
+                                Button("Disconnect") {
+                                    viewModel.logoutGitHub()
+                                }
+
+                                Button("Open GitHub Device Page") {
+                                    openGitHubDevicePage()
+                                }
                             }
                         }
                     } else {
@@ -465,36 +531,38 @@ struct SettingsView: View {
                                 .font(.system(size: 12, weight: .medium, design: .rounded))
                                 .foregroundStyle(tertiaryTextColor)
                         }
-                    }
 
-                    if viewModel.isGitHubAuthenticating || viewModel.githubUserCode != nil {
-                        Button("Open GitHub Verification Page") {
-                            let fallbackURL = URL(string: "https://github.com/login/device")
-                            if let verificationURL = viewModel.githubVerificationURL ?? fallbackURL {
-                                NSWorkspace.shared.open(verificationURL)
-                            }
+                        Button("Open GitHub Device Page") {
+                            openGitHubDevicePage()
                         }
                     }
 
                     if let userCode = viewModel.githubUserCode {
-                        HStack(spacing: 8) {
-                            Text("Code:")
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(secondaryTextColor)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack(spacing: 8) {
+                                Text("Code:")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
 
-                            Text(userCode)
-                                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                .foregroundStyle(primaryTextColor)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                        .fill(cardFillColor)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                                .stroke(cardStrokeColor, lineWidth: 1)
-                                        )
-                                )
+                                Text(userCode)
+                                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(primaryTextColor)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .fill(cardFillColor)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                                    .stroke(cardStrokeColor, lineWidth: 1)
+                                            )
+                                    )
+                            }
+
+                            Button("Copy Code") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(userCode, forType: .string)
+                            }
                         }
                     }
 
@@ -512,6 +580,16 @@ struct SettingsView: View {
                 .padding(.vertical, 14)
             }
         }
+    }
+
+    private func openGitHubDevicePage() {
+        if let verificationURL = viewModel.githubVerificationURL ?? URL(string: gitHubDeviceURLString) {
+            NSWorkspace.shared.open(verificationURL)
+        }
+    }
+
+    private var gitHubDeviceURLString: String {
+        "https://github.com/login/device"
     }
 
     private func rowValue(title: String, value: String) -> some View {
