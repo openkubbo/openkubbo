@@ -11,6 +11,7 @@ import AppKit
 @main
 struct OpenKubboApp: App {
     @Environment(\.openWindow) private var openWindow
+    @StateObject private var themeStore = AppThemeStore()
 
     private struct TopMenuItem: Identifiable {
         let id: String
@@ -62,6 +63,7 @@ struct OpenKubboApp: App {
 
         Window("Settings", id: "settings") {
             SettingsView()
+                .environmentObject(themeStore)
         }
         .defaultSize(width: 720, height: 450)
         .windowResizability(.automatic)
