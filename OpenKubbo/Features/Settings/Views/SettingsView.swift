@@ -265,6 +265,8 @@ struct SettingsView: View {
                     appearanceContent
                 case .codexCLI:
                     codexContent
+                case .github:
+                    githubContent
                 case .shortcuts:
                     shortcutsContent
                 }
@@ -393,6 +395,25 @@ struct SettingsView: View {
                         .foregroundStyle(primaryTextColor)
 
                     Text("Shortcuts are under construction.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+        }
+    }
+
+    private var githubContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("GITHUB")
+            settingsCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Under Construction")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+
+                    Text("GitHub settings are under construction.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
                 }

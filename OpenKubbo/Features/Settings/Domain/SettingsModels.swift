@@ -4,6 +4,7 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case general = "Geral"
     case appearance = "Aparência"
     case codexCLI = "Codex CLI"
+    case github = "GitHub"
     case shortcuts = "Atalhos"
 
     var id: String { rawValue }
@@ -16,6 +17,8 @@ enum SettingsTab: String, CaseIterable, Identifiable {
             return "desktopcomputer"
         case .codexCLI:
             return "chevron.left.forwardslash.chevron.right"
+        case .github:
+            return "arrow.triangle.branch"
         case .shortcuts:
             return "command"
         }
