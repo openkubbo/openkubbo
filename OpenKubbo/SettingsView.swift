@@ -307,16 +307,6 @@ struct SettingsView: View {
             .background(SettingsWindowDragRegion())
 
             HStack(spacing: 8) {
-                Button(action: {}) {
-                    SettingsHeaderIcon(symbol: "gearshape", isActive: true, isDarkTheme: isDarkTheme)
-                }
-                .buttonStyle(.plain)
-                .disabled(true)
-
-                SettingsHeaderIcon(symbol: activeTab.icon, isDarkTheme: isDarkTheme)
-
-                SettingsHeaderIcon(symbol: "ellipsis", isDarkTheme: isDarkTheme)
-
                 Button(action: closeSettingsWindow) {
                     SettingsHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
                 }
