@@ -366,64 +366,19 @@ struct SettingsView: View {
 
     private var codexContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("CONEXÃO")
+            sectionTitle("CODEX CLI")
             settingsCard {
-                rowValue(title: "Caminho do Executável", value: viewModel.executablePath)
-                rowDivider
-                rowValue(title: "Chave de API", value: viewModel.apiKeyMasked)
-            }
-
-            Text("O caminho deve apontar para o binário instalado via Homebrew ou npm.")
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundStyle(tertiaryTextColor)
-                .padding(.horizontal, 2)
-
-            sectionTitle("INFERÊNCIA")
-            settingsCard {
-                HStack {
-                    Text("Modelo Principal")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Under Construction")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Spacer()
-
-                    Picker("", selection: $viewModel.selectedModel) {
-                        ForEach(viewModel.models, id: \.self) { model in
-                            Text(model).tag(model)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .frame(width: 210)
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
-                .padding(.bottom, 10)
-
-                HStack(spacing: 10) {
-                    Text("Temperatura")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(primaryTextColor)
-
-                    Slider(value: $viewModel.temperature, in: 0...1, step: 0.1)
-                        .tint(Color(red: 0.39, green: 0.44, blue: 0.99))
-
-                    Text(String(format: "%.1f", viewModel.temperature))
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                    Text("Codex CLI settings are under construction.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
-                        .frame(width: 32)
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 14)
-            }
-
-            sectionTitle("INTEGRAÇÃO")
-            settingsCard {
-                toggleRow(title: "Sugestões Inteligentes no Terminal", isOn: $viewModel.terminalSuggestionsEnabled)
-                rowDivider
-                toggleRow(title: "Análise de Erros Automática", isOn: $viewModel.automaticErrorAnalysis)
-                rowDivider
-                toggleRow(title: "Sincronizar Perfis", isOn: $viewModel.syncProfilesEnabled)
+                .padding(.vertical, 14)
             }
         }
     }
