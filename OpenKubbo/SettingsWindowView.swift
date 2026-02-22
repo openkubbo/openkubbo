@@ -246,7 +246,7 @@ private struct SettingsPanePlaceholder: View {
 }
 
 private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
-    private static let fixedWindowSize = NSSize(width: 860, height: 640)
+    private static let fixedWindowSize = NSSize(width: 720, height: 520)
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)

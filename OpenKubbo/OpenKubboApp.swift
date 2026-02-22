@@ -63,7 +63,7 @@ struct OpenKubboApp: App {
         Window("Settings", id: "settings") {
             SettingsWindowView()
         }
-        .defaultSize(width: 860, height: 640)
+        .defaultSize(width: 720, height: 520)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
     }
