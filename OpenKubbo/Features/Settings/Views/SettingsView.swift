@@ -298,53 +298,15 @@ struct SettingsView: View {
 
     private var generalContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("INICIALIZAÇÃO")
+            sectionTitle("GENERAL")
             settingsCard {
-                toggleRow(icon: "power", title: "Iniciar ao ligar o Mac", isOn: $viewModel.launchAtLogin)
-                rowDivider
-                toggleRow(title: "Reabrir janelas anteriores", isOn: $viewModel.reopenPreviousWindows)
-            }
-
-            sectionTitle("SONS E FEEDBACK")
-            settingsCard {
-                toggleRow(icon: "speaker.wave.2", title: "Reproduzir som ao concluir", isOn: $viewModel.playCompletionSound)
-                rowDivider
-                toggleRow(title: "Feedback tátil (Haptics)", isOn: $viewModel.hapticsEnabled)
-            }
-
-            sectionTitle("IDIOMA")
-            settingsCard {
-                HStack(spacing: 12) {
-                    Text("Idioma do App")
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Under Construction")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Spacer()
-
-                    Picker("", selection: $viewModel.appLanguage) {
-                        ForEach(viewModel.languages, id: \.self) { language in
-                            Text(language).tag(language)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .frame(width: 220)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-            }
-
-            sectionTitle("DADOS")
-            settingsCard {
-                HStack(spacing: 10) {
-                    Text("Armazenamento Local")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(primaryTextColor)
-
-                    Spacer()
-
-                    Text("2.4 GB")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    Text("General settings are under construction.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
                 }
                 .padding(.horizontal, 16)
