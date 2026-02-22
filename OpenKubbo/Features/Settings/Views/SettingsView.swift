@@ -418,27 +418,7 @@ struct SettingsView: View {
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    HStack(spacing: 8) {
-                        Group {
-                            if isGitHubClientIDVisible {
-                                TextField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
-                            } else {
-                                SecureField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
-                            }
-                        }
-                        .textFieldStyle(.roundedBorder)
-
-                        Button {
-                            isGitHubClientIDVisible.toggle()
-                        } label: {
-                            Image(systemName: isGitHubClientIDVisible ? "eye.slash" : "eye")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(secondaryTextColor)
-                                .frame(width: 24, height: 24)
-                        }
-                        .buttonStyle(.plain)
-                        .help(isGitHubClientIDVisible ? "Hide client ID" : "Show client ID")
-                    }
+                    githubClientIDInput
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("How to connect")
@@ -586,6 +566,42 @@ struct SettingsView: View {
         if let verificationURL = viewModel.githubVerificationURL ?? URL(string: gitHubDeviceURLString) {
             NSWorkspace.shared.open(verificationURL)
         }
+    }
+
+    private var githubClientIDInput: some View {
+        HStack(spacing: 8) {
+            Group {
+                if isGitHubClientIDVisible {
+                    TextField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
+                } else {
+                    SecureField("GitHub OAuth App Client ID", text: $viewModel.githubClientID)
+                }
+            }
+            .textFieldStyle(.plain)
+            .font(.system(size: 14, weight: .medium, design: .rounded))
+            .foregroundStyle(primaryTextColor)
+
+            Button {
+                isGitHubClientIDVisible.toggle()
+            } label: {
+                Image(systemName: isGitHubClientIDVisible ? "eye" : "eye.slash")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .help(isGitHubClientIDVisible ? "Client ID is visible. Click to hide." : "Client ID is hidden. Click to show.")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
     }
 
     private var gitHubDeviceURLString: String {
