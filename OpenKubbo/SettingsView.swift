@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 private enum SettingsSection: String, CaseIterable {
     case geral = "Geral"
@@ -47,15 +48,24 @@ struct SettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(contentWhite)
+        .ignoresSafeArea(.container, edges: .top)
+        .overlay(
+            SettingsWindowChromeConfigurator()
+                .allowsHitTesting(false)
+        )
     }
 
     // MARK: - Sidebar
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
+            fakeTrafficLights
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
+
             searchField
                 .padding(.horizontal, 12)
-                .padding(.top, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 16)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -76,6 +86,21 @@ struct SettingsView: View {
         }
         .frame(width: sidebarWidth, alignment: .leading)
         .background(sidebarGray)
+    }
+
+    private var fakeTrafficLights: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(Color(red: 1.0, green: 0.37, blue: 0.34))
+                .frame(width: 12, height: 12)
+            Circle()
+                .fill(Color(red: 1.0, green: 0.75, blue: 0.18))
+                .frame(width: 12, height: 12)
+            Circle()
+                .fill(Color(red: 0.19, green: 0.78, blue: 0.35))
+                .frame(width: 12, height: 12)
+            Spacer(minLength: 0)
+        }
     }
 
     private var searchField: some View {
@@ -139,6 +164,35 @@ struct SettingsView: View {
         case .geral, .aparência, .codexCLI, .github, .atalhos:
             Color.clear
         }
+    }
+}
+
+private struct SettingsWindowChromeConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            configureWindow(for: view)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configureWindow(for: nsView)
+        }
+    }
+
+    private func configureWindow(for view: NSView) {
+        guard let window = view.window else { return }
+
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        window.isMovableByWindowBackground = true
+
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
     }
 }
 
