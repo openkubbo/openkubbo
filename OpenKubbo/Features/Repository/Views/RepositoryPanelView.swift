@@ -527,16 +527,19 @@ struct RepositoryPanelView: View {
     private func detailActionSection(for repo: RepoItem) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             detailNavigationRow(
-                icon: "arrow.up.right.square",
-                title: "Open \(repo.name) in GitHub"
+                icon: "shippingbox",
+                title: repo.name
             ) {
-                openRepositoryOnGitHub(repo)
+                closeWindow()
             }
 
             Rectangle()
                 .fill(dividerColor)
                 .frame(height: 1)
 
+            detailNavigationRow(icon: "arrow.up.right.square", title: "Open in GitHub") {
+                openRepositoryOnGitHub(repo)
+            }
             detailNavigationRow(icon: "folder", title: "Open in Finder") {}
             detailNavigationRow(icon: "terminal", title: "Open in Terminal") {}
             detailNavigationRow(icon: "wand.and.stars", title: "Open TARS Agent", isAccent: true) {}
