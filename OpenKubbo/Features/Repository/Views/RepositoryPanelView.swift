@@ -526,12 +526,7 @@ struct RepositoryPanelView: View {
 
     private func detailActionSection(for repo: RepoItem) -> some View {
         VStack(alignment: .leading, spacing: 9) {
-            detailNavigationRow(
-                icon: "shippingbox",
-                title: repo.name
-            ) {
-                closeWindow()
-            }
+            detailRepoHeaderRow(for: repo)
 
             Rectangle()
                 .fill(dividerColor)
@@ -544,6 +539,37 @@ struct RepositoryPanelView: View {
             detailNavigationRow(icon: "terminal", title: "Open in Terminal") {}
             detailNavigationRow(icon: "wand.and.stars", title: "Open TARS Agent", isAccent: true) {}
         }
+    }
+
+    private func detailRepoHeaderRow(for repo: RepoItem) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "shippingbox")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(secondaryTextColor)
+                .frame(width: 20, alignment: .center)
+
+            Text(repo.name)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .lineLimit(1)
+
+            Spacer(minLength: 10)
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    selectedRepoID = nil
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .repoCursorOnHover()
+        }
+        .padding(.vertical, 1)
     }
 
     private func branchStatusSection(for repo: RepoItem) -> some View {
