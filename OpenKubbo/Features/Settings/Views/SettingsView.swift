@@ -1,99 +1,13 @@
-//
-//  SettingsView.swift
-//  open-tasks
-//
-
 import AppKit
-import Combine
-import ObjectiveC.runtime
 import SwiftUI
 
-enum AppTheme {
-    case light
-    case dark
-    case automatic
-}
-
-@MainActor
-final class AppThemeStore: ObservableObject {
-    @Published var selectedTheme: AppTheme = .automatic
-
-    func resolvedColorScheme(systemColorScheme: ColorScheme) -> ColorScheme {
-        switch selectedTheme {
-        case .light:
-            return .light
-        case .dark:
-            return .dark
-        case .automatic:
-            return systemColorScheme
-        }
-    }
-}
-
 struct SettingsView: View {
-    private enum SettingsTab: String, CaseIterable, Identifiable {
-        case general = "Geral"
-        case appearance = "Aparência"
-        case codexCLI = "Codex CLI"
-        case shortcuts = "Atalhos"
+    @ObservedObject var viewModel: SettingsViewModel
 
-        var id: String { rawValue }
+    @State private var hostWindow: NSWindow?
 
-        var icon: String {
-            switch self {
-            case .general:
-                return "slider.horizontal.3"
-            case .appearance:
-                return "desktopcomputer"
-            case .codexCLI:
-                return "chevron.left.forwardslash.chevron.right"
-            case .shortcuts:
-                return "command"
-            }
-        }
-    }
-
-    private enum ThemeMode: String, CaseIterable, Identifiable {
-        case light = "Clara"
-        case dark = "Escura"
-        case automatic = "Automática"
-
-        var id: String { rawValue }
-
-        init(appTheme: AppTheme) {
-            switch appTheme {
-            case .light:
-                self = .light
-            case .dark:
-                self = .dark
-            case .automatic:
-                self = .automatic
-            }
-        }
-
-        var appTheme: AppTheme {
-            switch self {
-            case .light:
-                return .light
-            case .dark:
-                return .dark
-            case .automatic:
-                return .automatic
-            }
-        }
-    }
-
-    private struct ShortcutItem: Identifiable {
-        let id = UUID()
-        let name: String
-        let keys: [String]
-    }
-
-    private struct ShortcutGroup: Identifiable {
-        let id = UUID()
-        let title: String
-        let items: [ShortcutItem]
-    }
+    @EnvironmentObject private var themeStore: AppThemeStore
+    @Environment(\.colorScheme) private var systemColorScheme
 
     private let panelWidth: CGFloat = 760
     private let panelHeight: CGFloat = 640
@@ -101,30 +15,6 @@ struct SettingsView: View {
     private let panelVerticalInset: CGFloat = 6
     private let windowEdgePaddingX: CGFloat = 10
     private let windowEdgePaddingY: CGFloat = 12
-
-    @State private var selectedTab: SettingsTab = .general
-    @State private var searchText = ""
-    @State private var hostWindow: NSWindow?
-    @EnvironmentObject private var themeStore: AppThemeStore
-    @Environment(\.colorScheme) private var systemColorScheme
-
-    @State private var launchAtLogin = false
-    @State private var reopenPreviousWindows = true
-    @State private var playCompletionSound = true
-    @State private var hapticsEnabled = true
-    @State private var appLanguage = "Português (Brasil)"
-
-    @State private var selectedAccentColorIndex = 0
-
-    @State private var selectedModel = "Gemini 1.5 Pro"
-    @State private var temperature = 0.7
-    @State private var terminalSuggestionsEnabled = true
-    @State private var automaticErrorAnalysis = false
-    @State private var syncProfilesEnabled = true
-
-    private let executablePath = "/usr/local/bin/codex"
-    private let apiKeyMasked = "••••••••••••••••"
-    private let models = ["Gemini 1.5 Pro", "GPT-4.1", "Claude 3.7 Sonnet"]
 
     private var accentPalette: [Color] {
         [
@@ -136,55 +26,6 @@ struct SettingsView: View {
             Color(red: 0.90, green: 0.47, blue: 0.19),
             Color(red: 0.23, green: 0.73, blue: 0.41)
         ]
-    }
-
-    private var shortcutGroups: [ShortcutGroup] {
-        [
-            ShortcutGroup(
-                title: "GERAL",
-                items: [
-                    ShortcutItem(name: "Nova Tarefa", keys: ["↩"]),
-                    ShortcutItem(name: "Configurações", keys: ["⌘", ","]),
-                    ShortcutItem(name: "Buscar", keys: ["⌘", "F"])
-                ]
-            ),
-            ShortcutGroup(
-                title: "JANELA",
-                items: [
-                    ShortcutItem(name: "Duplicar Janela", keys: ["⌘", "D"]),
-                    ShortcutItem(name: "Fechar Janela", keys: ["⌘", "W"]),
-                    ShortcutItem(name: "Minimizar", keys: ["⌘", "M"])
-                ]
-            ),
-            ShortcutGroup(
-                title: "TAREFAS",
-                items: [
-                    ShortcutItem(name: "Editar Tarefa", keys: ["⌘", "E"]),
-                    ShortcutItem(name: "Concluir Tarefa", keys: ["⌘", "↩"]),
-                    ShortcutItem(name: "Excluir Tarefa", keys: ["⌘", "⌫"])
-                ]
-            )
-        ]
-    }
-
-    private var visibleTabs: [SettingsTab] {
-        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return SettingsTab.allCases
-        }
-        return SettingsTab.allCases.filter { tab in
-            tab.rawValue.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-
-    private var activeTab: SettingsTab {
-        if visibleTabs.contains(selectedTab) {
-            return selectedTab
-        }
-        return visibleTabs.first ?? .general
-    }
-
-    private var selectedThemeMode: ThemeMode {
-        ThemeMode(appTheme: themeStore.selectedTheme)
     }
 
     private var isDarkTheme: Bool {
@@ -324,16 +165,16 @@ struct SettingsView: View {
 
             TextField(
                 "",
-                text: $searchText,
+                text: $viewModel.searchText,
                 prompt: Text("Buscar ajustes...").foregroundColor(searchPlaceholderColor)
             )
             .textFieldStyle(.plain)
             .font(.system(size: 16, weight: .medium, design: .rounded))
             .foregroundStyle(primaryTextColor)
 
-            if !searchText.isEmpty {
+            if !viewModel.searchText.isEmpty {
                 Button {
-                    searchText = ""
+                    viewModel.clearSearch()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 14))
@@ -375,11 +216,11 @@ struct SettingsView: View {
 
     private var sidebarTabs: some View {
         Group {
-            if visibleTabs.isEmpty {
+            if viewModel.visibleTabs.isEmpty {
                 EmptySettingsStateView(isDarkTheme: isDarkTheme)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(visibleTabs) { tab in
+                    ForEach(viewModel.visibleTabs) { tab in
                         sidebarTabButton(tab)
                     }
                 }
@@ -389,7 +230,7 @@ struct SettingsView: View {
 
     private func sidebarTabButton(_ tab: SettingsTab) -> some View {
         Button {
-            selectedTab = tab
+            viewModel.selectTab(tab)
         } label: {
             HStack(spacing: 9) {
                 Image(systemName: tab.icon)
@@ -399,15 +240,15 @@ struct SettingsView: View {
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(activeTab == tab ? primaryTextColor : secondaryTextColor)
+            .foregroundStyle(viewModel.activeTab == tab ? primaryTextColor : secondaryTextColor)
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(activeTab == tab ? selectedTabFillColor : cardFillColor)
+                    .fill(viewModel.activeTab == tab ? selectedTabFillColor : cardFillColor)
                     .overlay(
                         RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            .stroke(activeTab == tab ? selectedTabStrokeColor : cardStrokeColor, lineWidth: 1)
+                            .stroke(viewModel.activeTab == tab ? selectedTabStrokeColor : cardStrokeColor, lineWidth: 1)
                     )
             )
         }
@@ -417,7 +258,7 @@ struct SettingsView: View {
     private var contentScroll: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                switch activeTab {
+                switch viewModel.activeTab {
                 case .general:
                     generalContent
                 case .appearance:
@@ -448,7 +289,7 @@ struct SettingsView: View {
 
                 Spacer()
 
-                Text(activeTab.rawValue)
+                Text(viewModel.activeTab.rawValue)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(secondaryTextColor)
             }
@@ -459,16 +300,16 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("INICIALIZAÇÃO")
             settingsCard {
-                toggleRow(icon: "power", title: "Iniciar ao ligar o Mac", isOn: $launchAtLogin)
+                toggleRow(icon: "power", title: "Iniciar ao ligar o Mac", isOn: $viewModel.launchAtLogin)
                 rowDivider
-                toggleRow(title: "Reabrir janelas anteriores", isOn: $reopenPreviousWindows)
+                toggleRow(title: "Reabrir janelas anteriores", isOn: $viewModel.reopenPreviousWindows)
             }
 
             sectionTitle("SONS E FEEDBACK")
             settingsCard {
-                toggleRow(icon: "speaker.wave.2", title: "Reproduzir som ao concluir", isOn: $playCompletionSound)
+                toggleRow(icon: "speaker.wave.2", title: "Reproduzir som ao concluir", isOn: $viewModel.playCompletionSound)
                 rowDivider
-                toggleRow(title: "Feedback tátil (Haptics)", isOn: $hapticsEnabled)
+                toggleRow(title: "Feedback tátil (Haptics)", isOn: $viewModel.hapticsEnabled)
             }
 
             sectionTitle("IDIOMA")
@@ -480,10 +321,10 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Picker("", selection: $appLanguage) {
-                        Text("Português (Brasil)").tag("Português (Brasil)")
-                        Text("English (US)").tag("English (US)")
-                        Text("Español").tag("Español")
+                    Picker("", selection: $viewModel.appLanguage) {
+                        ForEach(viewModel.languages, id: \.self) { language in
+                            Text(language).tag(language)
+                        }
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
@@ -513,14 +354,14 @@ struct SettingsView: View {
     }
 
     private var appearanceContent: some View {
-        let selectedTheme = selectedThemeMode
+        let selectedTheme = viewModel.selectedThemeMode
 
         return VStack(alignment: .leading, spacing: 12) {
             sectionTitle("TEMA")
             HStack(spacing: 10) {
                 ForEach(ThemeMode.allCases) { mode in
                     Button {
-                        themeStore.selectedTheme = mode.appTheme
+                        viewModel.selectedThemeMode = mode
                     } label: {
                         VStack(spacing: 8) {
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -545,14 +386,14 @@ struct SettingsView: View {
             HStack(spacing: 10) {
                 ForEach(accentPalette.indices, id: \.self) { index in
                     Button {
-                        selectedAccentColorIndex = index
+                        viewModel.selectedAccentColorIndex = index
                     } label: {
                         Circle()
                             .fill(accentPalette[index])
                             .frame(width: 26, height: 26)
                             .overlay(
                                 Circle()
-                                    .stroke((isDarkTheme ? Color.white.opacity(0.86) : Color.black.opacity(0.82)).opacity(index == selectedAccentColorIndex ? 1 : 0), lineWidth: 2)
+                                    .stroke((isDarkTheme ? Color.white.opacity(0.86) : Color.black.opacity(0.82)).opacity(index == viewModel.selectedAccentColorIndex ? 1 : 0), lineWidth: 2)
                             )
                     }
                     .buttonStyle(.plain)
@@ -565,9 +406,9 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("CONEXÃO")
             settingsCard {
-                rowValue(title: "Caminho do Executável", value: executablePath)
+                rowValue(title: "Caminho do Executável", value: viewModel.executablePath)
                 rowDivider
-                rowValue(title: "Chave de API", value: apiKeyMasked)
+                rowValue(title: "Chave de API", value: viewModel.apiKeyMasked)
             }
 
             Text("O caminho deve apontar para o binário instalado via Homebrew ou npm.")
@@ -584,8 +425,8 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Picker("", selection: $selectedModel) {
-                        ForEach(models, id: \.self) { model in
+                    Picker("", selection: $viewModel.selectedModel) {
+                        ForEach(viewModel.models, id: \.self) { model in
                             Text(model).tag(model)
                         }
                     }
@@ -602,10 +443,10 @@ struct SettingsView: View {
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Slider(value: $temperature, in: 0...1, step: 0.1)
+                    Slider(value: $viewModel.temperature, in: 0...1, step: 0.1)
                         .tint(Color(red: 0.39, green: 0.44, blue: 0.99))
 
-                    Text(String(format: "%.1f", temperature))
+                    Text(String(format: "%.1f", viewModel.temperature))
                         .font(.system(size: 13, weight: .bold, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
                         .frame(width: 32)
@@ -616,18 +457,18 @@ struct SettingsView: View {
 
             sectionTitle("INTEGRAÇÃO")
             settingsCard {
-                toggleRow(title: "Sugestões Inteligentes no Terminal", isOn: $terminalSuggestionsEnabled)
+                toggleRow(title: "Sugestões Inteligentes no Terminal", isOn: $viewModel.terminalSuggestionsEnabled)
                 rowDivider
-                toggleRow(title: "Análise de Erros Automática", isOn: $automaticErrorAnalysis)
+                toggleRow(title: "Análise de Erros Automática", isOn: $viewModel.automaticErrorAnalysis)
                 rowDivider
-                toggleRow(title: "Sincronizar Perfis", isOn: $syncProfilesEnabled)
+                toggleRow(title: "Sincronizar Perfis", isOn: $viewModel.syncProfilesEnabled)
             }
         }
     }
 
     private var shortcutsContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(shortcutGroups) { group in
+            ForEach(viewModel.shortcutGroups) { group in
                 sectionTitle(group.title)
                 settingsCard {
                     ForEach(group.items.indices, id: \.self) { index in
@@ -780,215 +621,5 @@ struct SettingsView: View {
 
     private func closeSettingsWindow() {
         hostWindow?.close()
-    }
-}
-
-private struct SettingsHeaderIcon: View {
-    let symbol: String
-    var isActive = false
-    var isDarkTheme = false
-
-    private var symbolColor: Color {
-        isDarkTheme ? .white.opacity(isActive ? 0.84 : 0.66) : .black.opacity(isActive ? 0.82 : 0.62)
-    }
-
-    private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.21, blue: 0.25) : .white
-    }
-
-    private var strokeColor: Color {
-        if isActive {
-            return Color(red: 0.42, green: 0.41, blue: 0.80).opacity(0.45)
-        }
-        return isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
-    }
-
-    var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(symbolColor)
-            .frame(width: 42, height: 42)
-            .background(
-                Circle()
-                    .fill(fillColor)
-                    .overlay(
-                        Circle()
-                            .stroke(strokeColor, lineWidth: 1)
-                    )
-            )
-    }
-}
-
-private struct ShortcutKeysView: View {
-    let keys: [String]
-    var isDarkTheme = false
-
-    private var textColor: Color {
-        isDarkTheme ? .white.opacity(0.84) : .black.opacity(0.78)
-    }
-
-    private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.21, blue: 0.25) : .white
-    }
-
-    private var strokeColor: Color {
-        isDarkTheme ? .white.opacity(0.12) : .black.opacity(0.12)
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(keys, id: \.self) { key in
-                Text(key)
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(textColor)
-                    .frame(minWidth: 26)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(fillColor)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .stroke(strokeColor, lineWidth: 1)
-                            )
-                    )
-            }
-        }
-    }
-}
-
-private struct EmptySettingsStateView: View {
-    var isDarkTheme = false
-
-    private var textColor: Color {
-        isDarkTheme ? .white.opacity(0.58) : .black.opacity(0.50)
-    }
-
-    private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.21, blue: 0.25) : .white
-    }
-
-    private var strokeColor: Color {
-        isDarkTheme ? .white.opacity(0.10) : .black.opacity(0.08)
-    }
-
-    var body: some View {
-        HStack {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(textColor)
-            Text("Nenhum ajuste encontrado")
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                .foregroundStyle(textColor)
-        }
-        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(fillColor)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(strokeColor, lineWidth: 1)
-                )
-        )
-    }
-}
-
-private struct SettingsWindowConfigurator: NSViewRepresentable {
-    let targetSize: CGSize
-    let onResolve: (NSWindow) -> Void
-    private static var patchedWindowClasses: Set<ObjectIdentifier> = []
-
-    init(targetSize: CGSize, onResolve: @escaping (NSWindow) -> Void = { _ in }) {
-        self.targetSize = targetSize
-        self.onResolve = onResolve
-    }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            configure(window)
-            onResolve(window)
-        }
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        DispatchQueue.main.async {
-            guard let window = nsView.window else { return }
-            configure(window)
-            onResolve(window)
-        }
-    }
-
-    private func configure(_ window: NSWindow) {
-        ensureWindowCanBecomeKey(window)
-
-        if window.identifier?.rawValue != "glassdo.settings.window" {
-            window.identifier = NSUserInterfaceItemIdentifier("glassdo.settings.window")
-            window.styleMask = [.borderless, .fullSizeContentView]
-            window.isMovableByWindowBackground = false
-            window.backgroundColor = .clear
-            window.isOpaque = false
-            window.hasShadow = true
-            window.level = .floating
-            window.collectionBehavior = [.fullScreenAuxiliary]
-            window.standardWindowButton(.closeButton)?.isHidden = true
-            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-            window.standardWindowButton(.zoomButton)?.isHidden = true
-        }
-
-        window.minSize = NSSize(width: 620, height: 520)
-        let desiredSize = NSSize(width: targetSize.width, height: targetSize.height)
-        if window.frame.size != desiredSize {
-            window.setContentSize(desiredSize)
-        }
-    }
-
-    private func ensureWindowCanBecomeKey(_ window: NSWindow) {
-        guard let windowClass = object_getClass(window) else { return }
-        let classID = ObjectIdentifier(windowClass)
-        guard !Self.patchedWindowClasses.contains(classID) else { return }
-
-        let canBecomeKey: @convention(block) (AnyObject) -> Bool = { _ in true }
-        let canBecomeMain: @convention(block) (AnyObject) -> Bool = { _ in true }
-
-        class_addMethod(
-            windowClass,
-            #selector(getter: NSWindow.canBecomeKey),
-            imp_implementationWithBlock(canBecomeKey),
-            "B@:"
-        )
-        class_addMethod(
-            windowClass,
-            #selector(getter: NSWindow.canBecomeMain),
-            imp_implementationWithBlock(canBecomeMain),
-            "B@:"
-        )
-
-        Self.patchedWindowClasses.insert(classID)
-    }
-}
-
-private struct SettingsWindowDragRegion: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        SettingsDragRegionNSView()
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
-private final class SettingsDragRegionNSView: NSView {
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        discardCursorRects()
-        addCursorRect(bounds, cursor: .openHand)
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        NSCursor.closedHand.push()
-        defer { NSCursor.pop() }
-        window?.performDrag(with: event)
     }
 }
