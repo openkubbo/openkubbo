@@ -430,28 +430,19 @@ struct SettingsView: View {
 
     private var shortcutsContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(viewModel.shortcutGroups) { group in
-                sectionTitle(group.title)
-                settingsCard {
-                    ForEach(group.items.indices, id: \.self) { index in
-                        let item = group.items[index]
-                        HStack {
-                            Text(item.name)
-                                .font(.system(size: 15, weight: .semibold, design: .rounded))
-                                .foregroundStyle(primaryTextColor)
+            sectionTitle("SHORTCUTS")
+            settingsCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Under Construction")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
 
-                            Spacer()
-
-                            ShortcutKeysView(keys: item.keys, isDarkTheme: isDarkTheme)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 13)
-
-                        if index < group.items.count - 1 {
-                            rowDivider
-                        }
-                    }
+                    Text("Shortcuts are under construction.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
             }
         }
     }
