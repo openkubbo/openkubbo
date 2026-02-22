@@ -72,16 +72,6 @@ struct SettingsView: View {
             .padding(.horizontal, 10)
 
             Spacer(minLength: 0)
-
-            // Divisor acima do usuário
-            Rectangle()
-                .fill(dividerColor)
-                .frame(height: 1)
-                .padding(.horizontal, 0)
-
-            userArea
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
         }
         .frame(width: sidebarWidth, alignment: .leading)
         .background(sidebarGray)
@@ -107,29 +97,6 @@ struct SettingsView: View {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(searchBorderGray, lineWidth: 1)
         )
-    }
-
-    private var userArea: some View {
-        HStack(spacing: 10) {
-            ZStack {
-                Circle()
-                    .fill(selectedBackground)
-                    .frame(width: 36, height: 36)
-                Image(systemName: "gearshape")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.45, green: 0.35, blue: 0.72))
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text("GlassUser")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color(white: 0.18))
-                Text("PRO ACCOUNT")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Color(white: 0.55))
-                    .tracking(0.3)
-            }
-            Spacer(minLength: 0)
-        }
     }
 
     // MARK: - Main Content
