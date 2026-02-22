@@ -63,7 +63,7 @@ struct OpenKubboApp: App {
         Window("Settings", id: "settings") {
             SettingsWindowView()
         }
-        .defaultSize(width: 1020, height: 680)
+        .defaultSize(width: 1400, height: 1020)
     }
 
     private func handleMenuSelection(_ itemID: String) {
