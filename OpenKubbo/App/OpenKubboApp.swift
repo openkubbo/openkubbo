@@ -32,7 +32,7 @@ struct OpenKubboApp: App {
         .windowStyle(.hiddenTitleBar)
 
         Window("Repository", id: "repository") {
-            RepositoryPanelView()
+            RepositoryPanelView(viewModel: container.repositoryViewModel)
                 .environmentObject(container.themeStore)
         }
         .defaultSize(width: 360, height: 728)

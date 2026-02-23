@@ -8,6 +8,7 @@ final class AppContainer: ObservableObject {
     let themeStore: AppThemeStore
     let settingsViewModel: SettingsViewModel
     let menuBarViewModel: MenuBarViewModel
+    let repositoryViewModel: RepositoryViewModel
 
     init() {
         let themeStore = AppThemeStore()
@@ -25,5 +26,6 @@ final class AppContainer: ObservableObject {
             gitHubTokenStore: gitHubTokenStore
         )
         self.menuBarViewModel = MenuBarViewModel()
+        self.repositoryViewModel = RepositoryViewModel()
     }
 }
