@@ -314,11 +314,16 @@ struct RepositoryPanelView: View {
                                 secondaryColor: secondaryTextColor,
                                 accentColor: accentColor,
                                 dividerColor: dividerColor,
+                                isPinned: viewModel.isRepoPinned(repo),
                                 isSelected: viewModel.selectedRepoID == repo.id,
                                 showDivider: index < filteredRepos.count - 1
                             ) {
                                 withAnimation(.easeInOut(duration: 0.18)) {
                                     viewModel.selectRepository(repo)
+                                }
+                            } onTogglePinned: {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    viewModel.togglePinned(repo)
                                 }
                             }
                         }
@@ -1085,9 +1090,11 @@ private struct RepoRow: View {
     var secondaryColor: Color
     var accentColor: Color
     var dividerColor: Color
+    var isPinned: Bool
     var isSelected: Bool
     var showDivider: Bool
     var onTap: () -> Void
+    var onTogglePinned: () -> Void
 
     @State private var isHovered = false
 
@@ -1106,66 +1113,98 @@ private struct RepoRow: View {
     }
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(spacing: 0) {
-                HStack(alignment: .top, spacing: 10) {
-                Circle()
-                    .fill(accentColor)
-                    .frame(width: 8, height: 8)
-                    .padding(.top, 5)
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 8) {
+                Button(action: onTap) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Circle()
+                            .fill(accentColor)
+                            .frame(width: 8, height: 8)
+                            .padding(.top, 5)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(repo.name)
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundStyle(primaryColor)
-                                .lineLimit(1)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(repo.name)
+                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                    .foregroundStyle(primaryColor)
+                                    .lineLimit(1)
 
-                            Spacer(minLength: 8)
+                                Spacer(minLength: 8)
 
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(isSelected ? primaryColor : secondaryColor)
-                        }
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(isSelected ? primaryColor : secondaryColor)
+                            }
 
-                        HStack(spacing: 8) {
-                            repoStat(icon: "exclamationmark.circle", value: "\(repo.issues) Issues")
-                            repoStat(icon: "arrow.triangle.pull", value: "\(repo.prs) PRs")
-                            repoStat(icon: "star", value: "\(starsFormatted(repo.stars)) Stars")
-                        }
+                            HStack(spacing: 8) {
+                                repoStat(icon: "exclamationmark.circle", value: "\(repo.issues) Issues")
+                                repoStat(icon: "arrow.triangle.pull", value: "\(repo.prs) PRs")
+                                repoStat(icon: "star", value: "\(starsFormatted(repo.stars)) Stars")
+                            }
 
-                        repoVisibilityTag()
+                            repoVisibilityTag()
 
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(secondaryColor)
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(secondaryColor)
 
-                            Text(repo.branch)
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                                .foregroundStyle(secondaryColor)
+                                Text(repo.branch)
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryColor)
 
-                            Spacer()
+                                Spacer()
 
-                            Text(repo.updatedAgo)
-                                .font(.system(size: 11, weight: .medium, design: .rounded))
-                                .foregroundStyle(secondaryColor)
+                                Text(repo.updatedAgo)
+                                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                                    .foregroundStyle(secondaryColor)
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(rowFillColor)
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
 
-                if showDivider {
-                    Rectangle()
-                        .fill(dividerColor)
-                        .frame(height: 1)
-                        .padding(.horizontal, 12)
+                Button(action: onTogglePinned) {
+                    Image(systemName: isPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(isPinned ? accentColor : secondaryColor)
+                        .frame(width: 24, height: 24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .fill(
+                                    isPinned
+                                        ? accentColor.opacity(isDarkTheme ? 0.20 : 0.14)
+                                        : Color.clear
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                        .stroke(
+                                            isPinned
+                                                ? accentColor.opacity(0.45)
+                                                : Color.clear,
+                                            lineWidth: 1
+                                        )
+                                )
+                        )
                 }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .accessibilityLabel(isPinned ? "Unpin repository" : "Pin repository")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(rowFillColor)
+
+            if showDivider {
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+                    .padding(.horizontal, 12)
             }
         }
-        .buttonStyle(.plain)
         .onHover { hovering in
             isHovered = hovering
             if hovering {

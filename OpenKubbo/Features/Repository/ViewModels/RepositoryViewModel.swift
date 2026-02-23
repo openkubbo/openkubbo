@@ -6,6 +6,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var repositories: [RepoItem] = []
     @Published private(set) var isLoadingRepositories = false
     @Published private(set) var repositoryLoadErrorMessage: String?
+    @Published private(set) var pinnedRepositoryIDs: Set<String> = []
 
     @Published var selectedFilter: RepoFilter = .all {
         didSet {
@@ -23,6 +24,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedIssuesScope: RepoIssuesScope = .open
 
     private let dataProvider: RepositoryDataProviding
+    private var hasUserCustomizedPins = false
 
     init(dataProvider: RepositoryDataProviding) {
         self.dataProvider = dataProvider
@@ -33,7 +35,7 @@ final class RepositoryViewModel: ObservableObject {
         case .all:
             return repositories
         case .pinned:
-            return repositories.filter { $0.isPinned }
+            return repositories.filter { pinnedRepositoryIDs.contains($0.id) }
         case .work:
             return repositories.filter { $0.isWork }
         }
@@ -56,6 +58,7 @@ final class RepositoryViewModel: ObservableObject {
 
         do {
             repositories = try await dataProvider.loadRepositories()
+            applyPinnedState(for: repositories)
             repositoryLoadErrorMessage = nil
             synchronizeSelectedRepo()
 
@@ -75,6 +78,22 @@ final class RepositoryViewModel: ObservableObject {
 
     func selectRepository(_ repo: RepoItem) {
         selectedRepoID = repo.id
+    }
+
+    func isRepoPinned(_ repo: RepoItem) -> Bool {
+        pinnedRepositoryIDs.contains(repo.id)
+    }
+
+    func togglePinned(_ repo: RepoItem) {
+        hasUserCustomizedPins = true
+
+        if pinnedRepositoryIDs.contains(repo.id) {
+            pinnedRepositoryIDs.remove(repo.id)
+        } else {
+            pinnedRepositoryIDs.insert(repo.id)
+        }
+
+        synchronizeSelectedRepo()
     }
 
     func closeRepositorySelection() {
@@ -118,6 +137,23 @@ final class RepositoryViewModel: ObservableObject {
         if !filteredRepos.contains(where: { $0.id == selectedRepoID }) {
             closeRepositorySelection()
         }
+    }
+
+    private func applyPinnedState(for repositories: [RepoItem]) {
+        let validIDs = Set(repositories.map(\.id))
+
+        if hasUserCustomizedPins {
+            pinnedRepositoryIDs = pinnedRepositoryIDs.intersection(validIDs)
+            return
+        }
+
+        let retainedDefaultPins = pinnedRepositoryIDs.intersection(validIDs)
+        if !retainedDefaultPins.isEmpty {
+            pinnedRepositoryIDs = retainedDefaultPins
+            return
+        }
+
+        pinnedRepositoryIDs = Set(repositories.filter(\.isPinned).map(\.id))
     }
 
     private func repositoryErrorDescription(_ error: Error) -> String {
