@@ -6,6 +6,7 @@ struct GitHubRepository: Identifiable, Equatable {
     let fullName: String
     let ownerLogin: String
     let sshCloneURL: String
+    let httpsCloneURL: String
     let isPrivate: Bool
     let defaultBranch: String
     let openIssuesCount: Int
@@ -142,6 +143,7 @@ final class GitHubAPIService: GitHubAPIServicing {
                         fullName: $0.fullName,
                         ownerLogin: $0.owner.login,
                         sshCloneURL: $0.sshCloneURL,
+                        httpsCloneURL: $0.httpsCloneURL,
                         isPrivate: $0.isPrivate,
                         defaultBranch: $0.defaultBranch,
                         openIssuesCount: $0.openIssuesCount,
@@ -431,6 +433,7 @@ private struct RepositoryResponse: Decodable {
     let fullName: String
     let owner: Owner
     let sshCloneURL: String
+    let httpsCloneURL: String
     let isPrivate: Bool
     let defaultBranch: String
     let openIssuesCount: Int
@@ -443,6 +446,7 @@ private struct RepositoryResponse: Decodable {
         case fullName = "full_name"
         case owner
         case sshCloneURL = "ssh_url"
+        case httpsCloneURL = "clone_url"
         case isPrivate = "private"
         case defaultBranch = "default_branch"
         case openIssuesCount = "open_issues_count"

@@ -3,7 +3,7 @@ import Foundation
 
 enum RepositoryLocalActionError: LocalizedError {
     case pathNotDirectory(String)
-    case missingSSHCloneURL
+    case missingCloneURL
     case destinationAlreadyExists(String)
     case destinationNotDirectory(String)
     case gitNotAvailable
@@ -14,8 +14,8 @@ enum RepositoryLocalActionError: LocalizedError {
         switch self {
         case .pathNotDirectory(let path):
             return "Local path is not a directory: \(path)"
-        case .missingSSHCloneURL:
-            return "Repository does not expose an SSH clone URL."
+        case .missingCloneURL:
+            return "Repository does not expose a clone URL."
         case .destinationAlreadyExists(let path):
             return "Destination folder is not empty: \(path)"
         case .destinationNotDirectory(let path):
@@ -33,7 +33,13 @@ enum RepositoryLocalActionError: LocalizedError {
 protocol RepositoryLocalActionServicing {
     func openInFinder(at localURL: URL) throws
     func openInTerminal(at localURL: URL) throws
-    func cloneRepository(sshCloneURL: String, into rootURL: URL, directoryName: String) async throws -> URL
+    func cloneRepository(
+        sshCloneURL: String?,
+        httpsCloneURL: String?,
+        accessToken: String?,
+        into rootURL: URL,
+        directoryName: String
+    ) async throws -> URL
 }
 
 struct RepositoryLocalActionService: RepositoryLocalActionServicing {
@@ -67,10 +73,18 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         }
     }
 
-    func cloneRepository(sshCloneURL: String, into rootURL: URL, directoryName: String) async throws -> URL {
-        let trimmedCloneURL = sshCloneURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedCloneURL.isEmpty else {
-            throw RepositoryLocalActionError.missingSSHCloneURL
+    func cloneRepository(
+        sshCloneURL: String?,
+        httpsCloneURL: String?,
+        accessToken: String?,
+        into rootURL: URL,
+        directoryName: String
+    ) async throws -> URL {
+        let trimmedSSHCloneURL = sshCloneURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedHTTPSCloneURL = httpsCloneURL?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        guard !trimmedSSHCloneURL.isEmpty || !trimmedHTTPSCloneURL.isEmpty else {
+            throw RepositoryLocalActionError.missingCloneURL
         }
 
         let gitExecutablePaths = availableGitExecutablePaths()
@@ -79,6 +93,7 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         }
 
         let destinationURL = rootURL.appendingPathComponent(directoryName, isDirectory: true)
+        let destinationExistedBeforeClone = fileManager.fileExists(atPath: destinationURL.path)
 
         let hasSecurityAccess = rootURL.startAccessingSecurityScopedResource()
         defer {
@@ -98,44 +113,72 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
             }
         }
 
+        let cloneConfigurations = buildCloneConfigurations(
+            sshCloneURL: trimmedSSHCloneURL,
+            httpsCloneURL: trimmedHTTPSCloneURL,
+            accessToken: accessToken
+        )
+
         var hasSandboxBlockedGit = false
-        var lastCloneErrorMessage: String?
 
-        for executablePath in gitExecutablePaths {
-            let result = try await runProcess(
-                executablePath: executablePath,
-                arguments: ["clone", "--", trimmedCloneURL, destinationURL.path],
-                currentDirectoryURL: rootURL
+        do {
+            for executablePath in gitExecutablePaths {
+                for configuration in cloneConfigurations {
+                    let result = try await runProcess(
+                        executablePath: executablePath,
+                        arguments: configuration.arguments(destinationPath: destinationURL.path),
+                        currentDirectoryURL: rootURL
+                    )
+
+                    if result.exitCode == 0 {
+                        return destinationURL
+                    }
+
+                    let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let stdout = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                    if isSandboxBlockedXcrunError(stderr: stderr, stdout: stdout) {
+                        hasSandboxBlockedGit = true
+                        continue
+                    }
+
+                    if !stderr.isEmpty {
+                        throw RepositoryLocalActionError.commandFailed(stderr)
+                    } else if !stdout.isEmpty {
+                        throw RepositoryLocalActionError.commandFailed(stdout)
+                    } else {
+                        throw RepositoryLocalActionError.commandFailed("Unable to clone repository.")
+                    }
+                }
+            }
+
+            if hasSandboxBlockedGit {
+                throw RepositoryLocalActionError.gitBlockedBySandbox
+            } else {
+                throw RepositoryLocalActionError.commandFailed("Unable to clone repository.")
+            }
+        } catch {
+            cleanupDestinationIfNeeded(
+                destinationURL: destinationURL,
+                destinationExistedBeforeClone: destinationExistedBeforeClone
             )
-
-            if result.exitCode == 0 {
-                return destinationURL
-            }
-
-            let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            let stdout = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            if isSandboxBlockedXcrunError(stderr: stderr, stdout: stdout) {
-                hasSandboxBlockedGit = true
-                continue
-            }
-
-            if !stderr.isEmpty {
-                lastCloneErrorMessage = stderr
-            } else if !stdout.isEmpty {
-                lastCloneErrorMessage = stdout
-            }
+            throw error
         }
+    }
 
-        if hasSandboxBlockedGit {
-            throw RepositoryLocalActionError.gitBlockedBySandbox
+    private struct CloneConfiguration {
+        let cloneURL: String
+        let extraGitConfigs: [String]
+
+        func arguments(destinationPath: String) -> [String] {
+            var args: [String] = []
+            for config in extraGitConfigs {
+                args.append("-c")
+                args.append(config)
+            }
+            args.append(contentsOf: ["clone", "--", cloneURL, destinationPath])
+            return args
         }
-
-        if let lastCloneErrorMessage {
-            throw RepositoryLocalActionError.commandFailed(lastCloneErrorMessage)
-        }
-
-        throw RepositoryLocalActionError.commandFailed("Unable to clone repository.")
     }
 
     private func isDirectoryEmpty(_ directoryURL: URL) -> Bool {
@@ -147,14 +190,60 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         }
     }
 
+    private func buildCloneConfigurations(
+        sshCloneURL: String,
+        httpsCloneURL: String,
+        accessToken: String?
+    ) -> [CloneConfiguration] {
+        var configurations: [CloneConfiguration] = []
+
+        if !httpsCloneURL.isEmpty {
+            let token = accessToken?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if let authHeader = basicAuthHeader(forAccessToken: token) {
+                configurations.append(
+                    CloneConfiguration(
+                        cloneURL: httpsCloneURL,
+                        extraGitConfigs: ["http.extraHeader=Authorization: Basic \(authHeader)"]
+                    )
+                )
+            }
+
+            configurations.append(
+                CloneConfiguration(cloneURL: httpsCloneURL, extraGitConfigs: [])
+            )
+        }
+
+        if !sshCloneURL.isEmpty {
+            configurations.append(
+                CloneConfiguration(cloneURL: sshCloneURL, extraGitConfigs: [])
+            )
+        }
+
+        return configurations
+    }
+
+    private func basicAuthHeader(forAccessToken accessToken: String) -> String? {
+        guard !accessToken.isEmpty else {
+            return nil
+        }
+
+        let credentials = "x-access-token:\(accessToken)"
+        return Data(credentials.utf8).base64EncodedString()
+    }
+
     private func availableGitExecutablePaths() -> [String] {
-        let candidates = [
+        var candidates = [
             "/opt/homebrew/bin/git",
             "/usr/local/bin/git",
             "/Library/Developer/CommandLineTools/usr/bin/git",
-            "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
-            "/usr/bin/git"
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/git"
         ]
+
+        // `/usr/bin/git` generally resolves through `xcrun`, which is commonly blocked in App Sandbox.
+        // Keep it as a last-resort fallback only when no other git binary is available.
+        if !candidates.contains(where: { fileManager.isExecutableFile(atPath: $0) }) {
+            candidates.append("/usr/bin/git")
+        }
 
         var seen: Set<String> = []
         var paths: [String] = []
@@ -171,6 +260,21 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
     private func isSandboxBlockedXcrunError(stderr: String, stdout: String) -> Bool {
         let mergedOutput = "\(stderr)\n\(stdout)".lowercased()
         return mergedOutput.contains("xcrun: error: cannot be used within an app sandbox")
+    }
+
+    private func cleanupDestinationIfNeeded(
+        destinationURL: URL,
+        destinationExistedBeforeClone: Bool
+    ) {
+        guard !destinationExistedBeforeClone else {
+            return
+        }
+
+        guard fileManager.fileExists(atPath: destinationURL.path) else {
+            return
+        }
+
+        _ = try? fileManager.removeItem(at: destinationURL)
     }
 
     private func ensureDirectory(at localURL: URL) throws {

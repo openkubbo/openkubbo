@@ -40,18 +40,21 @@ final class RepositoryViewModel: ObservableObject {
     private let localRootProvider: LocalRepositoryRootProviding
     private let localResolver: LocalRepositoryResolving
     private let localActionService: RepositoryLocalActionServicing
+    private let gitHubTokenStore: GitHubTokenStoring
     private var hasUserCustomizedPins = false
 
     init(
         dataProvider: RepositoryDataProviding,
         localRootProvider: LocalRepositoryRootProviding,
         localResolver: LocalRepositoryResolving,
-        localActionService: RepositoryLocalActionServicing
+        localActionService: RepositoryLocalActionServicing,
+        gitHubTokenStore: GitHubTokenStoring
     ) {
         self.dataProvider = dataProvider
         self.localRootProvider = localRootProvider
         self.localResolver = localResolver
         self.localActionService = localActionService
+        self.gitHubTokenStore = gitHubTokenStore
     }
 
     var filteredRepos: [RepoItem] {
@@ -180,13 +183,11 @@ final class RepositoryViewModel: ObservableObject {
             case .matched(let localURL):
                 return .cloned(localPath: localURL.path)
             case .missing:
-                guard let sshCloneURL = repo.sshCloneURL else {
-                    return .failed("This repository does not provide an SSH clone URL.")
-                }
-
                 let directoryName = localResolver.repositoryDirectoryName(for: repo)
                 let destinationURL = try await localActionService.cloneRepository(
-                    sshCloneURL: sshCloneURL,
+                    sshCloneURL: repo.sshCloneURL,
+                    httpsCloneURL: repo.httpsCloneURL,
+                    accessToken: gitHubTokenStore.token(),
                     into: rootURL,
                     directoryName: directoryName
                 )
