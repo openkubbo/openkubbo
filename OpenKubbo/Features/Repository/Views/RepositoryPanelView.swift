@@ -7,6 +7,7 @@ import SwiftUI
 private struct RepoItem: Identifiable, Equatable {
     let id: String
     let name: String
+    let visibility: RepoVisibility
     let issues: Int
     let prs: Int
     let stars: Int
@@ -21,6 +22,29 @@ private struct RepoItem: Identifiable, Equatable {
     let branches: Int
     let contributors: Int
     let openCommits: Int
+}
+
+private enum RepoVisibility: Equatable {
+    case openSource
+    case `private`
+
+    var label: String {
+        switch self {
+        case .openSource:
+            return "Open source"
+        case .private:
+            return "Private"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .openSource:
+            return "lock.open"
+        case .private:
+            return "lock"
+        }
+    }
 }
 
 private enum RepoDetailDestination: String, Identifiable {
@@ -252,6 +276,7 @@ struct RepositoryPanelView: View {
         RepoItem(
             id: "tarikvillalobos/postme",
             name: "tarikvillalobos/postme",
+            visibility: .openSource,
             issues: 2,
             prs: 1,
             stars: 124,
@@ -270,6 +295,7 @@ struct RepositoryPanelView: View {
         RepoItem(
             id: "tarikvillalobos/rentify",
             name: "tarikvillalobos/rentify",
+            visibility: .private,
             issues: 4,
             prs: 5,
             stars: 892,
@@ -288,6 +314,7 @@ struct RepositoryPanelView: View {
         RepoItem(
             id: "tarikvillalobos/time-zones",
             name: "tarikvillalobos/time-zones",
+            visibility: .openSource,
             issues: 1,
             prs: 0,
             stars: 340,
@@ -306,6 +333,7 @@ struct RepositoryPanelView: View {
         RepoItem(
             id: "tarikvillalobos/squaddy",
             name: "tarikvillalobos/squaddy",
+            visibility: .private,
             issues: 0,
             prs: 2,
             stars: 56,
@@ -324,6 +352,7 @@ struct RepositoryPanelView: View {
         RepoItem(
             id: "tarikvillalobos/api-kit",
             name: "tarikvillalobos/api-kit",
+            visibility: .openSource,
             issues: 3,
             prs: 1,
             stars: 1205,
@@ -342,6 +371,7 @@ struct RepositoryPanelView: View {
         RepoItem(
             id: "tarikvillalobos/mnemonic",
             name: "tarikvillalobos/mnemonic",
+            visibility: .private,
             issues: 0,
             prs: 0,
             stars: 78,
@@ -360,6 +390,7 @@ struct RepositoryPanelView: View {
         RepoItem(
             id: "tarikvillalobos/open-tasks",
             name: "tarikvillalobos/open-tasks",
+            visibility: .openSource,
             issues: 5,
             prs: 3,
             stars: 412,
@@ -1575,6 +1606,8 @@ private struct RepoRow: View {
                             repoStat(icon: "star", value: "\(starsFormatted(repo.stars)) Stars")
                         }
 
+                        repoVisibilityTag()
+
                         HStack(spacing: 6) {
                             Image(systemName: "chevron.left.forwardslash.chevron.right")
                                 .font(.system(size: 9, weight: .semibold))
@@ -1623,6 +1656,36 @@ private struct RepoRow: View {
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
         }
         .foregroundStyle(secondaryColor)
+    }
+
+    private func repoVisibilityTag() -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: repo.visibility.icon)
+                .font(.system(size: 9, weight: .semibold))
+            Text(repo.visibility.label)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(secondaryColor)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(
+            Capsule()
+                .fill(
+                    isDarkTheme
+                        ? Color.white.opacity(0.06)
+                        : Color.black.opacity(0.05)
+                )
+        )
+        .overlay(
+            Capsule()
+                .stroke(
+                    isDarkTheme
+                        ? Color.white.opacity(0.10)
+                        : Color.black.opacity(0.08),
+                    lineWidth: 1
+                )
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func starsFormatted(_ count: Int) -> String {
