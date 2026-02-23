@@ -2,248 +2,6 @@ import AppKit
 import ObjectiveC.runtime
 import SwiftUI
 
-// MARK: - Data Model
-
-private struct RepoItem: Identifiable, Equatable {
-    let id: String
-    let name: String
-    let visibility: RepoVisibility
-    let issues: Int
-    let prs: Int
-    let stars: Int
-    let branch: String
-    let updatedAgo: String
-    let isPinned: Bool
-    let isWork: Bool
-    let releases: Int
-    let ciRuns: Int
-    let discussions: Int
-    let tags: Int
-    let branches: Int
-    let contributors: Int
-    let openCommits: Int
-}
-
-private enum RepoVisibility: Equatable {
-    case openSource
-    case `private`
-
-    var label: String {
-        switch self {
-        case .openSource:
-            return "Open source"
-        case .private:
-            return "Private"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .openSource:
-            return "lock.open"
-        case .private:
-            return "lock"
-        }
-    }
-}
-
-private enum RepoDetailDestination: String, Identifiable {
-    case switchWorktree
-    case issues
-    case pullRequests
-    case releases
-    case ciRuns
-    case discussions
-    case tags
-    case branches
-    case contributors
-    case openCommits
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .switchWorktree:
-            return "Switch Worktree"
-        case .issues:
-            return "Issues"
-        case .pullRequests:
-            return "Pull Requests"
-        case .releases:
-            return "Releases"
-        case .ciRuns:
-            return "CI Runs"
-        case .discussions:
-            return "Discussions"
-        case .tags:
-            return "Tags"
-        case .branches:
-            return "Branches"
-        case .contributors:
-            return "Contributors"
-        case .openCommits:
-            return "Open Commits"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .switchWorktree:
-            return "arrow.left.arrow.right"
-        case .issues:
-            return "exclamationmark.circle"
-        case .pullRequests:
-            return "arrow.triangle.pull"
-        case .releases:
-            return "shippingbox"
-        case .ciRuns:
-            return "bolt"
-        case .discussions:
-            return "bubble.left"
-        case .tags:
-            return "tag"
-        case .branches:
-            return "arrow.triangle.branch"
-        case .contributors:
-            return "person.2"
-        case .openCommits:
-            return "clock.arrow.circlepath"
-        }
-    }
-
-    var helperText: String {
-        switch self {
-        case .switchWorktree:
-            return "Choose a worktree"
-        case .issues:
-            return "Issue overview"
-        case .pullRequests:
-            return "Pull request overview"
-        case .releases:
-            return "Release summary"
-        case .ciRuns:
-            return "Recent CI activity"
-        case .discussions:
-            return "Discussion overview"
-        case .tags:
-            return "Tag summary"
-        case .branches:
-            return "Branch summary"
-        case .contributors:
-            return "Contributors overview"
-        case .openCommits:
-            return "Open commit activity"
-        }
-    }
-
-    func mockEntries(repoName: String, branch: String) -> [String] {
-        switch self {
-        case .switchWorktree:
-            return [
-                "Use \(repoName) • \(branch) (active)",
-                "Use \(repoName) • develop",
-                "Create new worktree"
-            ]
-        case .issues:
-            return [
-                "Issue #128 - Improve onboarding copy",
-                "Issue #127 - Adjust light mode contrast",
-                "Issue #122 - Add repository interactions"
-            ]
-        case .pullRequests:
-            return [
-                "PR #91 - Repository third panel",
-                "PR #88 - OAuth flow improvements",
-                "PR #83 - Sidebar text updates"
-            ]
-        case .releases:
-            return [
-                "v1.6.2 - UI adjustments",
-                "v1.6.1 - GitHub integration polish",
-                "v1.6.0 - Repository panel"
-            ]
-        case .ciRuns:
-            return [
-                "macOS Build - Success",
-                "SwiftLint - Success",
-                "Unit Tests - Success"
-            ]
-        case .discussions:
-            return [
-                "Feature request: Workspace presets",
-                "Feedback: OAuth connect flow",
-                "Question: Repository default branch"
-            ]
-        case .tags:
-            return [
-                "latest",
-                "stable",
-                "preview"
-            ]
-        case .branches:
-            return [
-                branch,
-                "develop",
-                "feature/repository-panel"
-            ]
-        case .contributors:
-            return [
-                "Tarik Villalobos",
-                "OpenKubbo Team",
-                "Community Contributors"
-            ]
-        case .openCommits:
-            return [
-                "feat: repository overlay interactions",
-                "style: improve light theme contrast",
-                "fix: github device flow copy"
-            ]
-        }
-    }
-}
-
-private struct RepoMetric: Identifiable {
-    let id: String
-    let icon: String
-    let title: String
-    let value: Int?
-    let destination: RepoDetailDestination
-}
-
-private enum RepoIssuesScope: String, CaseIterable, Identifiable {
-    case all = "All"
-    case mine = "Mine"
-    case open = "Open"
-    case closed = "Closed"
-
-    var id: String { rawValue }
-}
-
-private enum RepoIssueLabelKind {
-    case bug
-    case enhancement
-    case helpWanted
-    case goodFirstIssue
-}
-
-private struct RepoIssueLabel: Identifiable {
-    let id: String
-    let title: String
-    let kind: RepoIssueLabelKind
-}
-
-private struct RepoIssueItem: Identifiable {
-    let id: String
-    let number: Int
-    let title: String
-    let labels: [RepoIssueLabel]
-    let author: String
-    let updatedAgo: String
-    let comments: Int
-    let isOpen: Bool
-    let isMine: Bool
-}
-
 // MARK: - Main View
 
 struct RepositoryPanelView: View {
@@ -256,177 +14,16 @@ struct RepositoryPanelView: View {
     private let windowEdgePaddingX: CGFloat = 10
     private let windowEdgePaddingY: CGFloat = 12
 
+    @ObservedObject var viewModel: RepositoryViewModel
+
     @State private var hostWindow: NSWindow?
-    @State private var selectedFilter: RepoFilter = .all
-    @State private var selectedRepoID: String?
-    @State private var selectedDetailDestination: RepoDetailDestination?
-    @State private var selectedIssuesScope: RepoIssuesScope = .open
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
 
-    private enum RepoFilter: String, CaseIterable, Identifiable {
-        case all = "All"
-        case pinned = "Pinned"
-        case work = "Work"
-
-        var id: String { rawValue }
-    }
-
-    private let repos: [RepoItem] = [
-        RepoItem(
-            id: "tarikvillalobos/postme",
-            name: "tarikvillalobos/postme",
-            visibility: .openSource,
-            issues: 2,
-            prs: 1,
-            stars: 124,
-            branch: "main",
-            updatedAgo: "1 min. ago",
-            isPinned: true,
-            isWork: false,
-            releases: 12,
-            ciRuns: 1232,
-            discussions: 0,
-            tags: 13,
-            branches: 1,
-            contributors: 3,
-            openCommits: 24
-        ),
-        RepoItem(
-            id: "tarikvillalobos/rentify",
-            name: "tarikvillalobos/rentify",
-            visibility: .private,
-            issues: 4,
-            prs: 5,
-            stars: 892,
-            branch: "main",
-            updatedAgo: "14 min. ago",
-            isPinned: true,
-            isWork: true,
-            releases: 9,
-            ciRuns: 761,
-            discussions: 3,
-            tags: 18,
-            branches: 4,
-            contributors: 6,
-            openCommits: 42
-        ),
-        RepoItem(
-            id: "tarikvillalobos/time-zones",
-            name: "tarikvillalobos/time-zones",
-            visibility: .openSource,
-            issues: 1,
-            prs: 0,
-            stars: 340,
-            branch: "dev",
-            updatedAgo: "13 min. ago",
-            isPinned: false,
-            isWork: false,
-            releases: 4,
-            ciRuns: 188,
-            discussions: 1,
-            tags: 7,
-            branches: 3,
-            contributors: 2,
-            openCommits: 11
-        ),
-        RepoItem(
-            id: "tarikvillalobos/squaddy",
-            name: "tarikvillalobos/squaddy",
-            visibility: .private,
-            issues: 0,
-            prs: 2,
-            stars: 56,
-            branch: "master",
-            updatedAgo: "1 hr. ago",
-            isPinned: false,
-            isWork: true,
-            releases: 2,
-            ciRuns: 43,
-            discussions: 0,
-            tags: 3,
-            branches: 2,
-            contributors: 2,
-            openCommits: 7
-        ),
-        RepoItem(
-            id: "tarikvillalobos/api-kit",
-            name: "tarikvillalobos/api-kit",
-            visibility: .openSource,
-            issues: 3,
-            prs: 1,
-            stars: 1205,
-            branch: "feature/v2",
-            updatedAgo: "30 min. ago",
-            isPinned: true,
-            isWork: true,
-            releases: 21,
-            ciRuns: 3011,
-            discussions: 7,
-            tags: 25,
-            branches: 8,
-            contributors: 11,
-            openCommits: 63
-        ),
-        RepoItem(
-            id: "tarikvillalobos/mnemonic",
-            name: "tarikvillalobos/mnemonic",
-            visibility: .private,
-            issues: 0,
-            prs: 0,
-            stars: 78,
-            branch: "main",
-            updatedAgo: "2 hr. ago",
-            isPinned: false,
-            isWork: false,
-            releases: 1,
-            ciRuns: 17,
-            discussions: 0,
-            tags: 1,
-            branches: 1,
-            contributors: 1,
-            openCommits: 4
-        ),
-        RepoItem(
-            id: "tarikvillalobos/open-tasks",
-            name: "tarikvillalobos/open-tasks",
-            visibility: .openSource,
-            issues: 5,
-            prs: 3,
-            stars: 412,
-            branch: "main",
-            updatedAgo: "4 min. ago",
-            isPinned: true,
-            isWork: true,
-            releases: 14,
-            ciRuns: 942,
-            discussions: 5,
-            tags: 16,
-            branches: 5,
-            contributors: 8,
-            openCommits: 38
-        )
-    ]
-
-    private var filteredRepos: [RepoItem] {
-        switch selectedFilter {
-        case .all:
-            return repos
-        case .pinned:
-            return repos.filter { $0.isPinned }
-        case .work:
-            return repos.filter { $0.isWork }
-        }
-    }
-
-    private var selectedRepo: RepoItem? {
-        guard let selectedRepoID else { return nil }
-        return filteredRepos.first { $0.id == selectedRepoID }
-    }
-
-    private var isDetailsVisible: Bool {
-        selectedRepo != nil
-    }
+    private var filteredRepos: [RepoItem] { viewModel.filteredRepos }
+    private var selectedRepo: RepoItem? { viewModel.selectedRepo }
+    private var isDetailsVisible: Bool { viewModel.isDetailsVisible }
+    private var selectedDetailDestination: RepoDetailDestination? { viewModel.selectedDetailDestination }
 
     // MARK: - Theme colors
 
@@ -560,12 +157,6 @@ struct RepositoryPanelView: View {
                 }
             }
         )
-        .onChange(of: selectedFilter, initial: false) { _, _ in
-            synchronizeSelectedRepo()
-        }
-        .onChange(of: selectedRepoID, initial: false) { _, _ in
-            selectedDetailDestination = nil
-        }
     }
 
     // MARK: - Left Column
@@ -653,10 +244,10 @@ struct RepositoryPanelView: View {
     }
 
     private func filterTab(_ filter: RepoFilter) -> some View {
-        let isActive = selectedFilter == filter
+        let isActive = viewModel.selectedFilter == filter
         return Button {
             withAnimation(.easeInOut(duration: 0.16)) {
-                selectedFilter = filter
+                viewModel.selectFilter(filter)
             }
         } label: {
             Text(filter.rawValue)
@@ -693,12 +284,11 @@ struct RepositoryPanelView: View {
                         secondaryColor: secondaryTextColor,
                         accentColor: accentColor,
                         dividerColor: dividerColor,
-                        isSelected: selectedRepoID == repo.id,
+                        isSelected: viewModel.selectedRepoID == repo.id,
                         showDivider: index < filteredRepos.count - 1
                     ) {
                         withAnimation(.easeInOut(duration: 0.18)) {
-                            selectedDetailDestination = nil
-                            selectedRepoID = repo.id
+                            viewModel.selectRepository(repo)
                         }
                     }
                 }
@@ -797,8 +387,7 @@ struct RepositoryPanelView: View {
 
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) {
-                    selectedDetailDestination = nil
-                    selectedRepoID = nil
+                    viewModel.closeRepositorySelection()
                 }
             } label: {
                 Image(systemName: "chevron.right")
@@ -923,7 +512,7 @@ struct RepositoryPanelView: View {
     }
 
     private func issuesOverlayPanel(for repo: RepoItem) -> some View {
-        let issues = filteredIssues(mockIssues(for: repo))
+        let issues = viewModel.filteredIssues(for: repo)
 
         return VStack(spacing: 0) {
             overlayTopBar(title: "Open Issues")
@@ -1077,11 +666,11 @@ struct RepositoryPanelView: View {
     }
 
     private func issuesFilterPill(_ scope: RepoIssuesScope) -> some View {
-        let isActive = selectedIssuesScope == scope
+        let isActive = viewModel.selectedIssuesScope == scope
 
         return Button {
             withAnimation(.easeInOut(duration: 0.14)) {
-                selectedIssuesScope = scope
+                viewModel.selectIssuesScope(scope)
             }
         } label: {
             Text(scope.rawValue)
@@ -1188,86 +777,6 @@ struct RepositoryPanelView: View {
         }
     }
 
-    private func filteredIssues(_ issues: [RepoIssueItem]) -> [RepoIssueItem] {
-        switch selectedIssuesScope {
-        case .all:
-            return issues
-        case .mine:
-            return issues.filter(\.isMine)
-        case .open:
-            return issues.filter(\.isOpen)
-        case .closed:
-            return issues.filter { !$0.isOpen }
-        }
-    }
-
-    private func mockIssues(for repo: RepoItem) -> [RepoIssueItem] {
-        [
-            RepoIssueItem(
-                id: "\(repo.id)-26",
-                number: 26,
-                title: "Refactor: Glass effect performance",
-                labels: [RepoIssueLabel(id: "enhancement-26", title: "enhancement", kind: .enhancement)],
-                author: "tarikvillalobos",
-                updatedAgo: "20 min. ago",
-                comments: 0,
-                isOpen: true,
-                isMine: true
-            ),
-            RepoIssueItem(
-                id: "\(repo.id)-25",
-                number: 25,
-                title: "Chat UI doesn't disappear if disabled in settings.",
-                labels: [RepoIssueLabel(id: "bug-25", title: "bug", kind: .bug)],
-                author: "tarikvillalobos",
-                updatedAgo: "21 min. ago",
-                comments: 0,
-                isOpen: true,
-                isMine: true
-            ),
-            RepoIssueItem(
-                id: "\(repo.id)-24",
-                number: 24,
-                title: "Build fails on Windows: 'rm' command not recognized in clean scripts",
-                labels: [
-                    RepoIssueLabel(id: "bug-24", title: "bug", kind: .bug),
-                    RepoIssueLabel(id: "help-24", title: "help wanted", kind: .helpWanted),
-                    RepoIssueLabel(id: "good-24", title: "good first issue", kind: .goodFirstIssue)
-                ],
-                author: "Ehtz",
-                updatedAgo: "1 hr. ago",
-                comments: 1,
-                isOpen: true,
-                isMine: false
-            ),
-            RepoIssueItem(
-                id: "\(repo.id)-21",
-                number: 21,
-                title: "Mozila extension",
-                labels: [
-                    RepoIssueLabel(id: "help-21", title: "help wanted", kind: .helpWanted),
-                    RepoIssueLabel(id: "good-21", title: "good first issue", kind: .goodFirstIssue)
-                ],
-                author: "vlnd0",
-                updatedAgo: "1 day ago",
-                comments: 1,
-                isOpen: true,
-                isMine: false
-            ),
-            RepoIssueItem(
-                id: "\(repo.id)-17",
-                number: 17,
-                title: "Legacy parser fallback cleanup",
-                labels: [RepoIssueLabel(id: "enhancement-17", title: "enhancement", kind: .enhancement)],
-                author: "openkubbo-bot",
-                updatedAgo: "2 days ago",
-                comments: 2,
-                isOpen: false,
-                isMine: false
-            )
-        ]
-    }
-
     private func detailNavigationRow(
         icon: String,
         title: String,
@@ -1330,26 +839,13 @@ struct RepositoryPanelView: View {
 
     private func openDetailPanel(_ destination: RepoDetailDestination) {
         withAnimation(.easeInOut(duration: 0.18)) {
-            if destination == .issues {
-                selectedIssuesScope = .open
-            }
-            selectedDetailDestination = destination
+            viewModel.openDetailPanel(destination)
         }
     }
 
     private func closeDetailPanel() {
         withAnimation(.easeInOut(duration: 0.18)) {
-            selectedDetailDestination = nil
-        }
-    }
-
-    private func synchronizeSelectedRepo() {
-        guard let selectedRepoID else { return }
-        if !filteredRepos.contains(where: { $0.id == selectedRepoID }) {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                self.selectedDetailDestination = nil
-                self.selectedRepoID = nil
-            }
+            viewModel.closeDetailPanel()
         }
     }
 
