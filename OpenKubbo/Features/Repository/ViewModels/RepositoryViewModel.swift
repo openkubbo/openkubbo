@@ -1,6 +1,19 @@
 import Combine
 import Foundation
 
+enum RepositoryLocalActionKind {
+    case finder
+    case terminal
+}
+
+enum RepositoryLocalActionResult {
+    case opened
+    case cloned(localPath: String)
+    case rootNotConfigured
+    case cloneRequired(expectedPath: String)
+    case failed(String)
+}
+
 @MainActor
 final class RepositoryViewModel: ObservableObject {
     @Published private(set) var repositories: [RepoItem] = []
@@ -24,10 +37,21 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedIssuesScope: RepoIssuesScope = .open
 
     private let dataProvider: RepositoryDataProviding
+    private let localRootProvider: LocalRepositoryRootProviding
+    private let localResolver: LocalRepositoryResolving
+    private let localActionService: RepositoryLocalActionServicing
     private var hasUserCustomizedPins = false
 
-    init(dataProvider: RepositoryDataProviding) {
+    init(
+        dataProvider: RepositoryDataProviding,
+        localRootProvider: LocalRepositoryRootProviding,
+        localResolver: LocalRepositoryResolving,
+        localActionService: RepositoryLocalActionServicing
+    ) {
         self.dataProvider = dataProvider
+        self.localRootProvider = localRootProvider
+        self.localResolver = localResolver
+        self.localActionService = localActionService
     }
 
     var filteredRepos: [RepoItem] {
@@ -80,6 +104,10 @@ final class RepositoryViewModel: ObservableObject {
         selectedRepoID = repo.id
     }
 
+    func repository(withID repositoryID: String) -> RepoItem? {
+        repositories.first(where: { $0.id == repositoryID })
+    }
+
     func isRepoPinned(_ repo: RepoItem) -> Bool {
         pinnedRepositoryIDs.contains(repo.id)
     }
@@ -129,6 +157,86 @@ final class RepositoryViewModel: ObservableObject {
         case .closed:
             return issues.filter { !$0.isOpen }
         }
+    }
+
+    func openInFinder(for repo: RepoItem) -> RepositoryLocalActionResult {
+        performLocalAction(.finder, for: repo)
+    }
+
+    func openInTerminal(for repo: RepoItem) -> RepositoryLocalActionResult {
+        performLocalAction(.terminal, for: repo)
+    }
+
+    func cloneLocalRepository(for repo: RepoItem) async -> RepositoryLocalActionResult {
+        do {
+            guard let rootURL = try localRootProvider.currentRootURL() else {
+                return .rootNotConfigured
+            }
+
+            let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
+            switch localMatch {
+            case .rootNotConfigured:
+                return .rootNotConfigured
+            case .matched(let localURL):
+                return .cloned(localPath: localURL.path)
+            case .missing:
+                guard let sshCloneURL = repo.sshCloneURL else {
+                    return .failed("This repository does not provide an SSH clone URL.")
+                }
+
+                let directoryName = localResolver.repositoryDirectoryName(for: repo)
+                let destinationURL = try await localActionService.cloneRepository(
+                    sshCloneURL: sshCloneURL,
+                    into: rootURL,
+                    directoryName: directoryName
+                )
+
+                return .cloned(localPath: destinationURL.path)
+            }
+        } catch {
+            return .failed(repositoryErrorDescription(error))
+        }
+    }
+
+    private func performLocalAction(_ action: RepositoryLocalActionKind, for repo: RepoItem) -> RepositoryLocalActionResult {
+        do {
+            let rootURL = try localRootProvider.currentRootURL()
+            let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
+
+            switch localMatch {
+            case .rootNotConfigured:
+                return .rootNotConfigured
+            case .missing(let expectedURL):
+                return .cloneRequired(expectedPath: expectedURL.path)
+            case .matched(let localURL):
+                try withRootAccess(rootURL: rootURL) {
+                    switch action {
+                    case .finder:
+                        try localActionService.openInFinder(at: localURL)
+                    case .terminal:
+                        try localActionService.openInTerminal(at: localURL)
+                    }
+                }
+                return .opened
+            }
+        } catch {
+            return .failed(repositoryErrorDescription(error))
+        }
+    }
+
+    private func withRootAccess<T>(rootURL: URL?, operation: () throws -> T) throws -> T {
+        guard let rootURL else {
+            return try operation()
+        }
+
+        let hasSecurityAccess = rootURL.startAccessingSecurityScopedResource()
+        defer {
+            if hasSecurityAccess {
+                rootURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        return try operation()
     }
 
     private func synchronizeSelectedRepo() {

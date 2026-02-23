@@ -28,6 +28,7 @@ final class SettingsViewModel: ObservableObject {
     @Published var syncProfilesEnabled: Bool { didSet { persist() } }
 
     @Published var githubClientID: String { didSet { persist() } }
+    @Published private(set) var localRepositoriesRootPath: String?
     @Published private(set) var isGitHubAuthenticating = false
     @Published private(set) var githubStatusMessage = "Not connected."
     @Published private(set) var githubErrorMessage: String?
@@ -69,6 +70,7 @@ final class SettingsViewModel: ObservableObject {
     private let gitHubOAuthService: GitHubOAuthServicing
     private let gitHubAPIService: GitHubAPIServicing
     private let gitHubTokenStore: GitHubTokenStoring
+    private var localRepositoriesRootBookmarkData: Data?
 
     private let gitHubOAuthScope = "repo read:org workflow gist"
 
@@ -106,6 +108,8 @@ final class SettingsViewModel: ObservableObject {
         self.syncProfilesEnabled = snapshot.syncProfilesEnabled
 
         self.githubClientID = snapshot.githubClientID ?? ""
+        self.localRepositoriesRootPath = snapshot.localRepositoriesRootPath
+        self.localRepositoriesRootBookmarkData = snapshot.localRepositoriesRootBookmarkData
 
         themeStore.apply(snapshot.selectedTheme)
         restoreGitHubSessionIfPossible()
@@ -150,6 +154,10 @@ final class SettingsViewModel: ObservableObject {
         githubRepositories.map(\.fullName)
     }
 
+    var hasLocalRepositoriesRootConfigured: Bool {
+        localRepositoriesRootPath?.isEmpty == false && localRepositoriesRootBookmarkData != nil
+    }
+
     func selectTab(_ tab: SettingsTab) {
         selectedTab = tab
     }
@@ -167,6 +175,24 @@ final class SettingsViewModel: ObservableObject {
         case .automatic:
             selectedThemeMode = .light
         }
+    }
+
+    func setLocalRepositoriesRoot(url: URL) throws {
+        let bookmarkData = try url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+
+        localRepositoriesRootPath = url.path
+        localRepositoriesRootBookmarkData = bookmarkData
+        persist()
+    }
+
+    func clearLocalRepositoriesRoot() {
+        localRepositoriesRootPath = nil
+        localRepositoriesRootBookmarkData = nil
+        persist()
     }
 
     func loginWithGitHub() async {
@@ -552,7 +578,9 @@ final class SettingsViewModel: ObservableObject {
                 terminalSuggestionsEnabled: terminalSuggestionsEnabled,
                 automaticErrorAnalysis: automaticErrorAnalysis,
                 syncProfilesEnabled: syncProfilesEnabled,
-                githubClientID: normalizedGitHubClientID.isEmpty ? nil : normalizedGitHubClientID
+                githubClientID: normalizedGitHubClientID.isEmpty ? nil : normalizedGitHubClientID,
+                localRepositoriesRootPath: localRepositoriesRootPath,
+                localRepositoriesRootBookmarkData: localRepositoriesRootBookmarkData
             )
         )
     }

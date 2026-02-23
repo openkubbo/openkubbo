@@ -177,6 +177,7 @@ enum RepoDetailDestination: String, Identifiable {
 struct RepoItem: Identifiable, Equatable {
     let id: String
     let name: String
+    let sshCloneURL: String?
     let visibility: RepoVisibility
     let issues: Int
     let prs: Int

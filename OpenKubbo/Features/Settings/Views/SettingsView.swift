@@ -6,6 +6,7 @@ struct SettingsView: View {
 
     @State private var hostWindow: NSWindow?
     @State private var isGitHubClientIDVisible = false
+    @State private var localRepositoriesRootErrorMessage: String?
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
@@ -461,6 +462,10 @@ struct SettingsView: View {
                     githubClientIDInput
 
                     githubSectionCard {
+                        githubLocalRepositoriesSection
+                    }
+
+                    githubSectionCard {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("How to connect")
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -628,6 +633,12 @@ struct SettingsView: View {
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
 
+                        if let localRepositoriesRootErrorMessage {
+                            Text(localRepositoriesRootErrorMessage)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.red.opacity(0.85))
+                        }
+
                         if let githubErrorMessage = viewModel.githubErrorMessage {
                             Text(githubErrorMessage)
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -754,6 +765,54 @@ struct SettingsView: View {
         }
     }
 
+    private var githubLocalRepositoriesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Local Repositories Folder")
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+
+            Text("Used by Open in Finder and Open in Terminal.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+
+            if let localRootPath = viewModel.localRepositoriesRootPath,
+               !localRootPath.isEmpty {
+                Text(localRootPath)
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(primaryTextColor)
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(githubInputFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(githubInputStrokeColor, lineWidth: 1)
+                            )
+                    )
+            } else {
+                Text("No local folder configured.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(tertiaryTextColor)
+            }
+
+            HStack(spacing: 10) {
+                githubSecondaryButton("Choose Folder") {
+                    chooseLocalRepositoriesFolder()
+                }
+
+                githubSecondaryButton(
+                    "Clear Folder",
+                    isDisabled: !viewModel.hasLocalRepositoriesRootConfigured
+                ) {
+                    viewModel.clearLocalRepositoriesRoot()
+                }
+            }
+        }
+    }
+
     private var githubIssueSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Create Issue")
@@ -875,6 +934,25 @@ struct SettingsView: View {
     private func openGitHubDevicePage() {
         if let verificationURL = viewModel.githubVerificationURL ?? URL(string: gitHubDeviceURLString) {
             NSWorkspace.shared.open(verificationURL)
+        }
+    }
+
+    private func chooseLocalRepositoriesFolder() {
+        let panel = NSOpenPanel()
+        panel.title = "Select local repositories folder"
+        panel.message = "Choose the folder that contains your local Git repositories."
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+
+        if panel.runModal() == .OK, let selectedURL = panel.url {
+            do {
+                try viewModel.setLocalRepositoriesRoot(url: selectedURL)
+                localRepositoriesRootErrorMessage = nil
+            } catch {
+                localRepositoriesRootErrorMessage = "Unable to save the selected folder."
+            }
         }
     }
 

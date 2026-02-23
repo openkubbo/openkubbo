@@ -51,6 +51,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         return RepoItem(
             id: repository.fullName,
             name: repository.fullName,
+            sshCloneURL: repository.sshCloneURL,
             visibility: visibility,
             issues: max(0, repository.openIssuesCount),
             prs: prs,

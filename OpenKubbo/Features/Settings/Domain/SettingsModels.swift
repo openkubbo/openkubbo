@@ -126,6 +126,8 @@ struct SettingsSnapshot: Codable, Equatable {
     var syncProfilesEnabled: Bool
 
     var githubClientID: String? = nil
+    var localRepositoriesRootPath: String? = nil
+    var localRepositoriesRootBookmarkData: Data? = nil
 
     static let defaultValue = SettingsSnapshot(
         selectedTheme: .automatic,

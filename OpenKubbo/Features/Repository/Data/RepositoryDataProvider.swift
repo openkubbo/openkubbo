@@ -11,6 +11,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             RepoItem(
                 id: "tarikvillalobos/postme",
                 name: "tarikvillalobos/postme",
+                sshCloneURL: "git@github.com:tarikvillalobos/postme.git",
                 visibility: .openSource,
                 issues: 2,
                 prs: 1,
@@ -30,6 +31,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             RepoItem(
                 id: "tarikvillalobos/rentify",
                 name: "tarikvillalobos/rentify",
+                sshCloneURL: "git@github.com:tarikvillalobos/rentify.git",
                 visibility: .private,
                 issues: 4,
                 prs: 5,
@@ -49,6 +51,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             RepoItem(
                 id: "tarikvillalobos/time-zones",
                 name: "tarikvillalobos/time-zones",
+                sshCloneURL: "git@github.com:tarikvillalobos/time-zones.git",
                 visibility: .openSource,
                 issues: 1,
                 prs: 0,
@@ -68,6 +71,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             RepoItem(
                 id: "tarikvillalobos/squaddy",
                 name: "tarikvillalobos/squaddy",
+                sshCloneURL: "git@github.com:tarikvillalobos/squaddy.git",
                 visibility: .private,
                 issues: 0,
                 prs: 2,
@@ -87,6 +91,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             RepoItem(
                 id: "tarikvillalobos/api-kit",
                 name: "tarikvillalobos/api-kit",
+                sshCloneURL: "git@github.com:tarikvillalobos/api-kit.git",
                 visibility: .openSource,
                 issues: 3,
                 prs: 1,
@@ -106,6 +111,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             RepoItem(
                 id: "tarikvillalobos/mnemonic",
                 name: "tarikvillalobos/mnemonic",
+                sshCloneURL: "git@github.com:tarikvillalobos/mnemonic.git",
                 visibility: .private,
                 issues: 0,
                 prs: 0,
@@ -125,6 +131,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             RepoItem(
                 id: "tarikvillalobos/open-tasks",
                 name: "tarikvillalobos/open-tasks",
+                sshCloneURL: "git@github.com:tarikvillalobos/open-tasks.git",
                 visibility: .openSource,
                 issues: 5,
                 prs: 3,

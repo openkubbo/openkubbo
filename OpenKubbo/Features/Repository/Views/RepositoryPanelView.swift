@@ -17,6 +17,11 @@ struct RepositoryPanelView: View {
     @ObservedObject var viewModel: RepositoryViewModel
 
     @State private var hostWindow: NSWindow?
+    @State private var pendingCloneRequest: PendingCloneRequest?
+    @State private var localActionErrorState: LocalActionErrorState?
+    @State private var showLocalRootConfigurationAlert = false
+
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -24,6 +29,27 @@ struct RepositoryPanelView: View {
     private var selectedRepo: RepoItem? { viewModel.selectedRepo }
     private var isDetailsVisible: Bool { viewModel.isDetailsVisible }
     private var selectedDetailDestination: RepoDetailDestination? { viewModel.selectedDetailDestination }
+
+    private enum PendingLocalAction: String {
+        case finder
+        case terminal
+    }
+
+    private struct PendingCloneRequest: Identifiable {
+        let repoID: String
+        let repoName: String
+        let expectedPath: String
+        let action: PendingLocalAction
+
+        var id: String {
+            "\(repoID)-\(action.rawValue)"
+        }
+    }
+
+    private struct LocalActionErrorState: Identifiable {
+        let id = UUID()
+        let message: String
+    }
 
     // MARK: - Theme colors
 
@@ -163,6 +189,32 @@ struct RepositoryPanelView: View {
         )
         .task {
             await viewModel.reloadRepositories()
+        }
+        .alert("Local Repositories Folder Not Configured", isPresented: $showLocalRootConfigurationAlert) {
+            Button("Open Settings") {
+                openWindow(id: "settings")
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Configure a local repositories folder in Settings > GitHub to use this action.")
+        }
+        .alert(item: $pendingCloneRequest) { request in
+            Alert(
+                title: Text("Repository not found locally"),
+                message: Text("Expected path:\n\(request.expectedPath)\n\nDo you want to clone this repository now?"),
+                primaryButton: .default(Text("Clone")) {
+                    cloneMissingRepository(request)
+                },
+                secondaryButton: .cancel()
+            )
+        }
+        .alert(item: $localActionErrorState) { errorState in
+            Alert(
+                title: Text("Action failed"),
+                message: Text(errorState.message),
+                dismissButton: .default(Text("OK"))
+            )
         }
     }
 
@@ -402,8 +454,12 @@ struct RepositoryPanelView: View {
             detailNavigationRow(icon: "arrow.up.right.square", title: "Open in GitHub") {
                 openRepositoryOnGitHub(repo)
             }
-            detailNavigationRow(icon: "folder", title: "Open in Finder") {}
-            detailNavigationRow(icon: "terminal", title: "Open in Terminal") {}
+            detailNavigationRow(icon: "folder", title: "Open in Finder") {
+                handleLocalAction(for: repo, action: .finder)
+            }
+            detailNavigationRow(icon: "terminal", title: "Open in Terminal") {
+                handleLocalAction(for: repo, action: .terminal)
+            }
             detailNavigationRow(icon: "wand.and.stars", title: "Open TARS Agent", isAccent: true) {}
         }
     }
@@ -889,6 +945,54 @@ struct RepositoryPanelView: View {
     private func openRepositoryOnGitHub(_ repo: RepoItem) {
         guard let repositoryURL = URL(string: "https://github.com/\(repo.name)") else { return }
         NSWorkspace.shared.open(repositoryURL)
+    }
+
+    private func handleLocalAction(for repo: RepoItem, action: PendingLocalAction) {
+        let result: RepositoryLocalActionResult
+
+        switch action {
+        case .finder:
+            result = viewModel.openInFinder(for: repo)
+        case .terminal:
+            result = viewModel.openInTerminal(for: repo)
+        }
+
+        handleLocalActionResult(result, for: repo, action: action)
+    }
+
+    private func handleLocalActionResult(
+        _ result: RepositoryLocalActionResult,
+        for repo: RepoItem,
+        action: PendingLocalAction
+    ) {
+        switch result {
+        case .opened:
+            return
+        case .cloned:
+            handleLocalAction(for: repo, action: action)
+        case .rootNotConfigured:
+            showLocalRootConfigurationAlert = true
+        case .cloneRequired(let expectedPath):
+            pendingCloneRequest = PendingCloneRequest(
+                repoID: repo.id,
+                repoName: repo.name,
+                expectedPath: expectedPath,
+                action: action
+            )
+        case .failed(let message):
+            localActionErrorState = LocalActionErrorState(message: message)
+        }
+    }
+
+    private func cloneMissingRepository(_ request: PendingCloneRequest) {
+        Task {
+            guard let repo = viewModel.repository(withID: request.repoID) else {
+                return
+            }
+
+            let result = await viewModel.cloneLocalRepository(for: repo)
+            handleLocalActionResult(result, for: repo, action: request.action)
+        }
     }
 
     private func formatBadgeValue(_ value: Int) -> String {

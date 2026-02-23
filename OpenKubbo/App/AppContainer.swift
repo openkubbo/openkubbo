@@ -16,6 +16,9 @@ final class AppContainer: ObservableObject {
         let gitHubOAuthService = GitHubOAuthService()
         let gitHubAPIService = GitHubAPIService()
         let gitHubTokenStore = KeychainGitHubTokenStore()
+        let localRootProvider = SettingsLocalRepositoryRootProvider(settingsRepository: repository)
+        let localResolver = LocalRepositoryResolver()
+        let localActionService = RepositoryLocalActionService()
 
         self.themeStore = themeStore
         self.settingsViewModel = SettingsViewModel(
@@ -30,7 +33,10 @@ final class AppContainer: ObservableObject {
             dataProvider: GitHubRepositoryDataProvider(
                 gitHubAPIService: gitHubAPIService,
                 gitHubTokenStore: gitHubTokenStore
-            )
+            ),
+            localRootProvider: localRootProvider,
+            localResolver: localResolver,
+            localActionService: localActionService
         )
     }
 }
