@@ -7,6 +7,7 @@ enum RepositoryLocalActionError: LocalizedError {
     case destinationAlreadyExists(String)
     case destinationNotDirectory(String)
     case gitNotAvailable
+    case gitBlockedBySandbox
     case commandFailed(String)
 
     var errorDescription: String? {
@@ -20,7 +21,9 @@ enum RepositoryLocalActionError: LocalizedError {
         case .destinationNotDirectory(let path):
             return "Destination path exists but is not a folder: \(path)"
         case .gitNotAvailable:
-            return "Git is not available at /usr/bin/git."
+            return "Git is not available in common system locations."
+        case .gitBlockedBySandbox:
+            return "Git clone is blocked by App Sandbox for the available Git binary. Install Git via Homebrew (for example /opt/homebrew/bin/git) and try again."
         case .commandFailed(let message):
             return message
         }
@@ -70,7 +73,8 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
             throw RepositoryLocalActionError.missingSSHCloneURL
         }
 
-        guard fileManager.isExecutableFile(atPath: "/usr/bin/git") else {
+        let gitExecutablePaths = availableGitExecutablePaths()
+        guard !gitExecutablePaths.isEmpty else {
             throw RepositoryLocalActionError.gitNotAvailable
         }
 
@@ -94,22 +98,44 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
             }
         }
 
-        let result = try await runProcess(
-            executablePath: "/usr/bin/git",
-            arguments: ["clone", "--", trimmedCloneURL, destinationURL.path],
-            currentDirectoryURL: rootURL
-        )
+        var hasSandboxBlockedGit = false
+        var lastCloneErrorMessage: String?
 
-        if result.exitCode != 0 {
-            let message = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !message.isEmpty {
-                throw RepositoryLocalActionError.commandFailed(message)
+        for executablePath in gitExecutablePaths {
+            let result = try await runProcess(
+                executablePath: executablePath,
+                arguments: ["clone", "--", trimmedCloneURL, destinationURL.path],
+                currentDirectoryURL: rootURL
+            )
+
+            if result.exitCode == 0 {
+                return destinationURL
             }
 
-            throw RepositoryLocalActionError.commandFailed("Unable to clone repository.")
+            let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stdout = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if isSandboxBlockedXcrunError(stderr: stderr, stdout: stdout) {
+                hasSandboxBlockedGit = true
+                continue
+            }
+
+            if !stderr.isEmpty {
+                lastCloneErrorMessage = stderr
+            } else if !stdout.isEmpty {
+                lastCloneErrorMessage = stdout
+            }
         }
 
-        return destinationURL
+        if hasSandboxBlockedGit {
+            throw RepositoryLocalActionError.gitBlockedBySandbox
+        }
+
+        if let lastCloneErrorMessage {
+            throw RepositoryLocalActionError.commandFailed(lastCloneErrorMessage)
+        }
+
+        throw RepositoryLocalActionError.commandFailed("Unable to clone repository.")
     }
 
     private func isDirectoryEmpty(_ directoryURL: URL) -> Bool {
@@ -119,6 +145,32 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         } catch {
             return false
         }
+    }
+
+    private func availableGitExecutablePaths() -> [String] {
+        let candidates = [
+            "/opt/homebrew/bin/git",
+            "/usr/local/bin/git",
+            "/Library/Developer/CommandLineTools/usr/bin/git",
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
+            "/usr/bin/git"
+        ]
+
+        var seen: Set<String> = []
+        var paths: [String] = []
+
+        for candidate in candidates where seen.insert(candidate).inserted {
+            if fileManager.isExecutableFile(atPath: candidate) {
+                paths.append(candidate)
+            }
+        }
+
+        return paths
+    }
+
+    private func isSandboxBlockedXcrunError(stderr: String, stdout: String) -> Bool {
+        let mergedOutput = "\(stderr)\n\(stdout)".lowercased()
+        return mergedOutput.contains("xcrun: error: cannot be used within an app sandbox")
     }
 
     private func ensureDirectory(at localURL: URL) throws {
