@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class RepositoryViewModel: ObservableObject {
     @Published private(set) var repositories: [RepoItem] = []
+    @Published private(set) var isLoadingRepositories = false
     @Published private(set) var repositoryLoadErrorMessage: String?
 
     @Published var selectedFilter: RepoFilter = .all {
@@ -23,9 +24,8 @@ final class RepositoryViewModel: ObservableObject {
 
     private let dataProvider: RepositoryDataProviding
 
-    init(dataProvider: RepositoryDataProviding = MockRepositoryDataProvider()) {
+    init(dataProvider: RepositoryDataProviding) {
         self.dataProvider = dataProvider
-        reloadRepositories()
     }
 
     var filteredRepos: [RepoItem] {
@@ -48,10 +48,25 @@ final class RepositoryViewModel: ObservableObject {
         selectedRepo != nil
     }
 
-    func reloadRepositories() {
-        repositories = dataProvider.loadRepositories()
-        repositoryLoadErrorMessage = nil
-        synchronizeSelectedRepo()
+    func reloadRepositories() async {
+        guard !isLoadingRepositories else { return }
+
+        isLoadingRepositories = true
+        defer { isLoadingRepositories = false }
+
+        do {
+            repositories = try await dataProvider.loadRepositories()
+            repositoryLoadErrorMessage = nil
+            synchronizeSelectedRepo()
+
+            if repositories.isEmpty {
+                closeRepositorySelection()
+            }
+        } catch {
+            repositories = []
+            closeRepositorySelection()
+            repositoryLoadErrorMessage = repositoryErrorDescription(error)
+        }
     }
 
     func selectFilter(_ filter: RepoFilter) {
@@ -103,5 +118,15 @@ final class RepositoryViewModel: ObservableObject {
         if !filteredRepos.contains(where: { $0.id == selectedRepoID }) {
             closeRepositorySelection()
         }
+    }
+
+    private func repositoryErrorDescription(_ error: Error) -> String {
+        if let localized = error as? LocalizedError,
+           let description = localized.errorDescription,
+           !description.isEmpty {
+            return description
+        }
+
+        return error.localizedDescription
     }
 }

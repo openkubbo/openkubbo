@@ -7,6 +7,9 @@ struct GitHubRepository: Identifiable, Equatable {
     let ownerLogin: String
     let isPrivate: Bool
     let defaultBranch: String
+    let openIssuesCount: Int
+    let stargazersCount: Int
+    let updatedAt: Date?
     let htmlURL: URL?
 }
 
@@ -94,6 +97,7 @@ final class GitHubAPIService: GitHubAPIServicing {
     private let decoder: JSONDecoder
     private let userAgent: String
     private let apiVersion: String
+    private let iso8601Formatter = ISO8601DateFormatter()
 
     init(
         session: URLSession = .shared,
@@ -138,6 +142,9 @@ final class GitHubAPIService: GitHubAPIServicing {
                         ownerLogin: $0.owner.login,
                         isPrivate: $0.isPrivate,
                         defaultBranch: $0.defaultBranch,
+                        openIssuesCount: $0.openIssuesCount,
+                        stargazersCount: $0.stargazersCount,
+                        updatedAt: iso8601Formatter.date(from: $0.updatedAt),
                         htmlURL: URL(string: $0.htmlURL)
                     )
                 }
@@ -423,6 +430,9 @@ private struct RepositoryResponse: Decodable {
     let owner: Owner
     let isPrivate: Bool
     let defaultBranch: String
+    let openIssuesCount: Int
+    let stargazersCount: Int
+    let updatedAt: String
     let htmlURL: String
 
     enum CodingKeys: String, CodingKey {
@@ -431,6 +441,9 @@ private struct RepositoryResponse: Decodable {
         case owner
         case isPrivate = "private"
         case defaultBranch = "default_branch"
+        case openIssuesCount = "open_issues_count"
+        case stargazersCount = "stargazers_count"
+        case updatedAt = "updated_at"
         case htmlURL = "html_url"
     }
 }

@@ -1,12 +1,12 @@
 import Foundation
 
 protocol RepositoryDataProviding {
-    func loadRepositories() -> [RepoItem]
+    func loadRepositories() async throws -> [RepoItem]
     func loadIssues(for repository: RepoItem) -> [RepoIssueItem]
 }
 
 struct MockRepositoryDataProvider: RepositoryDataProviding {
-    func loadRepositories() -> [RepoItem] {
+    func loadRepositories() async throws -> [RepoItem] {
         [
             RepoItem(
                 id: "tarikvillalobos/postme",

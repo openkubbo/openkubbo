@@ -74,6 +74,10 @@ struct RepositoryPanelView: View {
     // MARK: - Dynamic Size
 
     private var repoListHeight: CGFloat {
+        if filteredRepos.isEmpty {
+            return 150
+        }
+
         let rowHeight: CGFloat = 72
         let count = CGFloat(min(filteredRepos.count, 5))
         return count * rowHeight
@@ -157,6 +161,9 @@ struct RepositoryPanelView: View {
                 }
             }
         )
+        .task {
+            await viewModel.reloadRepositories()
+        }
     }
 
     // MARK: - Left Column
@@ -274,21 +281,46 @@ struct RepositoryPanelView: View {
     // MARK: - Repo List
 
     private var repoList: some View {
-        ScrollView(showsIndicators: false) {
-            LazyVStack(spacing: 0) {
-                ForEach(Array(filteredRepos.enumerated()), id: \.element.id) { index, repo in
-                    RepoRow(
-                        repo: repo,
-                        isDarkTheme: isDarkTheme,
-                        primaryColor: primaryTextColor,
-                        secondaryColor: secondaryTextColor,
-                        accentColor: accentColor,
-                        dividerColor: dividerColor,
-                        isSelected: viewModel.selectedRepoID == repo.id,
-                        showDivider: index < filteredRepos.count - 1
-                    ) {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            viewModel.selectRepository(repo)
+        Group {
+            if viewModel.isLoadingRepositories && filteredRepos.isEmpty {
+                VStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+
+                    Text("Loading repositories...")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 12)
+            } else if filteredRepos.isEmpty {
+                VStack(spacing: 8) {
+                    Text(viewModel.repositoryLoadErrorMessage ?? "No repositories found.")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 12)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(filteredRepos.enumerated()), id: \.element.id) { index, repo in
+                            RepoRow(
+                                repo: repo,
+                                isDarkTheme: isDarkTheme,
+                                primaryColor: primaryTextColor,
+                                secondaryColor: secondaryTextColor,
+                                accentColor: accentColor,
+                                dividerColor: dividerColor,
+                                isSelected: viewModel.selectedRepoID == repo.id,
+                                showDivider: index < filteredRepos.count - 1
+                            ) {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    viewModel.selectRepository(repo)
+                                }
+                            }
                         }
                     }
                 }
