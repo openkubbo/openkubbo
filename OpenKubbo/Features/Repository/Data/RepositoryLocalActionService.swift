@@ -5,6 +5,7 @@ enum RepositoryLocalActionError: LocalizedError {
     case pathNotDirectory(String)
     case missingSSHCloneURL
     case destinationAlreadyExists(String)
+    case destinationNotDirectory(String)
     case gitNotAvailable
     case commandFailed(String)
 
@@ -15,7 +16,9 @@ enum RepositoryLocalActionError: LocalizedError {
         case .missingSSHCloneURL:
             return "Repository does not expose an SSH clone URL."
         case .destinationAlreadyExists(let path):
-            return "Destination folder already exists: \(path)"
+            return "Destination folder is not empty: \(path)"
+        case .destinationNotDirectory(let path):
+            return "Destination path exists but is not a folder: \(path)"
         case .gitNotAvailable:
             return "Git is not available at /usr/bin/git."
         case .commandFailed(let message):
@@ -73,15 +76,21 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
 
         let destinationURL = rootURL.appendingPathComponent(directoryName, isDirectory: true)
 
-        var isDirectory: ObjCBool = false
-        if fileManager.fileExists(atPath: destinationURL.path, isDirectory: &isDirectory) {
-            throw RepositoryLocalActionError.destinationAlreadyExists(destinationURL.path)
-        }
-
         let hasSecurityAccess = rootURL.startAccessingSecurityScopedResource()
         defer {
             if hasSecurityAccess {
                 rootURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: destinationURL.path, isDirectory: &isDirectory) {
+            guard isDirectory.boolValue else {
+                throw RepositoryLocalActionError.destinationNotDirectory(destinationURL.path)
+            }
+
+            if !isDirectoryEmpty(destinationURL) {
+                throw RepositoryLocalActionError.destinationAlreadyExists(destinationURL.path)
             }
         }
 
@@ -101,6 +110,15 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         }
 
         return destinationURL
+    }
+
+    private func isDirectoryEmpty(_ directoryURL: URL) -> Bool {
+        do {
+            let contents = try fileManager.contentsOfDirectory(atPath: directoryURL.path)
+            return contents.isEmpty
+        } catch {
+            return false
+        }
     }
 
     private func ensureDirectory(at localURL: URL) throws {

@@ -17,9 +17,7 @@ struct RepositoryPanelView: View {
     @ObservedObject var viewModel: RepositoryViewModel
 
     @State private var hostWindow: NSWindow?
-    @State private var pendingCloneRequest: PendingCloneRequest?
-    @State private var localActionErrorState: LocalActionErrorState?
-    @State private var showLocalRootConfigurationAlert = false
+    @State private var localActionAlertState: LocalActionAlertState?
 
     @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var themeStore: AppThemeStore
@@ -46,9 +44,15 @@ struct RepositoryPanelView: View {
         }
     }
 
-    private struct LocalActionErrorState: Identifiable {
+    private struct LocalActionAlertState: Identifiable {
+        enum Kind {
+            case rootNotConfigured
+            case cloneRequired(PendingCloneRequest)
+            case failed(String)
+        }
+
         let id = UUID()
-        let message: String
+        let kind: Kind
     }
 
     // MARK: - Theme colors
@@ -190,31 +194,34 @@ struct RepositoryPanelView: View {
         .task {
             await viewModel.reloadRepositories()
         }
-        .alert("Local Repositories Folder Not Configured", isPresented: $showLocalRootConfigurationAlert) {
-            Button("Open Settings") {
-                openWindow(id: "settings")
-                NSApp.activate(ignoringOtherApps: true)
+        .alert(item: $localActionAlertState) { alertState in
+            switch alertState.kind {
+            case .rootNotConfigured:
+                return Alert(
+                    title: Text("Local Repositories Folder Not Configured"),
+                    message: Text("Configure a local repositories folder in Settings > GitHub to use this action."),
+                    primaryButton: .default(Text("Open Settings")) {
+                        openWindow(id: "settings")
+                        NSApp.activate(ignoringOtherApps: true)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .cloneRequired(let request):
+                return Alert(
+                    title: Text("Repository not found locally"),
+                    message: Text("Expected path:\n\(request.expectedPath)\n\nDo you want to clone this repository now?"),
+                    primaryButton: .default(Text("Clone")) {
+                        cloneMissingRepository(request)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .failed(let message):
+                return Alert(
+                    title: Text("Action failed"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Configure a local repositories folder in Settings > GitHub to use this action.")
-        }
-        .alert(item: $pendingCloneRequest) { request in
-            Alert(
-                title: Text("Repository not found locally"),
-                message: Text("Expected path:\n\(request.expectedPath)\n\nDo you want to clone this repository now?"),
-                primaryButton: .default(Text("Clone")) {
-                    cloneMissingRepository(request)
-                },
-                secondaryButton: .cancel()
-            )
-        }
-        .alert(item: $localActionErrorState) { errorState in
-            Alert(
-                title: Text("Action failed"),
-                message: Text(errorState.message),
-                dismissButton: .default(Text("OK"))
-            )
         }
     }
 
@@ -971,16 +978,20 @@ struct RepositoryPanelView: View {
         case .cloned:
             handleLocalAction(for: repo, action: action)
         case .rootNotConfigured:
-            showLocalRootConfigurationAlert = true
+            localActionAlertState = LocalActionAlertState(kind: .rootNotConfigured)
         case .cloneRequired(let expectedPath):
-            pendingCloneRequest = PendingCloneRequest(
-                repoID: repo.id,
-                repoName: repo.name,
-                expectedPath: expectedPath,
-                action: action
+            localActionAlertState = LocalActionAlertState(
+                kind: .cloneRequired(
+                    PendingCloneRequest(
+                        repoID: repo.id,
+                        repoName: repo.name,
+                        expectedPath: expectedPath,
+                        action: action
+                    )
+                )
             )
         case .failed(let message):
-            localActionErrorState = LocalActionErrorState(message: message)
+            localActionAlertState = LocalActionAlertState(kind: .failed(message))
         }
     }
 

@@ -28,7 +28,9 @@ struct LocalRepositoryResolver: LocalRepositoryResolving {
         var isDirectory: ObjCBool = false
 
         if fileManager.fileExists(atPath: expectedURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
-            return .matched(localURL: expectedURL)
+            return hasGitMetadata(in: expectedURL)
+                ? .matched(localURL: expectedURL)
+                : .missing(expectedURL: expectedURL)
         }
 
         return .missing(expectedURL: expectedURL)
@@ -38,5 +40,10 @@ struct LocalRepositoryResolver: LocalRepositoryResolving {
         let candidate = repo.name.split(separator: "/").last.map(String.init) ?? repo.name
         let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? repo.id : trimmed
+    }
+
+    private func hasGitMetadata(in repositoryURL: URL) -> Bool {
+        let gitDirectoryURL = repositoryURL.appendingPathComponent(".git", isDirectory: false)
+        return fileManager.fileExists(atPath: gitDirectoryURL.path)
     }
 }
