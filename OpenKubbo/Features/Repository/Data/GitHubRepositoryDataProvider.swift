@@ -52,6 +52,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             id: repository.fullName,
             name: repository.fullName,
             sshCloneURL: repository.sshCloneURL,
+            httpsCloneURL: repository.httpsCloneURL,
             visibility: visibility,
             issues: max(0, repository.openIssuesCount),
             prs: prs,

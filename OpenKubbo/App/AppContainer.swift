@@ -36,7 +36,8 @@ final class AppContainer: ObservableObject {
             ),
             localRootProvider: localRootProvider,
             localResolver: localResolver,
-            localActionService: localActionService
+            localActionService: localActionService,
+            gitHubTokenStore: gitHubTokenStore
         )
     }
 }

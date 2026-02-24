@@ -178,6 +178,7 @@ struct RepoItem: Identifiable, Equatable {
     let id: String
     let name: String
     let sshCloneURL: String?
+    let httpsCloneURL: String?
     let visibility: RepoVisibility
     let issues: Int
     let prs: Int
