@@ -272,3 +272,27 @@ struct RepoPullRequestCommitItem: Identifiable {
     let author: String
     let committedAgo: String
 }
+
+struct RepoBranchItem: Identifiable {
+    let id: String
+    let name: String
+    let isDefault: Bool
+    let isCurrent: Bool
+    let aheadBy: Int
+    let behindBy: Int
+    let hasOpenPullRequest: Bool
+    let updatedAgo: String
+
+    func canOpenPullRequest(baseBranch: String) -> Bool {
+        if name == baseBranch {
+            return false
+        }
+        if isDefault {
+            return false
+        }
+        if aheadBy <= 0 {
+            return false
+        }
+        return !hasOpenPullRequest
+    }
+}

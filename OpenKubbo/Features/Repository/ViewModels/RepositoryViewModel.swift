@@ -31,6 +31,9 @@ final class RepositoryViewModel: ObservableObject {
         didSet {
             selectedDetailDestination = nil
             selectedPullRequestID = nil
+            selectedBranchID = nil
+            isPullRequestComposerVisible = false
+            pullRequestDraftHeadBranch = nil
         }
     }
 
@@ -38,6 +41,9 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedIssuesScope: RepoIssuesScope = .open
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
+    @Published var selectedBranchID: String?
+    @Published var isPullRequestComposerVisible = false
+    @Published var pullRequestDraftHeadBranch: String?
 
     private let dataProvider: RepositoryDataProviding
     private let localRootProvider: LocalRepositoryRootProviding
@@ -133,6 +139,9 @@ final class RepositoryViewModel: ObservableObject {
     func closeRepositorySelection() {
         selectedDetailDestination = nil
         selectedPullRequestID = nil
+        selectedBranchID = nil
+        isPullRequestComposerVisible = false
+        pullRequestDraftHeadBranch = nil
         selectedRepoID = nil
     }
 
@@ -142,14 +151,23 @@ final class RepositoryViewModel: ObservableObject {
         }
         if destination == .pullRequests {
             selectedPullRequestsScope = .open
+            isPullRequestComposerVisible = false
+        } else {
+            isPullRequestComposerVisible = false
         }
         selectedPullRequestID = nil
+        if destination != .branches {
+            selectedBranchID = nil
+        }
         selectedDetailDestination = destination
     }
 
     func closeDetailPanel() {
         selectedDetailDestination = nil
         selectedPullRequestID = nil
+        selectedBranchID = nil
+        isPullRequestComposerVisible = false
+        pullRequestDraftHeadBranch = nil
     }
 
     func selectIssuesScope(_ scope: RepoIssuesScope) {
@@ -174,6 +192,7 @@ final class RepositoryViewModel: ObservableObject {
     func selectPullRequestsScope(_ scope: RepoPullRequestsScope) {
         selectedPullRequestsScope = scope
         selectedPullRequestID = nil
+        isPullRequestComposerVisible = false
     }
 
     func filteredPullRequests(for repo: RepoItem) -> [RepoPullRequestItem] {
@@ -192,6 +211,7 @@ final class RepositoryViewModel: ObservableObject {
     }
 
     func selectPullRequest(_ pullRequest: RepoPullRequestItem) {
+        isPullRequestComposerVisible = false
         selectedPullRequestID = pullRequest.id
     }
 
@@ -209,6 +229,53 @@ final class RepositoryViewModel: ObservableObject {
         in repo: RepoItem
     ) -> [RepoPullRequestCommitItem] {
         dataProvider.loadPullRequestCommits(for: pullRequest, in: repo)
+    }
+
+    func branches(for repo: RepoItem) -> [RepoBranchItem] {
+        dataProvider.loadBranches(for: repo)
+    }
+
+    func selectedBranch(for repo: RepoItem) -> RepoBranchItem? {
+        guard let selectedBranchID else { return nil }
+        return branches(for: repo).first(where: { $0.id == selectedBranchID })
+    }
+
+    func selectBranch(_ branch: RepoBranchItem) {
+        selectedBranchID = branch.id
+    }
+
+    func closeBranchDetails() {
+        selectedBranchID = nil
+    }
+
+    func openPullRequestComposer(
+        in repo: RepoItem,
+        preferredHeadBranch: String? = nil
+    ) {
+        selectedDetailDestination = .pullRequests
+        selectedPullRequestID = nil
+        selectedBranchID = nil
+        isPullRequestComposerVisible = true
+        if let preferredHeadBranch, !preferredHeadBranch.isEmpty {
+            pullRequestDraftHeadBranch = preferredHeadBranch
+        }
+        if pullRequestDraftHeadBranch == nil {
+            pullRequestDraftHeadBranch = eligiblePullRequestBranches(for: repo).first?.name
+        }
+    }
+
+    func closePullRequestComposer() {
+        isPullRequestComposerVisible = false
+    }
+
+    func eligiblePullRequestBranches(for repo: RepoItem) -> [RepoBranchItem] {
+        branches(for: repo).filter { branch in
+            branch.canOpenPullRequest(baseBranch: repo.branch)
+        }
+    }
+
+    func selectPullRequestDraftHeadBranch(_ branch: RepoBranchItem) {
+        pullRequestDraftHeadBranch = branch.name
     }
 
     func openInFinder(for repo: RepoItem) -> RepositoryLocalActionResult {

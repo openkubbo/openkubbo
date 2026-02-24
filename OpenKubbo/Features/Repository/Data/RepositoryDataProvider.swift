@@ -8,6 +8,7 @@ protocol RepositoryDataProviding {
         for pullRequest: RepoPullRequestItem,
         in repository: RepoItem
     ) -> [RepoPullRequestCommitItem]
+    func loadBranches(for repository: RepoItem) -> [RepoBranchItem]
 }
 
 struct MockRepositoryDataProvider: RepositoryDataProviding {
@@ -352,6 +353,81 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 message: "style(repository): adjust badges and spacing in PR panel",
                 author: repository.name.contains("tarik") ? "tarikvillalobos" : pullRequest.author,
                 committedAgo: "11 min. ago"
+            )
+        ]
+    }
+
+    func loadBranches(for repository: RepoItem) -> [RepoBranchItem] {
+        [
+            RepoBranchItem(
+                id: "\(repository.id)-branch-\(repository.branch)",
+                name: repository.branch,
+                isDefault: true,
+                isCurrent: true,
+                aheadBy: 0,
+                behindBy: 0,
+                hasOpenPullRequest: false,
+                updatedAgo: "1 min. ago"
+            ),
+            RepoBranchItem(
+                id: "\(repository.id)-branch-feature-repository-panel",
+                name: "feature/repository-panel",
+                isDefault: false,
+                isCurrent: false,
+                aheadBy: 6,
+                behindBy: 1,
+                hasOpenPullRequest: true,
+                updatedAgo: "9 min. ago"
+            ),
+            RepoBranchItem(
+                id: "\(repository.id)-branch-feat-github-oauth-ux",
+                name: "feat/github-oauth-ux",
+                isDefault: false,
+                isCurrent: false,
+                aheadBy: 4,
+                behindBy: 0,
+                hasOpenPullRequest: true,
+                updatedAgo: "34 min. ago"
+            ),
+            RepoBranchItem(
+                id: "\(repository.id)-branch-feat-pr-creation-flow",
+                name: "feat/pr-creation-flow",
+                isDefault: false,
+                isCurrent: false,
+                aheadBy: 3,
+                behindBy: 0,
+                hasOpenPullRequest: false,
+                updatedAgo: "12 min. ago"
+            ),
+            RepoBranchItem(
+                id: "\(repository.id)-branch-chore-light-theme-polish",
+                name: "chore/light-theme-polish",
+                isDefault: false,
+                isCurrent: false,
+                aheadBy: 2,
+                behindBy: 0,
+                hasOpenPullRequest: false,
+                updatedAgo: "53 min. ago"
+            ),
+            RepoBranchItem(
+                id: "\(repository.id)-branch-fix-settings-spacing",
+                name: "fix/settings-spacing",
+                isDefault: false,
+                isCurrent: false,
+                aheadBy: 1,
+                behindBy: 0,
+                hasOpenPullRequest: false,
+                updatedAgo: "2 hr. ago"
+            ),
+            RepoBranchItem(
+                id: "\(repository.id)-branch-refactor-theme-store",
+                name: "refactor/theme-store",
+                isDefault: false,
+                isCurrent: false,
+                aheadBy: 0,
+                behindBy: 0,
+                hasOpenPullRequest: false,
+                updatedAgo: "1 day ago"
             )
         ]
     }

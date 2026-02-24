@@ -608,6 +608,8 @@ struct RepositoryPanelView: View {
             issuesOverlayPanel(for: repo)
         case .pullRequests:
             pullRequestsOverlayPanel(for: repo)
+        case .branches:
+            branchesOverlayPanel(for: repo)
         default:
             genericDetailOverlayPanel(for: repo, destination: destination)
         }
@@ -672,6 +674,7 @@ struct RepositoryPanelView: View {
     private func pullRequestsOverlayPanel(for repo: RepoItem) -> some View {
         let pullRequests = viewModel.filteredPullRequests(for: repo)
         let selectedPullRequest = viewModel.selectedPullRequest(for: repo)
+        let isComposerVisible = viewModel.isPullRequestComposerVisible
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
@@ -690,7 +693,7 @@ struct RepositoryPanelView: View {
 
                     Spacer(minLength: 8)
 
-                    newPullRequestButton
+                    newPullRequestButton(for: repo)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -720,14 +723,111 @@ struct RepositoryPanelView: View {
                     }
                 }
             }
-            .allowsHitTesting(selectedPullRequest == nil)
+            .allowsHitTesting(selectedPullRequest == nil && !isComposerVisible)
 
-            if let selectedPullRequest {
+            if isComposerVisible {
+                pullRequestComposerOverlayPanel(for: repo)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if let selectedPullRequest {
                 pullRequestDetailsOverlayPanel(for: selectedPullRequest, in: repo)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: selectedPullRequest?.id)
+        .animation(
+            .easeInOut(duration: 0.18),
+            value: "\(selectedPullRequest?.id ?? "none")-\(isComposerVisible ? "composer" : "list")"
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func pullRequestComposerOverlayPanel(for repo: RepoItem) -> some View {
+        let eligibleBranches = viewModel.eligiblePullRequestBranches(for: repo)
+        let selectedHeadBranch = viewModel.pullRequestDraftHeadBranch
+
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: closePullRequestComposer) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Circle()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+
+                Text("Create Pull Request")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Base branch")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                Text(repo.branch)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(primaryTextColor)
+
+                if let selectedHeadBranch {
+                    Text("Head branch: \(selectedHeadBranch)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    if eligibleBranches.isEmpty {
+                        Text("No branches ready to open a PR.")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                    } else {
+                        ForEach(Array(eligibleBranches.enumerated()), id: \.element.id) { index, branch in
+                            pullRequestComposerBranchRow(
+                                branch,
+                                isSelected: selectedHeadBranch == branch.name,
+                                showDivider: index < eligibleBranches.count - 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -834,6 +934,179 @@ struct RepositoryPanelView: View {
                     }
                 }
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func branchesOverlayPanel(for repo: RepoItem) -> some View {
+        let branches = viewModel.branches(for: repo)
+        let selectedBranch = viewModel.selectedBranch(for: repo)
+
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                overlayTopBar(title: "Branches")
+
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        if branches.isEmpty {
+                            Text("No branches available.")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                        } else {
+                            ForEach(Array(branches.enumerated()), id: \.element.id) { index, branch in
+                                branchRow(
+                                    branch,
+                                    isSelected: selectedBranch?.id == branch.id,
+                                    showDivider: index < branches.count - 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .allowsHitTesting(selectedBranch == nil)
+
+            if let selectedBranch {
+                branchDetailsOverlayPanel(for: selectedBranch, in: repo)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: selectedBranch?.id)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func branchDetailsOverlayPanel(for branch: RepoBranchItem, in repo: RepoItem) -> some View {
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: closeBranchDetails) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Circle()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+
+                Text(branch.name)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .lineLimit(1)
+
+                Spacer()
+
+                if branch.isDefault {
+                    Text("Default")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.95))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule()
+                                .fill(accentColor)
+                        )
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Text(branch.isCurrent ? "Current branch" : "Branch")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                    Spacer()
+                    Text(branch.updatedAgo)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+
+                Text("Ahead \(branch.aheadBy) • Behind \(branch.behindBy)")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                if branch.hasOpenPullRequest {
+                    Text("This branch already has an open pull request.")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.orange.opacity(0.9))
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 10) {
+                detailNavigationRow(icon: "arrow.triangle.branch", title: "Checkout Branch") {}
+                detailNavigationRow(icon: "folder", title: "Open in Finder") {}
+                detailNavigationRow(icon: "terminal", title: "Open in Terminal") {}
+
+                Button {
+                    openPullRequestComposer(from: branch, in: repo)
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "arrow.triangle.pull")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Create PR")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(.white.opacity(0.95))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(accentColor)
+                            .overlay(
+                                Capsule()
+                                    .stroke(accentColor.opacity(0.65), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .disabled(!branch.canOpenPullRequest(baseBranch: repo.branch))
+                .opacity(branch.canOpenPullRequest(baseBranch: repo.branch) ? 1 : 0.55)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
@@ -1028,9 +1301,11 @@ struct RepositoryPanelView: View {
         .repoCursorOnHover()
     }
 
-    private var newPullRequestButton: some View {
+    private func newPullRequestButton(for repo: RepoItem) -> some View {
         Button {
-            // TODO: Connect with GitHub pull request creation flow.
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.openPullRequestComposer(in: repo)
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
@@ -1049,6 +1324,124 @@ struct RepositoryPanelView: View {
                             .stroke(accentColor.opacity(0.6), lineWidth: 1)
                     )
             )
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func pullRequestComposerBranchRow(
+        _ branch: RepoBranchItem,
+        isSelected: Bool,
+        showDivider: Bool
+    ) -> some View {
+        Button {
+            viewModel.selectPullRequestDraftHeadBranch(branch)
+        } label: {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                        .frame(width: 18, alignment: .center)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(branch.name)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .lineLimit(1)
+
+                        Text("Ahead \(branch.aheadBy) • Behind \(branch.behindBy) • \(branch.updatedAgo)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(accentColor)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 0, style: .continuous)
+                        .fill(isSelected ? accentColor.opacity(isDarkTheme ? 0.16 : 0.11) : .clear)
+                )
+
+                if showDivider {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func branchRow(
+        _ branch: RepoBranchItem,
+        isSelected: Bool,
+        showDivider: Bool
+    ) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.selectBranch(branch)
+            }
+        } label: {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                        .frame(width: 18, alignment: .center)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Text(branch.name)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
+                                .lineLimit(1)
+
+                            if branch.isCurrent {
+                                Text("Current")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.95))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        Capsule()
+                                            .fill(accentColor)
+                                    )
+                            }
+                        }
+
+                        Text("Ahead \(branch.aheadBy) • Behind \(branch.behindBy) • \(branch.updatedAgo)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 0, style: .continuous)
+                        .fill(isSelected ? accentColor.opacity(isDarkTheme ? 0.16 : 0.11) : .clear)
+                )
+
+                if showDivider {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
+            }
         }
         .buttonStyle(.plain)
         .repoCursorOnHover()
@@ -1331,6 +1724,24 @@ struct RepositoryPanelView: View {
     private func closePullRequestDetails() {
         withAnimation(.easeInOut(duration: 0.18)) {
             viewModel.closePullRequestDetails()
+        }
+    }
+
+    private func closePullRequestComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.closePullRequestComposer()
+        }
+    }
+
+    private func closeBranchDetails() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.closeBranchDetails()
+        }
+    }
+
+    private func openPullRequestComposer(from branch: RepoBranchItem, in repo: RepoItem) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.openPullRequestComposer(in: repo, preferredHeadBranch: branch.name)
         }
     }
 
