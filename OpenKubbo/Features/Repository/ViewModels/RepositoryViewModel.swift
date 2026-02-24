@@ -30,6 +30,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedRepoID: String? {
         didSet {
             selectedDetailDestination = nil
+            selectedIssueID = nil
             selectedPullRequestID = nil
             selectedBranchID = nil
             isPullRequestComposerVisible = false
@@ -39,6 +40,7 @@ final class RepositoryViewModel: ObservableObject {
 
     @Published var selectedDetailDestination: RepoDetailDestination?
     @Published var selectedIssuesScope: RepoIssuesScope = .open
+    @Published var selectedIssueID: String?
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
     @Published var selectedBranchID: String?
@@ -138,6 +140,7 @@ final class RepositoryViewModel: ObservableObject {
 
     func closeRepositorySelection() {
         selectedDetailDestination = nil
+        selectedIssueID = nil
         selectedPullRequestID = nil
         selectedBranchID = nil
         isPullRequestComposerVisible = false
@@ -148,6 +151,7 @@ final class RepositoryViewModel: ObservableObject {
     func openDetailPanel(_ destination: RepoDetailDestination) {
         if destination == .issues {
             selectedIssuesScope = .open
+            selectedIssueID = nil
         }
         if destination == .pullRequests {
             selectedPullRequestsScope = .open
@@ -164,6 +168,7 @@ final class RepositoryViewModel: ObservableObject {
 
     func closeDetailPanel() {
         selectedDetailDestination = nil
+        selectedIssueID = nil
         selectedPullRequestID = nil
         selectedBranchID = nil
         isPullRequestComposerVisible = false
@@ -172,6 +177,7 @@ final class RepositoryViewModel: ObservableObject {
 
     func selectIssuesScope(_ scope: RepoIssuesScope) {
         selectedIssuesScope = scope
+        selectedIssueID = nil
     }
 
     func filteredIssues(for repo: RepoItem) -> [RepoIssueItem] {
@@ -187,6 +193,19 @@ final class RepositoryViewModel: ObservableObject {
         case .closed:
             return issues.filter { !$0.isOpen }
         }
+    }
+
+    func selectIssue(_ issue: RepoIssueItem) {
+        selectedIssueID = issue.id
+    }
+
+    func closeIssueDetails() {
+        selectedIssueID = nil
+    }
+
+    func selectedIssue(for repo: RepoItem) -> RepoIssueItem? {
+        guard let selectedIssueID else { return nil }
+        return filteredIssues(for: repo).first(where: { $0.id == selectedIssueID })
     }
 
     func selectPullRequestsScope(_ scope: RepoPullRequestsScope) {

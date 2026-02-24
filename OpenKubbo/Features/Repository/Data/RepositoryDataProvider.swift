@@ -170,6 +170,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 id: "\(repository.id)-26",
                 number: 26,
                 title: "Refactor: Glass effect performance",
+                body: "Current glass effects are triggering high redraw cost on macOS and hurting scroll performance in large task lists.\n\nExpected:\n- Keep blur/glass visual quality.\n- Reduce expensive invalidations while scrolling.\n- Keep parity in dark and light themes.\n\nNotes:\n- Focus first on settings and repository overlays where repaint cost is highest.",
                 labels: [RepoIssueLabel(id: "enhancement-26", title: "enhancement", kind: .enhancement)],
                 author: "tarikvillalobos",
                 updatedAgo: "20 min. ago",
@@ -181,6 +182,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 id: "\(repository.id)-25",
                 number: 25,
                 title: "Chat UI doesn't disappear if disabled in settings.",
+                body: "When disabling the chat interface in Settings, the chat panel remains mounted and visible until app restart.\n\nSteps:\n1. Open Settings.\n2. Disable chat.\n3. Return to main screen.\n\nExpected: chat panel should disappear immediately.\nActual: panel remains visible.",
                 labels: [RepoIssueLabel(id: "bug-25", title: "bug", kind: .bug)],
                 author: "tarikvillalobos",
                 updatedAgo: "21 min. ago",
@@ -192,6 +194,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 id: "\(repository.id)-24",
                 number: 24,
                 title: "Build fails on Windows: 'rm' command not recognized in clean scripts",
+                body: "The clean script currently assumes a Unix shell and uses `rm`, which fails on Windows environments.\n\nProposal:\n- Replace shell-specific cleanup with Swift/Node cross-platform removal.\n- Add CI check for Windows build parity.",
                 labels: [
                     RepoIssueLabel(id: "bug-24", title: "bug", kind: .bug),
                     RepoIssueLabel(id: "help-24", title: "help wanted", kind: .helpWanted),
@@ -207,6 +210,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 id: "\(repository.id)-21",
                 number: 21,
                 title: "Mozila extension",
+                body: "Need to review naming and packaging for browser extension release.\n\nRequested:\n- Confirm final Firefox-compatible bundle.\n- Align naming to `Mozilla` before publishing.\n- Add release notes template for extension updates.",
                 labels: [
                     RepoIssueLabel(id: "help-21", title: "help wanted", kind: .helpWanted),
                     RepoIssueLabel(id: "good-21", title: "good first issue", kind: .goodFirstIssue)
@@ -221,6 +225,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 id: "\(repository.id)-17",
                 number: 17,
                 title: "Legacy parser fallback cleanup",
+                body: "Remove obsolete parser fallback path after migration.\n\nContext:\n- New parser has been stable for multiple releases.\n- Legacy code increases maintenance and test matrix.\n\nAcceptance:\n- Remove fallback path.\n- Keep backward compatibility tests green.",
                 labels: [RepoIssueLabel(id: "enhancement-17", title: "enhancement", kind: .enhancement)],
                 author: "openkubbo-bot",
                 updatedAgo: "2 days ago",

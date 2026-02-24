@@ -617,47 +617,153 @@ struct RepositoryPanelView: View {
 
     private func issuesOverlayPanel(for repo: RepoItem) -> some View {
         let issues = viewModel.filteredIssues(for: repo)
+        let selectedIssue = viewModel.selectedIssue(for: repo)
 
-        return VStack(spacing: 0) {
-            overlayTopBar(title: "Open Issues")
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                overlayTopBar(title: "Open Issues")
 
-            Rectangle()
-                .fill(dividerColor)
-                .frame(height: 1)
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
 
-            HStack(spacing: 10) {
                 HStack(spacing: 10) {
-                    ForEach(RepoIssuesScope.allCases) { scope in
-                        issuesFilterPill(scope)
+                    HStack(spacing: 10) {
+                        ForEach(RepoIssuesScope.allCases) { scope in
+                            issuesFilterPill(scope)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    newIssueButton
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        if issues.isEmpty {
+                            Text("No issues for this filter.")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                        } else {
+                            ForEach(Array(issues.enumerated()), id: \.element.id) { index, issue in
+                                issueRow(
+                                    issue,
+                                    isSelected: selectedIssue?.id == issue.id,
+                                    showDivider: index < issues.count - 1
+                                )
+                            }
+                        }
                     }
                 }
+            }
+            .allowsHitTesting(selectedIssue == nil)
 
-                Spacer(minLength: 8)
+            if let selectedIssue {
+                issueDetailsOverlayPanel(for: selectedIssue)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: selectedIssue?.id)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
 
-                newIssueButton
+    private func issueDetailsOverlayPanel(for issue: RepoIssueItem) -> some View {
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: closeIssueDetails) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Circle()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+
+                Text("Issue #\(issue.number)")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text(issue.isOpen ? "Open" : "Closed")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(issue.isOpen ? accentColor : secondaryTextColor.opacity(0.7))
+                    )
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
+            .padding(.vertical, 11)
 
             Rectangle()
                 .fill(dividerColor)
                 .frame(height: 1)
 
             ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: 0) {
-                    if issues.isEmpty {
-                        Text("No issues for this filter.")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(secondaryTextColor)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 18)
-                    } else {
-                        ForEach(Array(issues.enumerated()), id: \.element.id) { index, issue in
-                            issueRow(issue, showDivider: index < issues.count - 1)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(issue.title)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 8) {
+                        ForEach(issue.labels) { label in
+                            issueLabelPill(label)
                         }
                     }
+
+                    Text("#\(issue.number) \(issue.author) \(issue.updatedAgo)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+
+                    Text(issue.body)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if issue.comments > 0 {
+                        Text("\(issue.comments) comments")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1563,52 +1669,68 @@ struct RepositoryPanelView: View {
         }
     }
 
-    private func issueRow(_ issue: RepoIssueItem, showDivider: Bool) -> some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: issue.isOpen ? "exclamationmark.circle" : "checkmark.circle")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(accentColor)
-                        .frame(width: 18, alignment: .center)
-
-                    Text(issue.title)
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .foregroundStyle(primaryTextColor)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 8)
-
-                    if issue.comments > 0 {
-                        HStack(spacing: 4) {
-                            Image(systemName: "bubble.left")
-                                .font(.system(size: 11, weight: .medium))
-                            Text("\(issue.comments)")
-                                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        }
-                        .foregroundStyle(secondaryTextColor)
-                    }
-                }
-
-                HStack(spacing: 8) {
-                    ForEach(issue.labels) { label in
-                        issueLabelPill(label)
-                    }
-                }
-
-                Text("#\(issue.number) \(issue.author) \(issue.updatedAgo)")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(secondaryTextColor)
+    private func issueRow(_ issue: RepoIssueItem, isSelected: Bool, showDivider: Bool) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.selectIssue(issue)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 13)
+        } label: {
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: issue.isOpen ? "exclamationmark.circle" : "checkmark.circle")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(accentColor)
+                            .frame(width: 18, alignment: .center)
 
-            if showDivider {
-                Rectangle()
-                    .fill(dividerColor)
-                    .frame(height: 1)
+                        Text(issue.title)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 8)
+
+                        if issue.comments > 0 {
+                            HStack(spacing: 4) {
+                                Image(systemName: "bubble.left")
+                                    .font(.system(size: 11, weight: .medium))
+                                Text("\(issue.comments)")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            }
+                            .foregroundStyle(secondaryTextColor)
+                        }
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(issue.labels) { label in
+                            issueLabelPill(label)
+                        }
+                    }
+
+                    Text("#\(issue.number) \(issue.author) \(issue.updatedAgo)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 0, style: .continuous)
+                        .fill(isSelected ? accentColor.opacity(isDarkTheme ? 0.16 : 0.11) : .clear)
+                )
+
+                if showDivider {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
             }
         }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
     }
 
     private func issueLabelPill(_ label: RepoIssueLabel) -> some View {
@@ -1718,6 +1840,12 @@ struct RepositoryPanelView: View {
     private func closeDetailPanel() {
         withAnimation(.easeInOut(duration: 0.18)) {
             viewModel.closeDetailPanel()
+        }
+    }
+
+    private func closeIssueDetails() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.closeIssueDetails()
         }
     }
 

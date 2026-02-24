@@ -239,6 +239,7 @@ struct RepoIssueItem: Identifiable {
     let id: String
     let number: Int
     let title: String
+    let body: String
     let labels: [RepoIssueLabel]
     let author: String
     let updatedAgo: String
