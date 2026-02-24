@@ -31,6 +31,7 @@ final class RepositoryViewModel: ObservableObject {
         didSet {
             selectedDetailDestination = nil
             selectedIssueID = nil
+            issueCommentDraft = ""
             selectedPullRequestID = nil
             selectedBranchID = nil
             isPullRequestComposerVisible = false
@@ -41,6 +42,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedDetailDestination: RepoDetailDestination?
     @Published var selectedIssuesScope: RepoIssuesScope = .open
     @Published var selectedIssueID: String?
+    @Published var issueCommentDraft = ""
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
     @Published var selectedBranchID: String?
@@ -53,6 +55,7 @@ final class RepositoryViewModel: ObservableObject {
     private let localActionService: RepositoryLocalActionServicing
     private let gitHubTokenStore: GitHubTokenStoring
     private var hasUserCustomizedPins = false
+    private var issueCommentItemsByIssueID: [String: [RepoIssueCommentItem]] = [:]
 
     init(
         dataProvider: RepositoryDataProviding,
@@ -86,6 +89,10 @@ final class RepositoryViewModel: ObservableObject {
 
     var isDetailsVisible: Bool {
         selectedRepo != nil
+    }
+
+    var canSubmitIssueComment: Bool {
+        !trimmedIssueCommentDraft.isEmpty
     }
 
     func reloadRepositories() async {
@@ -141,6 +148,7 @@ final class RepositoryViewModel: ObservableObject {
     func closeRepositorySelection() {
         selectedDetailDestination = nil
         selectedIssueID = nil
+        issueCommentDraft = ""
         selectedPullRequestID = nil
         selectedBranchID = nil
         isPullRequestComposerVisible = false
@@ -152,6 +160,9 @@ final class RepositoryViewModel: ObservableObject {
         if destination == .issues {
             selectedIssuesScope = .open
             selectedIssueID = nil
+            issueCommentDraft = ""
+        } else {
+            issueCommentDraft = ""
         }
         if destination == .pullRequests {
             selectedPullRequestsScope = .open
@@ -169,6 +180,7 @@ final class RepositoryViewModel: ObservableObject {
     func closeDetailPanel() {
         selectedDetailDestination = nil
         selectedIssueID = nil
+        issueCommentDraft = ""
         selectedPullRequestID = nil
         selectedBranchID = nil
         isPullRequestComposerVisible = false
@@ -178,10 +190,11 @@ final class RepositoryViewModel: ObservableObject {
     func selectIssuesScope(_ scope: RepoIssuesScope) {
         selectedIssuesScope = scope
         selectedIssueID = nil
+        issueCommentDraft = ""
     }
 
     func filteredIssues(for repo: RepoItem) -> [RepoIssueItem] {
-        let issues = dataProvider.loadIssues(for: repo)
+        let issues = dataProvider.loadIssues(for: repo).map(resolveIssueComments)
 
         switch selectedIssuesScope {
         case .all:
@@ -197,15 +210,33 @@ final class RepositoryViewModel: ObservableObject {
 
     func selectIssue(_ issue: RepoIssueItem) {
         selectedIssueID = issue.id
+        issueCommentDraft = ""
     }
 
     func closeIssueDetails() {
         selectedIssueID = nil
+        issueCommentDraft = ""
     }
 
     func selectedIssue(for repo: RepoItem) -> RepoIssueItem? {
         guard let selectedIssueID else { return nil }
         return filteredIssues(for: repo).first(where: { $0.id == selectedIssueID })
+    }
+
+    func addIssueComment(to issue: RepoIssueItem) {
+        let draft = trimmedIssueCommentDraft
+        guard !draft.isEmpty else { return }
+
+        let currentItems = issueCommentItemsByIssueID[issue.id] ?? issue.commentItems
+        let newComment = RepoIssueCommentItem(
+            id: "\(issue.id)-comment-\(UUID().uuidString)",
+            author: "you",
+            body: draft,
+            updatedAgo: "just now"
+        )
+
+        issueCommentItemsByIssueID[issue.id] = currentItems + [newComment]
+        issueCommentDraft = ""
     }
 
     func selectPullRequestsScope(_ scope: RepoPullRequestsScope) {
@@ -408,5 +439,32 @@ final class RepositoryViewModel: ObservableObject {
         }
 
         return error.localizedDescription
+    }
+
+    private var trimmedIssueCommentDraft: String {
+        issueCommentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func resolveIssueComments(_ issue: RepoIssueItem) -> RepoIssueItem {
+        guard let overriddenComments = issueCommentItemsByIssueID[issue.id] else {
+            return issue
+        }
+
+        let unresolvedCommentsCount = max(0, issue.comments - issue.commentItems.count)
+        let resolvedCount = overriddenComments.count + unresolvedCommentsCount
+
+        return RepoIssueItem(
+            id: issue.id,
+            number: issue.number,
+            title: issue.title,
+            body: issue.body,
+            labels: issue.labels,
+            author: issue.author,
+            updatedAgo: issue.updatedAgo,
+            comments: resolvedCount,
+            commentItems: overriddenComments,
+            isOpen: issue.isOpen,
+            isMine: issue.isMine
+        )
     }
 }

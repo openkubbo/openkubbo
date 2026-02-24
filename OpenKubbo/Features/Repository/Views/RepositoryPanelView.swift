@@ -669,7 +669,7 @@ struct RepositoryPanelView: View {
             .allowsHitTesting(selectedIssue == nil)
 
             if let selectedIssue {
-                issueDetailsOverlayPanel(for: selectedIssue)
+                issueDetailsOverlayPanel(for: selectedIssue, in: repo)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
@@ -685,7 +685,7 @@ struct RepositoryPanelView: View {
         )
     }
 
-    private func issueDetailsOverlayPanel(for issue: RepoIssueItem) -> some View {
+    private func issueDetailsOverlayPanel(for issue: RepoIssueItem, in repo: RepoItem) -> some View {
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button(action: closeIssueDetails) {
@@ -786,6 +786,60 @@ struct RepositoryPanelView: View {
                                     )
                             )
                         }
+                    }
+
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+
+                    Text("Add comment")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    TextField("Write a comment...", text: $viewModel.issueCommentDraft, axis: .vertical)
+                        .lineLimit(4...8)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+
+                    HStack {
+                        Spacer(minLength: 0)
+
+                        Button(action: {
+                            addIssueComment(in: repo)
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "paperplane.fill")
+                                    .font(.system(size: 11, weight: .bold))
+                                Text("Add Comment")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            }
+                            .foregroundStyle(.white.opacity(0.95))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                Capsule()
+                                    .fill(accentColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(accentColor.opacity(0.6), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .repoCursorOnHover()
+                        .disabled(!viewModel.canSubmitIssueComment)
+                        .opacity(viewModel.canSubmitIssueComment ? 1 : 0.55)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1905,6 +1959,14 @@ struct RepositoryPanelView: View {
     private func closeIssueDetails() {
         withAnimation(.easeInOut(duration: 0.18)) {
             viewModel.closeIssueDetails()
+        }
+    }
+
+    private func addIssueComment(in repo: RepoItem) {
+        guard let issue = viewModel.selectedIssue(for: repo) else { return }
+
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.addIssueComment(to: issue)
         }
     }
 
