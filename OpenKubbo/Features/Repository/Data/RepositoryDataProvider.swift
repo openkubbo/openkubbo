@@ -175,6 +175,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 author: "tarikvillalobos",
                 updatedAgo: "20 min. ago",
                 comments: 0,
+                commentItems: [],
                 isOpen: true,
                 isMine: true
             ),
@@ -187,6 +188,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 author: "tarikvillalobos",
                 updatedAgo: "21 min. ago",
                 comments: 0,
+                commentItems: [],
                 isOpen: true,
                 isMine: true
             ),
@@ -203,6 +205,14 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 author: "Ehtz",
                 updatedAgo: "1 hr. ago",
                 comments: 1,
+                commentItems: [
+                    RepoIssueCommentItem(
+                        id: "\(repository.id)-24-comment-1",
+                        author: "tarikvillalobos",
+                        body: "Good catch. We can replace the cleanup step with a cross-platform script and wire it to CI to prevent regressions.",
+                        updatedAgo: "52 min. ago"
+                    )
+                ],
                 isOpen: true,
                 isMine: false
             ),
@@ -218,6 +228,14 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 author: "vlnd0",
                 updatedAgo: "1 day ago",
                 comments: 1,
+                commentItems: [
+                    RepoIssueCommentItem(
+                        id: "\(repository.id)-21-comment-1",
+                        author: "openkubbo-bot",
+                        body: "Tracking this for next extension release. Please share final assets and the publication checklist.",
+                        updatedAgo: "20 hr. ago"
+                    )
+                ],
                 isOpen: true,
                 isMine: false
             ),
@@ -230,6 +248,20 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 author: "openkubbo-bot",
                 updatedAgo: "2 days ago",
                 comments: 2,
+                commentItems: [
+                    RepoIssueCommentItem(
+                        id: "\(repository.id)-17-comment-1",
+                        author: "tarikvillalobos",
+                        body: "I started removing the fallback path. Before merging, we should validate older migrated projects one more time.",
+                        updatedAgo: "1 day ago"
+                    ),
+                    RepoIssueCommentItem(
+                        id: "\(repository.id)-17-comment-2",
+                        author: "openkubbo-bot",
+                        body: "CI passed for parser migration tests on latest run. Waiting for final manual verification.",
+                        updatedAgo: "18 hr. ago"
+                    )
+                ],
                 isOpen: false,
                 isMine: false
             )

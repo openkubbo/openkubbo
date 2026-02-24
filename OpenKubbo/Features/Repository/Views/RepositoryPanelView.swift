@@ -756,9 +756,36 @@ struct RepositoryPanelView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     if issue.comments > 0 {
-                        Text("\(issue.comments) comments")
-                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        Rectangle()
+                            .fill(dividerColor)
+                            .frame(height: 1)
+
+                        Text(issue.comments == 1 ? "1 comment" : "\(issue.comments) comments")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
+
+                        if issue.commentItems.isEmpty {
+                            Text("Comments are not available for this issue.")
+                                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(Array(issue.commentItems.enumerated()), id: \.element.id) { index, comment in
+                                    issueCommentRow(
+                                        comment,
+                                        showDivider: index < issue.commentItems.count - 1
+                                    )
+                                }
+                            }
+                            .background(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1743,6 +1770,38 @@ struct RepositoryPanelView: View {
                 Capsule()
                     .fill(issueLabelBackgroundColor(label.kind))
             )
+    }
+
+    private func issueCommentRow(_ comment: RepoIssueCommentItem, showDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(comment.author)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+
+                    Spacer(minLength: 8)
+
+                    Text(comment.updatedAgo)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+
+                Text(comment.body)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+
+            if showDivider {
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+                    .padding(.horizontal, 12)
+            }
+        }
     }
 
     private func issueLabelBackgroundColor(_ kind: RepoIssueLabelKind) -> Color {

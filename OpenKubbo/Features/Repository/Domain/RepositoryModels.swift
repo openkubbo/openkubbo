@@ -235,6 +235,13 @@ struct RepoIssueLabel: Identifiable {
     let kind: RepoIssueLabelKind
 }
 
+struct RepoIssueCommentItem: Identifiable {
+    let id: String
+    let author: String
+    let body: String
+    let updatedAgo: String
+}
+
 struct RepoIssueItem: Identifiable {
     let id: String
     let number: Int
@@ -244,6 +251,7 @@ struct RepoIssueItem: Identifiable {
     let author: String
     let updatedAgo: String
     let comments: Int
+    let commentItems: [RepoIssueCommentItem]
     let isOpen: Bool
     let isMine: Bool
 }
