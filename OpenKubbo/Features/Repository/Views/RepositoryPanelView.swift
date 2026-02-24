@@ -622,9 +622,15 @@ struct RepositoryPanelView: View {
                 .frame(height: 1)
 
             HStack(spacing: 10) {
-                ForEach(RepoIssuesScope.allCases) { scope in
-                    issuesFilterPill(scope)
+                HStack(spacing: 10) {
+                    ForEach(RepoIssuesScope.allCases) { scope in
+                        issuesFilterPill(scope)
+                    }
                 }
+
+                Spacer(minLength: 8)
+
+                newIssueButton
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -786,6 +792,32 @@ struct RepositoryPanelView: View {
                                 .stroke(isActive ? accentColor.opacity(0.65) : actionCardStrokeColor, lineWidth: 1)
                         )
                 )
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private var newIssueButton: some View {
+        Button {
+            // TODO: Connect with GitHub issue creation flow.
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .bold))
+                Text("New Issue")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(.white.opacity(0.95))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(accentColor)
+                    .overlay(
+                        Capsule()
+                            .stroke(accentColor.opacity(0.6), lineWidth: 1)
+                    )
+            )
         }
         .buttonStyle(.plain)
         .repoCursorOnHover()
