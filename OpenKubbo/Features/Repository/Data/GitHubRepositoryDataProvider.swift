@@ -43,6 +43,17 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         fallbackIssuesProvider.loadIssues(for: repository)
     }
 
+    func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {
+        fallbackIssuesProvider.loadPullRequests(for: repository)
+    }
+
+    func loadPullRequestCommits(
+        for pullRequest: RepoPullRequestItem,
+        in repository: RepoItem
+    ) -> [RepoPullRequestCommitItem] {
+        fallbackIssuesProvider.loadPullRequestCommits(for: pullRequest, in: repository)
+    }
+
     private func mapToRepoItem(_ repository: GitHubRepository, index: Int) -> RepoItem {
         let seed = seededValue("\(repository.fullName)-seed")
         let visibility: RepoVisibility = repository.isPrivate ? .private : .openSource

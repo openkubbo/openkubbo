@@ -30,11 +30,14 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedRepoID: String? {
         didSet {
             selectedDetailDestination = nil
+            selectedPullRequestID = nil
         }
     }
 
     @Published var selectedDetailDestination: RepoDetailDestination?
     @Published var selectedIssuesScope: RepoIssuesScope = .open
+    @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
+    @Published var selectedPullRequestID: String?
 
     private let dataProvider: RepositoryDataProviding
     private let localRootProvider: LocalRepositoryRootProviding
@@ -129,6 +132,7 @@ final class RepositoryViewModel: ObservableObject {
 
     func closeRepositorySelection() {
         selectedDetailDestination = nil
+        selectedPullRequestID = nil
         selectedRepoID = nil
     }
 
@@ -136,11 +140,16 @@ final class RepositoryViewModel: ObservableObject {
         if destination == .issues {
             selectedIssuesScope = .open
         }
+        if destination == .pullRequests {
+            selectedPullRequestsScope = .open
+        }
+        selectedPullRequestID = nil
         selectedDetailDestination = destination
     }
 
     func closeDetailPanel() {
         selectedDetailDestination = nil
+        selectedPullRequestID = nil
     }
 
     func selectIssuesScope(_ scope: RepoIssuesScope) {
@@ -160,6 +169,46 @@ final class RepositoryViewModel: ObservableObject {
         case .closed:
             return issues.filter { !$0.isOpen }
         }
+    }
+
+    func selectPullRequestsScope(_ scope: RepoPullRequestsScope) {
+        selectedPullRequestsScope = scope
+        selectedPullRequestID = nil
+    }
+
+    func filteredPullRequests(for repo: RepoItem) -> [RepoPullRequestItem] {
+        let pullRequests = dataProvider.loadPullRequests(for: repo)
+
+        switch selectedPullRequestsScope {
+        case .all:
+            return pullRequests
+        case .mine:
+            return pullRequests.filter(\.isMine)
+        case .open:
+            return pullRequests.filter(\.isOpen)
+        case .merged:
+            return pullRequests.filter(\.isMerged)
+        }
+    }
+
+    func selectPullRequest(_ pullRequest: RepoPullRequestItem) {
+        selectedPullRequestID = pullRequest.id
+    }
+
+    func closePullRequestDetails() {
+        selectedPullRequestID = nil
+    }
+
+    func selectedPullRequest(for repo: RepoItem) -> RepoPullRequestItem? {
+        guard let selectedPullRequestID else { return nil }
+        return filteredPullRequests(for: repo).first(where: { $0.id == selectedPullRequestID })
+    }
+
+    func pullRequestCommits(
+        for pullRequest: RepoPullRequestItem,
+        in repo: RepoItem
+    ) -> [RepoPullRequestCommitItem] {
+        dataProvider.loadPullRequestCommits(for: pullRequest, in: repo)
     }
 
     func openInFinder(for repo: RepoItem) -> RepositoryLocalActionResult {

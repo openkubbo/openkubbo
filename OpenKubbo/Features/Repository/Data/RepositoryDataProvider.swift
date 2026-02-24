@@ -3,6 +3,11 @@ import Foundation
 protocol RepositoryDataProviding {
     func loadRepositories() async throws -> [RepoItem]
     func loadIssues(for repository: RepoItem) -> [RepoIssueItem]
+    func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem]
+    func loadPullRequestCommits(
+        for pullRequest: RepoPullRequestItem,
+        in repository: RepoItem
+    ) -> [RepoPullRequestCommitItem]
 }
 
 struct MockRepositoryDataProvider: RepositoryDataProviding {
@@ -221,6 +226,132 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 comments: 2,
                 isOpen: false,
                 isMine: false
+            )
+        ]
+    }
+
+    func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {
+        [
+            RepoPullRequestItem(
+                id: "\(repository.id)-pr-91",
+                number: 91,
+                title: "Repository third panel",
+                author: "tarikvillalobos",
+                sourceBranch: "feature/repository-panel",
+                targetBranch: repository.branch,
+                updatedAgo: "9 min. ago",
+                comments: 3,
+                changedFiles: 8,
+                commits: 6,
+                additions: 312,
+                deletions: 74,
+                isOpen: true,
+                isMerged: false,
+                isMine: true
+            ),
+            RepoPullRequestItem(
+                id: "\(repository.id)-pr-88",
+                number: 88,
+                title: "OAuth flow improvements",
+                author: "tarikvillalobos",
+                sourceBranch: "feat/github-oauth-ux",
+                targetBranch: repository.branch,
+                updatedAgo: "34 min. ago",
+                comments: 1,
+                changedFiles: 5,
+                commits: 4,
+                additions: 164,
+                deletions: 29,
+                isOpen: true,
+                isMerged: false,
+                isMine: true
+            ),
+            RepoPullRequestItem(
+                id: "\(repository.id)-pr-84",
+                number: 84,
+                title: "Fix menu bar close behavior",
+                author: "openkubbo-bot",
+                sourceBranch: "fix/menu-close",
+                targetBranch: repository.branch,
+                updatedAgo: "2 hr. ago",
+                comments: 0,
+                changedFiles: 3,
+                commits: 2,
+                additions: 41,
+                deletions: 16,
+                isOpen: true,
+                isMerged: false,
+                isMine: false
+            ),
+            RepoPullRequestItem(
+                id: "\(repository.id)-pr-80",
+                number: 80,
+                title: "Sidebar labels in English",
+                author: "tarikvillalobos",
+                sourceBranch: "chore/sidebar-en",
+                targetBranch: repository.branch,
+                updatedAgo: "1 day ago",
+                comments: 2,
+                changedFiles: 2,
+                commits: 1,
+                additions: 22,
+                deletions: 9,
+                isOpen: false,
+                isMerged: true,
+                isMine: true
+            ),
+            RepoPullRequestItem(
+                id: "\(repository.id)-pr-78",
+                number: 78,
+                title: "Theme token cleanup",
+                author: "teammate",
+                sourceBranch: "refactor/theme-tokens",
+                targetBranch: repository.branch,
+                updatedAgo: "3 days ago",
+                comments: 4,
+                changedFiles: 11,
+                commits: 7,
+                additions: 288,
+                deletions: 201,
+                isOpen: false,
+                isMerged: true,
+                isMine: false
+            )
+        ]
+    }
+
+    func loadPullRequestCommits(
+        for pullRequest: RepoPullRequestItem,
+        in repository: RepoItem
+    ) -> [RepoPullRequestCommitItem] {
+        [
+            RepoPullRequestCommitItem(
+                id: "\(pullRequest.id)-c1",
+                sha: "6d7f1b2",
+                message: "feat(repository): add pull request overlay layout",
+                author: pullRequest.author,
+                committedAgo: "18 min. ago"
+            ),
+            RepoPullRequestCommitItem(
+                id: "\(pullRequest.id)-c2",
+                sha: "84a2fe9",
+                message: "feat(repository): add create PR button in pull requests tab",
+                author: pullRequest.author,
+                committedAgo: "16 min. ago"
+            ),
+            RepoPullRequestCommitItem(
+                id: "\(pullRequest.id)-c3",
+                sha: "b13cd44",
+                message: "feat(repository): add commit list details for selected pull request",
+                author: pullRequest.author,
+                committedAgo: "14 min. ago"
+            ),
+            RepoPullRequestCommitItem(
+                id: "\(pullRequest.id)-c4",
+                sha: "d21ab76",
+                message: "style(repository): adjust badges and spacing in PR panel",
+                author: repository.name.contains("tarik") ? "tarikvillalobos" : pullRequest.author,
+                committedAgo: "11 min. ago"
             )
         ]
     }

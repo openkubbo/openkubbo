@@ -213,6 +213,15 @@ enum RepoIssuesScope: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum RepoPullRequestsScope: String, CaseIterable, Identifiable {
+    case all = "All"
+    case mine = "Mine"
+    case open = "Open"
+    case merged = "Merged"
+
+    var id: String { rawValue }
+}
+
 enum RepoIssueLabelKind {
     case bug
     case enhancement
@@ -236,4 +245,30 @@ struct RepoIssueItem: Identifiable {
     let comments: Int
     let isOpen: Bool
     let isMine: Bool
+}
+
+struct RepoPullRequestItem: Identifiable {
+    let id: String
+    let number: Int
+    let title: String
+    let author: String
+    let sourceBranch: String
+    let targetBranch: String
+    let updatedAgo: String
+    let comments: Int
+    let changedFiles: Int
+    let commits: Int
+    let additions: Int
+    let deletions: Int
+    let isOpen: Bool
+    let isMerged: Bool
+    let isMine: Bool
+}
+
+struct RepoPullRequestCommitItem: Identifiable {
+    let id: String
+    let sha: String
+    let message: String
+    let author: String
+    let committedAgo: String
 }

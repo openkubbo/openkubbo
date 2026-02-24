@@ -606,6 +606,8 @@ struct RepositoryPanelView: View {
         switch destination {
         case .issues:
             issuesOverlayPanel(for: repo)
+        case .pullRequests:
+            pullRequestsOverlayPanel(for: repo)
         default:
             genericDetailOverlayPanel(for: repo, destination: destination)
         }
@@ -651,6 +653,183 @@ struct RepositoryPanelView: View {
                     } else {
                         ForEach(Array(issues.enumerated()), id: \.element.id) { index, issue in
                             issueRow(issue, showDivider: index < issues.count - 1)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func pullRequestsOverlayPanel(for repo: RepoItem) -> some View {
+        let pullRequests = viewModel.filteredPullRequests(for: repo)
+        let selectedPullRequest = viewModel.selectedPullRequest(for: repo)
+
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                overlayTopBar(title: "Open Pull Requests")
+
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+
+                HStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        ForEach(RepoPullRequestsScope.allCases) { scope in
+                            pullRequestsFilterPill(scope)
+                        }
+                    }
+
+                    Spacer(minLength: 8)
+
+                    newPullRequestButton
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        if pullRequests.isEmpty {
+                            Text("No pull requests for this filter.")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                        } else {
+                            ForEach(Array(pullRequests.enumerated()), id: \.element.id) { index, pullRequest in
+                                pullRequestRow(
+                                    pullRequest,
+                                    isSelected: selectedPullRequest?.id == pullRequest.id,
+                                    showDivider: index < pullRequests.count - 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .allowsHitTesting(selectedPullRequest == nil)
+
+            if let selectedPullRequest {
+                pullRequestDetailsOverlayPanel(for: selectedPullRequest, in: repo)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: selectedPullRequest?.id)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func pullRequestDetailsOverlayPanel(
+        for pullRequest: RepoPullRequestItem,
+        in repo: RepoItem
+    ) -> some View {
+        let commits = viewModel.pullRequestCommits(for: pullRequest, in: repo)
+
+        return VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: closePullRequestDetails) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Circle()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+
+                Text("PR #\(pullRequest.number)")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .lineLimit(1)
+
+                Spacer()
+
+                Text(pullRequest.isMerged ? "Merged" : "Open")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(pullRequest.isMerged ? Color.green.opacity(0.7) : accentColor)
+                    )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(pullRequest.title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("#\(pullRequest.number) \(pullRequest.author) \(pullRequest.updatedAgo)")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                HStack(spacing: 8) {
+                    Text("\(pullRequest.sourceBranch) -> \(pullRequest.targetBranch)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 8)
+
+                    Text("\(pullRequest.commits) commits")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    if commits.isEmpty {
+                        Text("No commits for this pull request.")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                    } else {
+                        ForEach(Array(commits.enumerated()), id: \.element.id) { index, commit in
+                            pullRequestCommitRow(commit, showDivider: index < commits.count - 1)
                         }
                     }
                 }
@@ -797,6 +976,32 @@ struct RepositoryPanelView: View {
         .repoCursorOnHover()
     }
 
+    private func pullRequestsFilterPill(_ scope: RepoPullRequestsScope) -> some View {
+        let isActive = viewModel.selectedPullRequestsScope == scope
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.14)) {
+                viewModel.selectPullRequestsScope(scope)
+            }
+        } label: {
+            Text(scope.rawValue)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(isActive ? .white : secondaryTextColor)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(isActive ? accentColor : .clear)
+                        .overlay(
+                            Capsule()
+                                .stroke(isActive ? accentColor.opacity(0.65) : actionCardStrokeColor, lineWidth: 1)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
     private var newIssueButton: some View {
         Button {
             // TODO: Connect with GitHub issue creation flow.
@@ -821,6 +1026,148 @@ struct RepositoryPanelView: View {
         }
         .buttonStyle(.plain)
         .repoCursorOnHover()
+    }
+
+    private var newPullRequestButton: some View {
+        Button {
+            // TODO: Connect with GitHub pull request creation flow.
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .bold))
+                Text("Create PR")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(.white.opacity(0.95))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(accentColor)
+                    .overlay(
+                        Capsule()
+                            .stroke(accentColor.opacity(0.6), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func pullRequestRow(
+        _ pullRequest: RepoPullRequestItem,
+        isSelected: Bool,
+        showDivider: Bool
+    ) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.selectPullRequest(pullRequest)
+            }
+        } label: {
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 9) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "arrow.triangle.pull")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(accentColor)
+                            .frame(width: 18, alignment: .center)
+
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(pullRequest.title)
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            HStack(spacing: 7) {
+                                Text(pullRequest.isMerged ? "Merged" : "Open")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(.white.opacity(0.95))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(
+                                        Capsule()
+                                            .fill(pullRequest.isMerged ? Color.green.opacity(0.7) : accentColor)
+                                    )
+
+                                Text("#\(pullRequest.number)")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                            }
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+
+                    HStack(spacing: 8) {
+                        Text("\(pullRequest.sourceBranch) -> \(pullRequest.targetBranch)")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 8)
+
+                        Text("\(pullRequest.commits) commits")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+
+                    Text("\(pullRequest.changedFiles) files +\(pullRequest.additions) -\(pullRequest.deletions)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: 0, style: .continuous)
+                        .fill(isSelected ? accentColor.opacity(isDarkTheme ? 0.16 : 0.11) : .clear)
+                )
+
+                if showDivider {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func pullRequestCommitRow(_ commit: RepoPullRequestCommitItem, showDivider: Bool) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 10) {
+                Circle()
+                    .fill(accentColor)
+                    .frame(width: 7, height: 7)
+                    .padding(.top, 5)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(commit.message)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text("\(commit.sha) \(commit.author) \(commit.committedAgo)")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(secondaryTextColor)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 6)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            if showDivider {
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+            }
+        }
     }
 
     private func issueRow(_ issue: RepoIssueItem, showDivider: Bool) -> some View {
@@ -978,6 +1325,12 @@ struct RepositoryPanelView: View {
     private func closeDetailPanel() {
         withAnimation(.easeInOut(duration: 0.18)) {
             viewModel.closeDetailPanel()
+        }
+    }
+
+    private func closePullRequestDetails() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.closePullRequestDetails()
         }
     }
 
