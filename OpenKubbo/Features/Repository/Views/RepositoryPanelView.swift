@@ -261,11 +261,19 @@ struct RepositoryPanelView: View {
             .frame(height: 36)
             .background(RepoWindowDragRegion())
 
-            Button(action: closeWindow) {
-                RepoHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
+            HStack(spacing: 8) {
+                Button(action: openSettingsWindow) {
+                    RepoHeaderIcon(symbol: "gearshape", isDarkTheme: isDarkTheme)
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+
+                Button(action: closeWindow) {
+                    RepoHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
             }
-            .buttonStyle(.plain)
-            .repoCursorOnHover()
         }
     }
 
@@ -2329,6 +2337,11 @@ struct RepositoryPanelView: View {
 
     private func closeWindow() {
         hostWindow?.close()
+    }
+
+    private func openSettingsWindow() {
+        openWindow(id: "settings")
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func openDetailPanel(_ destination: RepoDetailDestination) {
