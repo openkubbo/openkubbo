@@ -119,8 +119,23 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         fallbackIssuesProvider.loadPullRequestCommits(for: pullRequest, in: repository)
     }
 
-    func loadBranches(for repository: RepoItem) -> [RepoBranchItem] {
-        fallbackIssuesProvider.loadBranches(for: repository)
+    func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
+        let token = try accessToken()
+        let fetchedBranches = try await gitHubAPIService.fetchBranches(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        let mapped = fetchedBranches.map { branch in
+            mapToBranchItem(branch, repository: repository)
+        }
+
+        return mapped.sorted { lhs, rhs in
+            if lhs.isDefault != rhs.isDefault {
+                return lhs.isDefault
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
     }
 
     private func accessToken() throws -> String {
@@ -187,6 +202,41 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
     private func normalizedIssueBody(_ value: String?) -> String {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? "No description provided." : trimmed
+    }
+
+    private func mapToBranchItem(
+        _ branch: GitHubBranch,
+        repository: RepoItem
+    ) -> RepoBranchItem {
+        let isDefault = branch.name == repository.branch
+        let isCurrent = isDefault
+
+        return RepoBranchItem(
+            id: "\(repository.id)-branch-\(branch.name)",
+            name: branch.name,
+            isDefault: isDefault,
+            isCurrent: isCurrent,
+            aheadBy: isDefault ? 0 : 1,
+            behindBy: 0,
+            hasOpenPullRequest: false,
+            updatedAgo: seededRelativeTime("\(repository.id)-\(branch.name)-branch-updated")
+        )
+    }
+
+    private func seededRelativeTime(_ key: String) -> String {
+        let totalMinutes = Int(seededValue(key) % 1_440)
+
+        if totalMinutes < 60 {
+            return "\(max(1, totalMinutes)) min. ago"
+        }
+
+        let totalHours = totalMinutes / 60
+        if totalHours < 24 {
+            return "\(totalHours) hr. ago"
+        }
+
+        let days = max(1, totalHours / 24)
+        return "\(days) day" + (days == 1 ? " ago" : "s ago")
     }
 
     private func mapToRepoItem(_ repository: GitHubRepository, index: Int) -> RepoItem {

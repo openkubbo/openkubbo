@@ -22,7 +22,7 @@ protocol RepositoryDataProviding {
         for pullRequest: RepoPullRequestItem,
         in repository: RepoItem
     ) -> [RepoPullRequestCommitItem]
-    func loadBranches(for repository: RepoItem) -> [RepoBranchItem]
+    func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem]
 }
 
 struct MockRepositoryDataProvider: RepositoryDataProviding {
@@ -460,7 +460,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
         ]
     }
 
-    func loadBranches(for repository: RepoItem) -> [RepoBranchItem] {
+    func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
         [
             RepoBranchItem(
                 id: "\(repository.id)-branch-\(repository.branch)",

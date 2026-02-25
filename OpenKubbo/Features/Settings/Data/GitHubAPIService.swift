@@ -57,6 +57,12 @@ struct GitHubIssueComment: Equatable {
     let updatedAt: Date?
 }
 
+struct GitHubBranch: Equatable {
+    let name: String
+    let isProtected: Bool
+    let commitSHA: String
+}
+
 enum GitHubAPIError: LocalizedError {
     case invalidRepositoryFormat
     case invalidFilePath
@@ -95,6 +101,7 @@ enum GitHubAPIError: LocalizedError {
 protocol GitHubAPIServicing {
     func fetchViewerLogin(accessToken: String) async throws -> String
     func fetchRepositories(accessToken: String) async throws -> [GitHubRepository]
+    func fetchBranches(accessToken: String, repositoryFullName: String) async throws -> [GitHubBranch]
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(
         accessToken: String,
@@ -206,6 +213,45 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
 
         return repositories
+    }
+
+    func fetchBranches(accessToken: String, repositoryFullName: String) async throws -> [GitHubBranch] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var branches: [GitHubBranch] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/branches")!
+            components.queryItems = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [BranchResponse] = try await perform(request)
+
+            branches.append(
+                contentsOf: response.map {
+                    GitHubBranch(
+                        name: $0.name,
+                        isProtected: $0.isProtected,
+                        commitSHA: $0.commit.sha
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return branches
     }
 
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue] {
@@ -637,6 +683,22 @@ private struct RepositoryResponse: Decodable {
 
 private struct ViewerResponse: Decodable {
     let login: String
+}
+
+private struct BranchResponse: Decodable {
+    struct Commit: Decodable {
+        let sha: String
+    }
+
+    let name: String
+    let isProtected: Bool
+    let commit: Commit
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case isProtected = "protected"
+        case commit
+    }
 }
 
 private struct IssueListResponse: Decodable {

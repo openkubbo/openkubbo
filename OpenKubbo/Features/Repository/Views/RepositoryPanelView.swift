@@ -1402,10 +1402,19 @@ struct RepositoryPanelView: View {
     private func branchesOverlayPanel(for repo: RepoItem) -> some View {
         let branches = viewModel.branches(for: repo)
         let selectedBranch = viewModel.selectedBranch(for: repo)
+        let isLoadingBranches = viewModel.isLoadingBranches(for: repo)
+        let branchesLoadErrorMessage = viewModel.branchesLoadErrorMessage(for: repo)
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
-                overlayTopBar(title: "Branches")
+                overlayTopBar(
+                    title: "Branches",
+                    onRefresh: {
+                        Task {
+                            await viewModel.reloadBranches(for: repo)
+                        }
+                    }
+                )
 
                 Rectangle()
                     .fill(dividerColor)
@@ -1413,7 +1422,38 @@ struct RepositoryPanelView: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 0) {
-                        if branches.isEmpty {
+                        if isLoadingBranches && branches.isEmpty {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading branches...")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if let branchesLoadErrorMessage, branches.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(branchesLoadErrorMessage)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.red.opacity(isDarkTheme ? 0.86 : 0.72))
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Button("Retry") {
+                                    Task {
+                                        await viewModel.reloadBranches(for: repo)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                                .repoCursorOnHover()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if branches.isEmpty {
                             Text("No branches available.")
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(secondaryTextColor)
@@ -1449,6 +1489,9 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+        .task(id: "branches-\(repo.id)") {
+            await viewModel.loadBranchesIfNeeded(for: repo)
+        }
     }
 
     private func branchDetailsOverlayPanel(for branch: RepoBranchItem, in repo: RepoItem) -> some View {

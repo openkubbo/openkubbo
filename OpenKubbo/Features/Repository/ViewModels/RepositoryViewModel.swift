@@ -74,6 +74,9 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var loadedIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
     @Published private(set) var issuesLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var issuesLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedBranchesByRepositoryID: [String: [RepoBranchItem]] = [:]
+    @Published private(set) var branchesLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var branchesLoadErrorMessageByRepositoryID: [String: String] = [:]
 
     init(
         dataProvider: RepositoryDataProviding,
@@ -138,6 +141,9 @@ final class RepositoryViewModel: ObservableObject {
             loadedIssuesByRepositoryID = [:]
             issuesLoadingRepositoryIDs = []
             issuesLoadErrorMessageByRepositoryID = [:]
+            loadedBranchesByRepositoryID = [:]
+            branchesLoadingRepositoryIDs = []
+            branchesLoadErrorMessageByRepositoryID = [:]
             closeRepositorySelection()
             repositoryLoadErrorMessage = repositoryErrorDescription(error)
         }
@@ -221,6 +227,10 @@ final class RepositoryViewModel: ObservableObject {
         if destination == .issues, let repo = selectedRepo {
             Task { [weak self] in
                 await self?.loadIssuesIfNeeded(for: repo)
+            }
+        } else if destination == .branches, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadBranchesIfNeeded(for: repo)
             }
         }
     }
@@ -464,7 +474,23 @@ final class RepositoryViewModel: ObservableObject {
     }
 
     func branches(for repo: RepoItem) -> [RepoBranchItem] {
-        dataProvider.loadBranches(for: repo)
+        loadedBranchesByRepositoryID[repo.id, default: []]
+    }
+
+    func loadBranchesIfNeeded(for repo: RepoItem) async {
+        await loadBranches(for: repo, forceReload: false)
+    }
+
+    func reloadBranches(for repo: RepoItem) async {
+        await loadBranches(for: repo, forceReload: true)
+    }
+
+    func isLoadingBranches(for repo: RepoItem) -> Bool {
+        branchesLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func branchesLoadErrorMessage(for repo: RepoItem) -> String? {
+        branchesLoadErrorMessageByRepositoryID[repo.id]
     }
 
     func selectedBranch(for repo: RepoItem) -> RepoBranchItem? {
@@ -517,6 +543,15 @@ final class RepositoryViewModel: ObservableObject {
         }
         if pullRequestDraftHeadBranch == nil {
             pullRequestDraftHeadBranch = eligiblePullRequestBranches(for: repo).first?.name
+            if pullRequestDraftHeadBranch == nil {
+                Task { [weak self] in
+                    guard let self else { return }
+                    await self.loadBranchesIfNeeded(for: repo)
+                    if self.pullRequestDraftHeadBranch == nil {
+                        self.pullRequestDraftHeadBranch = self.eligiblePullRequestBranches(for: repo).first?.name
+                    }
+                }
+            }
         }
     }
 
@@ -645,6 +680,38 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadBranches(for repo: RepoItem, forceReload: Bool) async {
+        if branchesLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, loadedBranchesByRepositoryID[repo.id] != nil {
+            return
+        }
+
+        branchesLoadingRepositoryIDs.insert(repo.id)
+        branchesLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            branchesLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let branches = try await dataProvider.loadBranches(for: repo)
+            loadedBranchesByRepositoryID[repo.id] = branches
+            branchesLoadErrorMessageByRepositoryID[repo.id] = nil
+
+            if let selectedBranchID,
+               !branches.contains(where: { $0.id == selectedBranchID }) {
+                self.selectedBranchID = nil
+            }
+        } catch {
+            branchesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedBranchesByRepositoryID[repo.id] == nil {
+                loadedBranchesByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -758,6 +825,11 @@ final class RepositoryViewModel: ObservableObject {
         loadedIssuesByRepositoryID = loadedIssuesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
         issuesLoadingRepositoryIDs = issuesLoadingRepositoryIDs.intersection(validRepositoryIDs)
         issuesLoadErrorMessageByRepositoryID = issuesLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        loadedBranchesByRepositoryID = loadedBranchesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        branchesLoadingRepositoryIDs = branchesLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        branchesLoadErrorMessageByRepositoryID = branchesLoadErrorMessageByRepositoryID.filter {
             validRepositoryIDs.contains($0.key)
         }
     }
