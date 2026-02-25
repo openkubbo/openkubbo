@@ -17,7 +17,9 @@ enum RepositoryLocalActionResult {
 @MainActor
 final class RepositoryViewModel: ObservableObject {
     @Published private(set) var repositories: [RepoItem] = []
+    @Published private(set) var contributionCountsByDateKey: [String: Int] = [:]
     @Published private(set) var isLoadingRepositories = false
+    @Published private(set) var isLoadingContributionCalendar = false
     @Published private(set) var repositoryLoadErrorMessage: String?
     @Published private(set) var pinnedRepositoryIDs: Set<String> = []
 
@@ -120,6 +122,11 @@ final class RepositoryViewModel: ObservableObject {
         !trimmedIssueDraftTitle.isEmpty
     }
 
+    func reloadPanelData() async {
+        await reloadRepositories()
+        await reloadContributionCalendar()
+    }
+
     func reloadRepositories() async {
         guard !isLoadingRepositories else { return }
 
@@ -146,6 +153,27 @@ final class RepositoryViewModel: ObservableObject {
             branchesLoadErrorMessageByRepositoryID = [:]
             closeRepositorySelection()
             repositoryLoadErrorMessage = repositoryErrorDescription(error)
+        }
+    }
+
+    func reloadContributionCalendar() async {
+        guard !isLoadingContributionCalendar else { return }
+
+        isLoadingContributionCalendar = true
+        defer { isLoadingContributionCalendar = false }
+
+        do {
+            let contributionDays = try await dataProvider.loadContributionCalendar()
+            var mapped: [String: Int] = [:]
+            mapped.reserveCapacity(contributionDays.count)
+
+            for day in contributionDays {
+                mapped[day.dateKey] = max(0, day.count)
+            }
+
+            contributionCountsByDateKey = mapped
+        } catch {
+            contributionCountsByDateKey = [:]
         }
     }
 

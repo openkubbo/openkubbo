@@ -192,7 +192,7 @@ struct RepositoryPanelView: View {
             }
         )
         .task {
-            await viewModel.reloadRepositories()
+            await viewModel.reloadPanelData()
         }
         .alert(item: $localActionAlertState) { alertState in
             switch alertState.kind {
@@ -281,7 +281,10 @@ struct RepositoryPanelView: View {
 
     private var heatmapSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ContributionHeatmap(isDarkTheme: isDarkTheme)
+            ContributionHeatmap(
+                isDarkTheme: isDarkTheme,
+                contributionCountsByDateKey: viewModel.contributionCountsByDateKey
+            )
                 .frame(maxWidth: .infinity)
                 .frame(height: 116)
         }
@@ -2665,6 +2668,7 @@ struct RepositoryPanelView: View {
 
 private struct ContributionHeatmap: View {
     var isDarkTheme: Bool
+    var contributionCountsByDateKey: [String: Int]
 
     static let weeks = 28
     static let days = 7
@@ -2683,7 +2687,6 @@ private struct ContributionHeatmap: View {
     private var weeks: Int { Self.weeks }
     private var days: Int { Self.days }
     private var firstDate: Date { Self.dateRange.start }
-    private var lastDate: Date { Self.dateRange.end }
 
     private let lightPalette: [Color] = [
         Color(red: 0.92, green: 0.93, blue: 0.94),
@@ -2706,50 +2709,17 @@ private struct ContributionHeatmap: View {
         return calendar.date(byAdding: .day, value: offset, to: firstDate) ?? firstDate
     }
 
+    private func dateKey(for date: Date) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = components.year ?? 0
+        let month = components.month ?? 1
+        let day = components.day ?? 1
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
     private func contributionCount(for date: Date) -> Int {
-        if date > lastDate {
-            return 0
-        }
-
-        let weekday = calendar.component(.weekday, from: date)
-        let month = calendar.component(.month, from: date)
-        let weekOfYear = calendar.component(.weekOfYear, from: date)
-        let ordinal = calendar.ordinality(of: .day, in: .era, for: date) ?? 0
-
-        let weekdayWeight: [Double] = [0.45, 0.92, 1.0, 1.0, 0.95, 0.82, 0.52] // Sun...Sat
-        let monthWeight: [Int: Double] = [
-            1: 0.82, 2: 0.86, 3: 0.95, 4: 1.03, 5: 1.08, 6: 1.0,
-            7: 0.92, 8: 0.88, 9: 1.0, 10: 1.06, 11: 0.98, 12: 0.84
-        ]
-
-        var seed = UInt64(truncatingIfNeeded: (ordinal * 110_351_524 + weekOfYear * 97) &+ 12_345)
-        func randomUnit() -> Double {
-            seed = seed &* 6_364_136_223_846_793_005 &+ 1
-            return Double((seed >> 33) % 1000) / 1000.0
-        }
-
-        let weekdayIndex = max(0, min(6, weekday - 1))
-        let base = weekdayWeight[weekdayIndex] * (monthWeight[month] ?? 1.0)
-        var activity = base * (0.48 + randomUnit() * 0.82)
-
-        if weekOfYear % 7 == 3 {
-            activity += 0.28
-        }
-        if weekOfYear % 11 == 6 {
-            activity += 0.38
-        }
-
-        if randomUnit() < 0.34 {
-            return 0
-        }
-
-        var count = Int((activity * 9.0).rounded())
-
-        if randomUnit() > 0.93 {
-            count += Int(6 + randomUnit() * 12)
-        }
-
-        return max(0, min(count, 24))
+        let key = dateKey(for: date)
+        return max(0, contributionCountsByDateKey[key] ?? 0)
     }
 
     private func level(for count: Int) -> Int {

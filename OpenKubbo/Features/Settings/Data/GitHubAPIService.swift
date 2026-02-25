@@ -63,6 +63,15 @@ struct GitHubBranch: Equatable {
     let commitSHA: String
 }
 
+struct GitHubContributionDay: Equatable {
+    let dateKey: String
+    let contributionCount: Int
+}
+
+struct GitHubContributionCalendar: Equatable {
+    let days: [GitHubContributionDay]
+}
+
 enum GitHubAPIError: LocalizedError {
     case invalidRepositoryFormat
     case invalidFilePath
@@ -101,6 +110,7 @@ enum GitHubAPIError: LocalizedError {
 protocol GitHubAPIServicing {
     func fetchViewerLogin(accessToken: String) async throws -> String
     func fetchRepositories(accessToken: String) async throws -> [GitHubRepository]
+    func fetchContributionCalendar(accessToken: String) async throws -> GitHubContributionCalendar
     func fetchBranches(accessToken: String, repositoryFullName: String) async throws -> [GitHubBranch]
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(
@@ -213,6 +223,59 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
 
         return repositories
+    }
+
+    func fetchContributionCalendar(accessToken: String) async throws -> GitHubContributionCalendar {
+        let url = URL(string: "https://api.github.com/graphql")!
+        let range = contributionRange()
+        let query = """
+        query ContributionCalendar($from: DateTime!, $to: DateTime!) {
+          viewer {
+            contributionsCollection(from: $from, to: $to) {
+              contributionCalendar {
+                weeks {
+                  contributionDays {
+                    date
+                    contributionCount
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+
+        let request = try makeJSONRequest(
+            url: url,
+            method: "POST",
+            accessToken: accessToken,
+            jsonBody: [
+                "query": query,
+                "variables": [
+                    "from": range.from,
+                    "to": range.to
+                ]
+            ]
+        )
+
+        let response: ContributionCalendarGraphQLResponse = try await perform(request)
+        if let graphQLError = response.errors?.first?.message,
+           !graphQLError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw GitHubAPIError.api(graphQLError)
+        }
+
+        guard let weeks = response.data?.viewer.contributionsCollection.contributionCalendar.weeks else {
+            throw GitHubAPIError.malformedResponse
+        }
+
+        let days = weeks.flatMap(\.contributionDays).map { day in
+            GitHubContributionDay(
+                dateKey: day.date,
+                contributionCount: day.contributionCount
+            )
+        }
+
+        return GitHubContributionCalendar(days: days)
     }
 
     func fetchBranches(accessToken: String, repositoryFullName: String) async throws -> [GitHubBranch] {
@@ -590,6 +653,15 @@ final class GitHubAPIService: GitHubAPIServicing {
             .joined(separator: "/")
     }
 
+    private func contributionRange() -> (from: String, to: String) {
+        let now = Date()
+        let fromDate = Calendar(identifier: .gregorian).date(byAdding: .year, value: -1, to: now) ?? now
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return (from: formatter.string(from: fromDate), to: formatter.string(from: now))
+    }
+
     private func makeJSONRequest(url: URL, method: String, accessToken: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
@@ -796,6 +868,40 @@ private struct CommitFileResponse: Decodable {
     }
 
     let commit: Commit
+}
+
+private struct ContributionCalendarGraphQLResponse: Decodable {
+    struct DataPayload: Decodable {
+        struct Viewer: Decodable {
+            struct ContributionsCollection: Decodable {
+                struct ContributionCalendar: Decodable {
+                    struct Week: Decodable {
+                        struct Day: Decodable {
+                            let date: String
+                            let contributionCount: Int
+                        }
+
+                        let contributionDays: [Day]
+                    }
+
+                    let weeks: [Week]
+                }
+
+                let contributionCalendar: ContributionCalendar
+            }
+
+            let contributionsCollection: ContributionsCollection
+        }
+
+        let viewer: Viewer
+    }
+
+    struct GraphQLError: Decodable {
+        let message: String
+    }
+
+    let data: DataPayload?
+    let errors: [GraphQLError]?
 }
 
 private struct APIErrorResponse: Decodable {

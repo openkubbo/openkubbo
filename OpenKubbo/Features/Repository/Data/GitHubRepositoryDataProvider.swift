@@ -36,6 +36,18 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
     }
 
+    func loadContributionCalendar() async throws -> [RepoContributionDay] {
+        let token = try accessToken()
+        let calendar = try await gitHubAPIService.fetchContributionCalendar(accessToken: token)
+
+        return calendar.days.map { day in
+            RepoContributionDay(
+                dateKey: day.dateKey,
+                count: max(0, day.contributionCount)
+            )
+        }
+    }
+
     func loadIssues(for repository: RepoItem) async throws -> [RepoIssueItem] {
         let token = try accessToken()
         let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token).lowercased()

@@ -2,6 +2,7 @@ import Foundation
 
 protocol RepositoryDataProviding {
     func loadRepositories() async throws -> [RepoItem]
+    func loadContributionCalendar() async throws -> [RepoContributionDay]
     func loadIssues(for repository: RepoItem) async throws -> [RepoIssueItem]
     func loadIssueComments(
         for issue: RepoIssueItem,
@@ -176,6 +177,31 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 openCommits: 38
             )
         ]
+    }
+
+    func loadContributionCalendar() async throws -> [RepoContributionDay] {
+        let calendar = Calendar(identifier: .gregorian)
+        let today = calendar.startOfDay(for: Date())
+        let weekday = calendar.component(.weekday, from: today)
+        let daysSinceSunday = weekday - 1
+        let thisWeekStart = calendar.date(byAdding: .day, value: -daysSinceSunday, to: today) ?? today
+        let firstWeekStart = calendar.date(byAdding: .day, value: -((28 - 1) * 7), to: thisWeekStart) ?? thisWeekStart
+
+        var days: [RepoContributionDay] = []
+        days.reserveCapacity(28 * 7)
+
+        for offset in 0..<(28 * 7) {
+            let date = calendar.date(byAdding: .day, value: offset, to: firstWeekStart) ?? firstWeekStart
+            let key = dateKey(for: date, calendar: calendar)
+            days.append(
+                RepoContributionDay(
+                    dateKey: key,
+                    count: seededContributionCount(for: key)
+                )
+            )
+        }
+
+        return days
     }
 
     func loadIssues(for repository: RepoItem) async throws -> [RepoIssueItem] {
@@ -533,5 +559,33 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 updatedAgo: "1 day ago"
             )
         ]
+    }
+
+    private func dateKey(for date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        let year = components.year ?? 0
+        let month = components.month ?? 1
+        let day = components.day ?? 1
+        return String(format: "%04d-%02d-%02d", year, month, day)
+    }
+
+    private func seededContributionCount(for key: String) -> Int {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in key.utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+
+        let base = Int(hash % 11)
+        if base <= 2 {
+            return 0
+        }
+        if base <= 5 {
+            return Int(hash % 3) + 1
+        }
+        if base <= 8 {
+            return Int(hash % 5) + 3
+        }
+        return Int(hash % 7) + 8
     }
 }

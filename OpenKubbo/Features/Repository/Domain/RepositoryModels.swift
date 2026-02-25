@@ -463,6 +463,11 @@ struct RepoDestinationInfoItem: Identifiable, Equatable {
     let trailingValue: String?
 }
 
+struct RepoContributionDay: Equatable {
+    let dateKey: String
+    let count: Int
+}
+
 struct RepoItem: Identifiable, Equatable {
     let id: String
     let name: String
