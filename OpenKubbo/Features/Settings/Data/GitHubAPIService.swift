@@ -112,6 +112,12 @@ protocol GitHubAPIServicing {
     func fetchRepositories(accessToken: String) async throws -> [GitHubRepository]
     func fetchContributionCalendar(accessToken: String) async throws -> GitHubContributionCalendar
     func fetchBranches(accessToken: String, repositoryFullName: String) async throws -> [GitHubBranch]
+    func createBranch(
+        accessToken: String,
+        repositoryFullName: String,
+        branchName: String,
+        fromCommitSHA: String
+    ) async throws -> GitHubBranch
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(
         accessToken: String,
@@ -315,6 +321,42 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
 
         return branches
+    }
+
+    func createBranch(
+        accessToken: String,
+        repositoryFullName: String,
+        branchName: String,
+        fromCommitSHA: String
+    ) async throws -> GitHubBranch {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        let trimmedBranchName = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSHA = fromCommitSHA.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedBranchName.isEmpty else {
+            throw GitHubAPIError.invalidParameters("Branch name is required.")
+        }
+
+        guard !trimmedSHA.isEmpty else {
+            throw GitHubAPIError.invalidParameters("Base commit SHA is required.")
+        }
+
+        let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/git/refs")!
+        let request = try makeJSONRequest(
+            url: url,
+            method: "POST",
+            accessToken: accessToken,
+            jsonBody: [
+                "ref": "refs/heads/\(trimmedBranchName)",
+                "sha": trimmedSHA
+            ]
+        )
+        let response: GitReferenceResponse = try await perform(request)
+        return GitHubBranch(
+            name: normalizedBranchName(from: response.ref),
+            isProtected: false,
+            commitSHA: response.object.sha
+        )
     }
 
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue] {
@@ -638,6 +680,14 @@ final class GitHubAPIService: GitHubAPIServicing {
         return (components[0], components[1])
     }
 
+    private func normalizedBranchName(from gitRef: String) -> String {
+        let prefix = "refs/heads/"
+        if gitRef.hasPrefix(prefix) {
+            return String(gitRef.dropFirst(prefix.count))
+        }
+        return gitRef
+    }
+
     private func encodePath(_ path: String) throws -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
@@ -771,6 +821,15 @@ private struct BranchResponse: Decodable {
         case isProtected = "protected"
         case commit
     }
+}
+
+private struct GitReferenceResponse: Decodable {
+    struct GitObject: Decodable {
+        let sha: String
+    }
+
+    let ref: String
+    let object: GitObject
 }
 
 private struct IssueListResponse: Decodable {

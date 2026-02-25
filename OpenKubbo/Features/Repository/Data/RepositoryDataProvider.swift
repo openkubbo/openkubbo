@@ -18,6 +18,10 @@ protocol RepositoryDataProviding {
         in repository: RepoItem,
         body: String
     ) async throws -> RepoIssueCommentItem
+    func createBranch(
+        from issue: RepoIssueItem,
+        in repository: RepoItem
+    ) async throws -> String
     func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem]
     func loadPullRequestCommits(
         for pullRequest: RepoPullRequestItem,
@@ -358,6 +362,19 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             body: body,
             updatedAgo: "just now"
         )
+    }
+
+    func createBranch(
+        from issue: RepoIssueItem,
+        in repository: RepoItem
+    ) async throws -> String {
+        let normalized = issue.title
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        let suffix = normalized.isEmpty ? "issue" : normalized
+        return "issue/\(issue.number)-\(suffix)"
     }
 
     func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {

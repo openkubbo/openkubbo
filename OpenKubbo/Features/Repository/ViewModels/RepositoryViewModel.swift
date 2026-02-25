@@ -53,6 +53,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published var isIssueComposerVisible = false
     @Published private(set) var isIssueCreating = false
     @Published private(set) var isIssueCommentSubmitting = false
+    @Published private(set) var isIssueBranchCreating = false
     @Published private(set) var isIssueCommentsLoading = false
     @Published private(set) var issueRefreshingID: String?
     @Published private(set) var issueActionErrorMessage: String?
@@ -422,6 +423,24 @@ final class RepositoryViewModel: ObservableObject {
             appendComment(createdComment, to: issue, in: repo)
             issueCommentDraft = ""
             issueActionStatusMessage = "Comment added to issue #\(issue.number)."
+        } catch {
+            issueActionErrorMessage = repositoryErrorDescription(error)
+        }
+    }
+
+    func createBranchFromIssue(_ issue: RepoIssueItem, in repo: RepoItem) async {
+        guard !isIssueBranchCreating else { return }
+
+        isIssueBranchCreating = true
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
+
+        defer { isIssueBranchCreating = false }
+
+        do {
+            let branchName = try await dataProvider.createBranch(from: issue, in: repo)
+            issueActionStatusMessage = "Branch \(branchName) created from issue #\(issue.number)."
+            await reloadBranches(for: repo)
         } catch {
             issueActionErrorMessage = repositoryErrorDescription(error)
         }

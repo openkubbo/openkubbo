@@ -120,6 +120,31 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         return mapToIssueCommentItem(createdComment)
     }
 
+    func createBranch(
+        from issue: RepoIssueItem,
+        in repository: RepoItem
+    ) async throws -> String {
+        let token = try accessToken()
+        let fetchedBranches = try await gitHubAPIService.fetchBranches(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        let baseBranch = fetchedBranches.first(where: { $0.name == repository.branch }) ?? fetchedBranches.first
+        guard let baseBranch else {
+            throw GitHubAPIError.invalidParameters("Base branch not found for this repository.")
+        }
+
+        let branchName = issueBranchName(for: issue)
+        let createdBranch = try await gitHubAPIService.createBranch(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            branchName: branchName,
+            fromCommitSHA: baseBranch.commitSHA
+        )
+        return createdBranch.name
+    }
+
     func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {
         fallbackIssuesProvider.loadPullRequests(for: repository)
     }
@@ -233,6 +258,16 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             hasOpenPullRequest: false,
             updatedAgo: seededRelativeTime("\(repository.id)-\(branch.name)-branch-updated")
         )
+    }
+
+    private func issueBranchName(for issue: RepoIssueItem) -> String {
+        let normalizedTitle = issue.title
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        let suffix = normalizedTitle.isEmpty ? "issue" : normalizedTitle
+        return "issue/\(issue.number)-\(suffix)"
     }
 
     private func seededRelativeTime(_ key: String) -> String {

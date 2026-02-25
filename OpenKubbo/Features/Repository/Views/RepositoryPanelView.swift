@@ -941,6 +941,44 @@ struct RepositoryPanelView: View {
 
                 Button {
                     Task {
+                        await createIssueBranch(from: issue, in: repo)
+                    }
+                } label: {
+                    if viewModel.isIssueBranchCreating {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    } else {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    }
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .help("Create branch from this issue")
+                .disabled(viewModel.isIssueBranchCreating || !issue.isOpen)
+                .opacity((viewModel.isIssueBranchCreating || !issue.isOpen) ? 0.7 : 1)
+
+                Button {
+                    Task {
                         await viewModel.refreshIssue(issue, in: repo)
                     }
                 } label: {
@@ -992,6 +1030,20 @@ struct RepositoryPanelView: View {
             Rectangle()
                 .fill(dividerColor)
                 .frame(height: 1)
+
+            if let statusMessage = viewModel.issueActionStatusMessage {
+                issueFeedbackBanner(statusMessage, isError: false)
+
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+            } else if let errorMessage = viewModel.issueActionErrorMessage {
+                issueFeedbackBanner(errorMessage, isError: true)
+
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+            }
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 10) {
@@ -2582,6 +2634,10 @@ struct RepositoryPanelView: View {
     private func addIssueComment(in repo: RepoItem) async {
         guard let issue = viewModel.selectedIssue(for: repo) else { return }
         await viewModel.addIssueComment(to: issue, in: repo)
+    }
+
+    private func createIssueBranch(from issue: RepoIssueItem, in repo: RepoItem) async {
+        await viewModel.createBranchFromIssue(issue, in: repo)
     }
 
     private func closePullRequestDetails() {
