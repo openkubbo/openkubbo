@@ -610,6 +610,13 @@ struct RepositoryPanelView: View {
             pullRequestsOverlayPanel(for: repo)
         case .branches:
             branchesOverlayPanel(for: repo)
+        case .releases,
+                .ciRuns,
+                .discussions,
+                .tags,
+                .contributors,
+                .openCommits:
+            destinationInfoOverlayPanel(for: repo, destination: destination)
         default:
             genericDetailOverlayPanel(for: repo, destination: destination)
         }
@@ -1306,6 +1313,177 @@ struct RepositoryPanelView: View {
         )
     }
 
+    private func destinationInfoOverlayPanel(
+        for repo: RepoItem,
+        destination: RepoDetailDestination
+    ) -> some View {
+        let items = viewModel.destinationInfoItems(for: repo, destination: destination)
+        let selectedItem = viewModel.selectedDestinationInfoItem(for: repo, destination: destination)
+
+        return ZStack(alignment: .topLeading) {
+            VStack(spacing: 0) {
+                overlayTopBar(title: "Open \(destination.title)")
+
+                Rectangle()
+                    .fill(dividerColor)
+                    .frame(height: 1)
+
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 0) {
+                        if items.isEmpty {
+                            Text("No items available.")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 18)
+                        } else {
+                            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                                destinationInfoRow(
+                                    item,
+                                    icon: destination.icon,
+                                    isSelected: selectedItem?.id == item.id,
+                                    showDivider: index < items.count - 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            .allowsHitTesting(selectedItem == nil)
+
+            if let selectedItem {
+                destinationInfoDetailsOverlayPanel(item: selectedItem, destination: destination)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: selectedItem?.id)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func destinationInfoDetailsOverlayPanel(
+        item: RepoDestinationInfoItem,
+        destination: RepoDetailDestination
+    ) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: closeDestinationInfoDetails) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Circle()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+
+                Text(destination.title)
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(item.title)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        Spacer(minLength: 8)
+
+                        if let status = item.status {
+                            Text(status)
+                                .font(.system(size: 10, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.95))
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(
+                                    Capsule()
+                                        .fill(accentColor)
+                                )
+                        }
+                    }
+
+                    Text(item.subtitle)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Text(item.metadata)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+
+                    Text(item.summary)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !item.bulletPoints.isEmpty {
+                        Rectangle()
+                            .fill(dividerColor)
+                            .frame(height: 1)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(Array(item.bulletPoints.enumerated()), id: \.offset) { _, bulletPoint in
+                                HStack(alignment: .top, spacing: 8) {
+                                    Circle()
+                                        .fill(accentColor)
+                                        .frame(width: 6, height: 6)
+                                        .padding(.top, 5)
+
+                                    Text(bulletPoint)
+                                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                                        .foregroundStyle(primaryTextColor)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
     private func genericDetailOverlayPanel(for repo: RepoItem, destination: RepoDetailDestination) -> some View {
         let entries = destination.mockEntries(repoName: repo.name, branch: repo.branch)
 
@@ -1611,6 +1789,76 @@ struct RepositoryPanelView: View {
                     }
 
                     Spacer(minLength: 8)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 0, style: .continuous)
+                        .fill(isSelected ? accentColor.opacity(isDarkTheme ? 0.16 : 0.11) : .clear)
+                )
+
+                if showDivider {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
+    private func destinationInfoRow(
+        _ item: RepoDestinationInfoItem,
+        icon: String,
+        isSelected: Bool,
+        showDivider: Bool
+    ) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.selectDestinationInfoItem(item)
+            }
+        } label: {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                        .frame(width: 18, alignment: .center)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.title)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .lineLimit(1)
+
+                        Text(item.subtitle)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if let trailingValue = item.trailingValue {
+                        Text(trailingValue)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    }
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .semibold))
@@ -1985,6 +2233,12 @@ struct RepositoryPanelView: View {
     private func closeBranchDetails() {
         withAnimation(.easeInOut(duration: 0.18)) {
             viewModel.closeBranchDetails()
+        }
+    }
+
+    private func closeDestinationInfoDetails() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.closeDestinationInfoDetails()
         }
     }
 

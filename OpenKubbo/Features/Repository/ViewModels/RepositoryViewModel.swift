@@ -34,6 +34,7 @@ final class RepositoryViewModel: ObservableObject {
             issueCommentDraft = ""
             selectedPullRequestID = nil
             selectedBranchID = nil
+            selectedDestinationInfoItemID = nil
             isPullRequestComposerVisible = false
             pullRequestDraftHeadBranch = nil
         }
@@ -46,6 +47,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
     @Published var selectedBranchID: String?
+    @Published var selectedDestinationInfoItemID: String?
     @Published var isPullRequestComposerVisible = false
     @Published var pullRequestDraftHeadBranch: String?
 
@@ -151,6 +153,7 @@ final class RepositoryViewModel: ObservableObject {
         issueCommentDraft = ""
         selectedPullRequestID = nil
         selectedBranchID = nil
+        selectedDestinationInfoItemID = nil
         isPullRequestComposerVisible = false
         pullRequestDraftHeadBranch = nil
         selectedRepoID = nil
@@ -174,6 +177,7 @@ final class RepositoryViewModel: ObservableObject {
         if destination != .branches {
             selectedBranchID = nil
         }
+        selectedDestinationInfoItemID = nil
         selectedDetailDestination = destination
     }
 
@@ -183,6 +187,7 @@ final class RepositoryViewModel: ObservableObject {
         issueCommentDraft = ""
         selectedPullRequestID = nil
         selectedBranchID = nil
+        selectedDestinationInfoItemID = nil
         isPullRequestComposerVisible = false
         pullRequestDraftHeadBranch = nil
     }
@@ -296,6 +301,30 @@ final class RepositoryViewModel: ObservableObject {
 
     func closeBranchDetails() {
         selectedBranchID = nil
+    }
+
+    func destinationInfoItems(
+        for repo: RepoItem,
+        destination: RepoDetailDestination
+    ) -> [RepoDestinationInfoItem] {
+        destination.mockInfoItems(repoName: repo.name, branch: repo.branch)
+    }
+
+    func selectDestinationInfoItem(_ item: RepoDestinationInfoItem) {
+        selectedDestinationInfoItemID = item.id
+    }
+
+    func closeDestinationInfoDetails() {
+        selectedDestinationInfoItemID = nil
+    }
+
+    func selectedDestinationInfoItem(
+        for repo: RepoItem,
+        destination: RepoDetailDestination
+    ) -> RepoDestinationInfoItem? {
+        guard let selectedDestinationInfoItemID else { return nil }
+        return destinationInfoItems(for: repo, destination: destination)
+            .first(where: { $0.id == selectedDestinationInfoItemID })
     }
 
     func openPullRequestComposer(
