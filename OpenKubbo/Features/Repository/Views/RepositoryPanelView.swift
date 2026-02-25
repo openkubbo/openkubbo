@@ -720,6 +720,7 @@ struct RepositoryPanelView: View {
                             ForEach(Array(issues.enumerated()), id: \.element.id) { index, issue in
                                 issueRow(
                                     issue,
+                                    in: repo,
                                     isSelected: selectedIssue?.id == issue.id,
                                     showDivider: index < issues.count - 1
                                 )
@@ -896,6 +897,7 @@ struct RepositoryPanelView: View {
 
     private func issueDetailsOverlayPanel(for issue: RepoIssueItem, in repo: RepoItem) -> some View {
         let isLoadingComments = viewModel.isLoadingIssueComments(for: issue)
+        let isRefreshingIssue = viewModel.isRefreshingIssue(issue)
 
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -922,6 +924,43 @@ struct RepositoryPanelView: View {
                     .lineLimit(1)
 
                 Spacer()
+
+                Button {
+                    Task {
+                        await viewModel.refreshIssue(issue, in: repo)
+                    }
+                } label: {
+                    if isRefreshingIssue {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    }
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .disabled(isRefreshingIssue)
+                .opacity(isRefreshingIssue ? 0.7 : 1)
 
                 Text(issue.isOpen ? "Open" : "Closed")
                     .font(.system(size: 11, weight: .bold, design: .rounded))
@@ -2245,10 +2284,15 @@ struct RepositoryPanelView: View {
         }
     }
 
-    private func issueRow(_ issue: RepoIssueItem, isSelected: Bool, showDivider: Bool) -> some View {
+    private func issueRow(
+        _ issue: RepoIssueItem,
+        in repo: RepoItem,
+        isSelected: Bool,
+        showDivider: Bool
+    ) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.18)) {
-                viewModel.selectIssue(issue)
+                viewModel.selectIssue(issue, in: repo)
             }
         } label: {
             VStack(spacing: 0) {

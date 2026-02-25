@@ -52,6 +52,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var isIssueCreating = false
     @Published private(set) var isIssueCommentSubmitting = false
     @Published private(set) var isIssueCommentsLoading = false
+    @Published private(set) var issueRefreshingID: String?
     @Published private(set) var issueActionErrorMessage: String?
     @Published private(set) var issueActionStatusMessage: String?
     @Published var issueDraftTitle = ""
@@ -281,16 +282,15 @@ final class RepositoryViewModel: ObservableObject {
         issuesLoadErrorMessageByRepositoryID[repo.id]
     }
 
-    func selectIssue(_ issue: RepoIssueItem) {
+    func selectIssue(_ issue: RepoIssueItem, in repo: RepoItem) {
         selectedIssueID = issue.id
         isIssueComposerVisible = false
         issueCommentDraft = ""
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
 
-        guard let selectedRepo else { return }
         Task { [weak self] in
-            await self?.loadIssueCommentsIfNeeded(for: issue, in: selectedRepo)
+            await self?.refreshIssue(issue, in: repo)
         }
     }
 
@@ -383,6 +383,42 @@ final class RepositoryViewModel: ObservableObject {
 
     func isLoadingIssueComments(for issue: RepoIssueItem) -> Bool {
         isIssueCommentsLoading && selectedIssueID == issue.id
+    }
+
+    func isRefreshingIssue(_ issue: RepoIssueItem) -> Bool {
+        issueRefreshingID == issue.id
+    }
+
+    func refreshIssue(_ issue: RepoIssueItem, in repo: RepoItem) async {
+        if issueRefreshingID == issue.id {
+            return
+        }
+
+        issueRefreshingID = issue.id
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
+        defer {
+            if issueRefreshingID == issue.id {
+                issueRefreshingID = nil
+            }
+        }
+
+        do {
+            let issues = try await dataProvider.loadIssues(for: repo)
+            loadedIssuesByRepositoryID[repo.id] = issues
+            issuesLoadErrorMessageByRepositoryID[repo.id] = nil
+
+            guard let refreshedIssue = issues.first(where: { $0.id == issue.id }) else {
+                selectedIssueID = nil
+                issueCommentDraft = ""
+                return
+            }
+
+            selectedIssueID = refreshedIssue.id
+            await loadIssueComments(for: refreshedIssue, in: repo, forceReload: true)
+        } catch {
+            issueActionErrorMessage = repositoryErrorDescription(error)
+        }
     }
 
     func selectPullRequestsScope(_ scope: RepoPullRequestsScope) {
@@ -609,11 +645,11 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
-    private func loadIssueCommentsIfNeeded(for issue: RepoIssueItem, in repo: RepoItem) async {
-        guard issue.comments > 0 else {
-            return
-        }
-
+    private func loadIssueComments(
+        for issue: RepoIssueItem,
+        in repo: RepoItem,
+        forceReload: Bool
+    ) async {
         guard !isIssueCommentsLoading else {
             return
         }
@@ -622,7 +658,11 @@ final class RepositoryViewModel: ObservableObject {
             return
         }
 
-        if !currentIssue.commentItems.isEmpty {
+        if !forceReload && !currentIssue.commentItems.isEmpty {
+            return
+        }
+
+        if !forceReload && currentIssue.comments <= 0 {
             return
         }
 
