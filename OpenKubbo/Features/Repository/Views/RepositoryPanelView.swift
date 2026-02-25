@@ -283,7 +283,8 @@ struct RepositoryPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             ContributionHeatmap(
                 isDarkTheme: isDarkTheme,
-                contributionCountsByDateKey: viewModel.contributionCountsByDateKey
+                contributionCountsByDateKey: viewModel.contributionCountsByDateKey,
+                totalContributions: viewModel.totalContributionsLast12Months
             )
                 .frame(maxWidth: .infinity)
                 .frame(height: 116)
@@ -2669,6 +2670,7 @@ struct RepositoryPanelView: View {
 private struct ContributionHeatmap: View {
     var isDarkTheme: Bool
     var contributionCountsByDateKey: [String: Int]
+    var totalContributions: Int
 
     static let weeks = 28
     static let days = 7
@@ -2749,9 +2751,19 @@ private struct ContributionHeatmap: View {
         return max(0, min(widthBased, heightBased))
     }
 
+    private var totalContributionsText: String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        let formatted = formatter.string(from: NSNumber(value: totalContributions)) ?? "\(totalContributions)"
+        return "\(formatted) contributions"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
+                Text(totalContributionsText)
+                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                    .foregroundStyle(isDarkTheme ? .white.opacity(0.64) : .black.opacity(0.58))
                 Spacer()
                 Text("last 12 months")
                     .font(.system(size: 10, weight: .medium, design: .rounded))

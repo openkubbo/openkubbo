@@ -122,6 +122,10 @@ final class RepositoryViewModel: ObservableObject {
         !trimmedIssueDraftTitle.isEmpty
     }
 
+    var totalContributionsLast12Months: Int {
+        contributionCountsByDateKey.values.reduce(0, +)
+    }
+
     func reloadPanelData() async {
         await reloadRepositories()
         await reloadContributionCalendar()
