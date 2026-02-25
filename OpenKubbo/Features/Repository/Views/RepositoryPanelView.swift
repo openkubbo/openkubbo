@@ -634,10 +634,19 @@ struct RepositoryPanelView: View {
         let issues = viewModel.filteredIssues(for: repo)
         let selectedIssue = viewModel.selectedIssue(for: repo)
         let isComposerVisible = viewModel.isIssueComposerVisible
+        let isLoadingIssues = viewModel.isLoadingIssues(for: repo)
+        let issuesLoadErrorMessage = viewModel.issuesLoadErrorMessage(for: repo)
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
-                overlayTopBar(title: "Open Issues")
+                overlayTopBar(
+                    title: "Open Issues",
+                    onRefresh: {
+                        Task {
+                            await viewModel.reloadIssues(for: repo)
+                        }
+                    }
+                )
 
                 Rectangle()
                     .fill(dividerColor)
@@ -657,13 +666,50 @@ struct RepositoryPanelView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
 
+                if let statusMessage = viewModel.issueActionStatusMessage {
+                    issueFeedbackBanner(statusMessage, isError: false)
+                } else if let errorMessage = viewModel.issueActionErrorMessage {
+                    issueFeedbackBanner(errorMessage, isError: true)
+                }
+
                 Rectangle()
                     .fill(dividerColor)
                     .frame(height: 1)
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 0) {
-                        if issues.isEmpty {
+                        if isLoadingIssues && issues.isEmpty {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading issues...")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if let issuesLoadErrorMessage, issues.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(issuesLoadErrorMessage)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.red.opacity(isDarkTheme ? 0.86 : 0.72))
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Button("Retry") {
+                                    Task {
+                                        await viewModel.reloadIssues(for: repo)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                                .repoCursorOnHover()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if issues.isEmpty {
                             Text("No issues for this filter.")
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(secondaryTextColor)
@@ -705,6 +751,9 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+        .task(id: "issues-\(repo.id)") {
+            await viewModel.loadIssuesIfNeeded(for: repo)
+        }
     }
 
     private func issueComposerOverlayPanel(for repo: RepoItem) -> some View {
@@ -798,13 +847,21 @@ struct RepositoryPanelView: View {
                 Spacer(minLength: 0)
 
                 Button(action: {
-                    createIssue(in: repo)
+                    Task {
+                        await createIssue(in: repo)
+                    }
                 }) {
                     HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Create Issue")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        if viewModel.isIssueCreating {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white.opacity(0.95))
+                        } else {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Create Issue")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        }
                     }
                     .foregroundStyle(.white.opacity(0.95))
                     .padding(.horizontal, 12)
@@ -820,8 +877,8 @@ struct RepositoryPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .repoCursorOnHover()
-                .disabled(!viewModel.canCreateIssue)
-                .opacity(viewModel.canCreateIssue ? 1 : 0.55)
+                .disabled(!viewModel.canCreateIssue || viewModel.isIssueCreating)
+                .opacity((viewModel.canCreateIssue && !viewModel.isIssueCreating) ? 1 : 0.55)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -838,6 +895,8 @@ struct RepositoryPanelView: View {
     }
 
     private func issueDetailsOverlayPanel(for issue: RepoIssueItem, in repo: RepoItem) -> some View {
+        let isLoadingComments = viewModel.isLoadingIssueComments(for: issue)
+
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Button(action: closeIssueDetails) {
@@ -916,7 +975,15 @@ struct RepositoryPanelView: View {
                             .font(.system(size: 11, weight: .bold, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
 
-                        if issue.commentItems.isEmpty {
+                        if isLoadingComments {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading comments...")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                            }
+                        } else if issue.commentItems.isEmpty {
                             Text("Comments are not available for this issue.")
                                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                                 .foregroundStyle(secondaryTextColor)
@@ -968,13 +1035,21 @@ struct RepositoryPanelView: View {
                         Spacer(minLength: 0)
 
                         Button(action: {
-                            addIssueComment(in: repo)
+                            Task {
+                                await addIssueComment(in: repo)
+                            }
                         }) {
                             HStack(spacing: 6) {
-                                Image(systemName: "paperplane.fill")
-                                    .font(.system(size: 11, weight: .bold))
-                                Text("Add Comment")
-                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                if viewModel.isIssueCommentSubmitting {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(.white.opacity(0.95))
+                                } else {
+                                    Image(systemName: "paperplane.fill")
+                                        .font(.system(size: 11, weight: .bold))
+                                    Text("Add Comment")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                }
                             }
                             .foregroundStyle(.white.opacity(0.95))
                             .padding(.horizontal, 12)
@@ -990,8 +1065,8 @@ struct RepositoryPanelView: View {
                         }
                         .buttonStyle(.plain)
                         .repoCursorOnHover()
-                        .disabled(!viewModel.canSubmitIssueComment)
-                        .opacity(viewModel.canSubmitIssueComment ? 1 : 0.55)
+                        .disabled(!viewModel.canSubmitIssueComment || viewModel.isIssueCommentSubmitting)
+                        .opacity((viewModel.canSubmitIssueComment && !viewModel.isIssueCommentSubmitting) ? 1 : 0.55)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1681,7 +1756,11 @@ struct RepositoryPanelView: View {
         )
     }
 
-    private func overlayTopBar(title: String) -> some View {
+    private func overlayTopBar(
+        title: String,
+        onFilter: (() -> Void)? = nil,
+        onRefresh: (() -> Void)? = nil
+    ) -> some View {
         HStack(spacing: 10) {
             Button(action: closeDetailPanel) {
                 Image(systemName: "chevron.left")
@@ -1707,15 +1786,17 @@ struct RepositoryPanelView: View {
 
             Spacer()
 
-            overlayHeaderIconButton(symbol: "line.3.horizontal.decrease")
-            overlayHeaderIconButton(symbol: "arrow.clockwise")
+            overlayHeaderIconButton(symbol: "line.3.horizontal.decrease", action: onFilter)
+            overlayHeaderIconButton(symbol: "arrow.clockwise", action: onRefresh)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
     }
 
-    private func overlayHeaderIconButton(symbol: String) -> some View {
-        Button {} label: {
+    private func overlayHeaderIconButton(symbol: String, action: (() -> Void)? = nil) -> some View {
+        Button {
+            action?()
+        } label: {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(secondaryTextColor)
@@ -1731,6 +1812,25 @@ struct RepositoryPanelView: View {
         }
         .buttonStyle(.plain)
         .repoCursorOnHover()
+        .disabled(action == nil)
+        .opacity(action == nil ? 0.45 : 1)
+    }
+
+    private func issueFeedbackBanner(_ message: String, isError: Bool) -> some View {
+        Text(message)
+            .font(.system(size: 11, weight: .semibold, design: .rounded))
+            .foregroundStyle(
+                isError
+                    ? Color.red.opacity(isDarkTheme ? 0.9 : 0.72)
+                    : Color.green.opacity(isDarkTheme ? 0.9 : 0.72)
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(
+                (isError ? Color.red : Color.green)
+                    .opacity(isDarkTheme ? 0.12 : 0.08)
+            )
     }
 
     private func issuesFilterPill(_ scope: RepoIssuesScope) -> some View {
@@ -2368,18 +2468,13 @@ struct RepositoryPanelView: View {
         }
     }
 
-    private func createIssue(in repo: RepoItem) {
-        withAnimation(.easeInOut(duration: 0.18)) {
-            viewModel.createIssue(in: repo)
-        }
+    private func createIssue(in repo: RepoItem) async {
+        await viewModel.createIssue(in: repo)
     }
 
-    private func addIssueComment(in repo: RepoItem) {
+    private func addIssueComment(in repo: RepoItem) async {
         guard let issue = viewModel.selectedIssue(for: repo) else { return }
-
-        withAnimation(.easeInOut(duration: 0.18)) {
-            viewModel.addIssueComment(to: issue)
-        }
+        await viewModel.addIssueComment(to: issue, in: repo)
     }
 
     private func closePullRequestDetails() {

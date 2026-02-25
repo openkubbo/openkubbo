@@ -2,7 +2,21 @@ import Foundation
 
 protocol RepositoryDataProviding {
     func loadRepositories() async throws -> [RepoItem]
-    func loadIssues(for repository: RepoItem) -> [RepoIssueItem]
+    func loadIssues(for repository: RepoItem) async throws -> [RepoIssueItem]
+    func loadIssueComments(
+        for issue: RepoIssueItem,
+        in repository: RepoItem
+    ) async throws -> [RepoIssueCommentItem]
+    func createIssue(
+        in repository: RepoItem,
+        title: String,
+        body: String?
+    ) async throws -> RepoIssueItem
+    func addIssueComment(
+        to issue: RepoIssueItem,
+        in repository: RepoItem,
+        body: String
+    ) async throws -> RepoIssueCommentItem
     func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem]
     func loadPullRequestCommits(
         for pullRequest: RepoPullRequestItem,
@@ -164,7 +178,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
         ]
     }
 
-    func loadIssues(for repository: RepoItem) -> [RepoIssueItem] {
+    func loadIssues(for repository: RepoItem) async throws -> [RepoIssueItem] {
         [
             RepoIssueItem(
                 id: "\(repository.id)-26",
@@ -266,6 +280,58 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 isMine: false
             )
         ]
+    }
+
+    func loadIssueComments(
+        for issue: RepoIssueItem,
+        in repository: RepoItem
+    ) async throws -> [RepoIssueCommentItem] {
+        _ = repository
+        return issue.commentItems
+    }
+
+    func createIssue(
+        in repository: RepoItem,
+        title: String,
+        body: String?
+    ) async throws -> RepoIssueItem {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let currentIssues = try await loadIssues(for: repository)
+        let nextNumber = currentIssues.map(\.number).max() ?? 0
+
+        return RepoIssueItem(
+            id: "\(repository.id)-local-issue-\(UUID().uuidString)",
+            number: nextNumber + 1,
+            title: trimmedTitle,
+            body: {
+                guard let trimmedBody, !trimmedBody.isEmpty else {
+                    return "No description provided."
+                }
+                return trimmedBody
+            }(),
+            labels: [],
+            author: "you",
+            updatedAgo: "just now",
+            comments: 0,
+            commentItems: [],
+            isOpen: true,
+            isMine: true
+        )
+    }
+
+    func addIssueComment(
+        to issue: RepoIssueItem,
+        in repository: RepoItem,
+        body: String
+    ) async throws -> RepoIssueCommentItem {
+        _ = repository
+        return RepoIssueCommentItem(
+            id: "\(issue.id)-comment-\(UUID().uuidString)",
+            author: "you",
+            body: body,
+            updatedAgo: "just now"
+        )
     }
 
     func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {

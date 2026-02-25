@@ -40,6 +40,8 @@ final class RepositoryViewModel: ObservableObject {
             selectedDestinationInfoItemID = nil
             isPullRequestComposerVisible = false
             pullRequestDraftHeadBranch = nil
+            issueActionErrorMessage = nil
+            issueActionStatusMessage = nil
         }
     }
 
@@ -47,6 +49,11 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedIssuesScope: RepoIssuesScope = .open
     @Published var selectedIssueID: String?
     @Published var isIssueComposerVisible = false
+    @Published private(set) var isIssueCreating = false
+    @Published private(set) var isIssueCommentSubmitting = false
+    @Published private(set) var isIssueCommentsLoading = false
+    @Published private(set) var issueActionErrorMessage: String?
+    @Published private(set) var issueActionStatusMessage: String?
     @Published var issueDraftTitle = ""
     @Published var issueDraftBody = ""
     @Published var issueCommentDraft = ""
@@ -63,8 +70,9 @@ final class RepositoryViewModel: ObservableObject {
     private let localActionService: RepositoryLocalActionServicing
     private let gitHubTokenStore: GitHubTokenStoring
     private var hasUserCustomizedPins = false
-    private var createdIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
-    private var issueCommentItemsByIssueID: [String: [RepoIssueCommentItem]] = [:]
+    @Published private(set) var loadedIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
+    @Published private(set) var issuesLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var issuesLoadErrorMessageByRepositoryID: [String: String] = [:]
 
     init(
         dataProvider: RepositoryDataProviding,
@@ -118,6 +126,7 @@ final class RepositoryViewModel: ObservableObject {
             repositories = try await dataProvider.loadRepositories()
             applyPinnedState(for: repositories)
             repositoryLoadErrorMessage = nil
+            pruneIssuesCache(for: repositories)
             synchronizeSelectedRepo()
 
             if repositories.isEmpty {
@@ -125,6 +134,9 @@ final class RepositoryViewModel: ObservableObject {
             }
         } catch {
             repositories = []
+            loadedIssuesByRepositoryID = [:]
+            issuesLoadingRepositoryIDs = []
+            issuesLoadErrorMessageByRepositoryID = [:]
             closeRepositorySelection()
             repositoryLoadErrorMessage = repositoryErrorDescription(error)
         }
@@ -165,6 +177,9 @@ final class RepositoryViewModel: ObservableObject {
         issueDraftTitle = ""
         issueDraftBody = ""
         issueCommentDraft = ""
+        isIssueCommentsLoading = false
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
         selectedPullRequestID = nil
         selectedBranchID = nil
         selectedDestinationInfoItemID = nil
@@ -181,6 +196,8 @@ final class RepositoryViewModel: ObservableObject {
             issueDraftTitle = ""
             issueDraftBody = ""
             issueCommentDraft = ""
+            issueActionErrorMessage = nil
+            issueActionStatusMessage = nil
         } else {
             isIssueComposerVisible = false
             issueDraftTitle = ""
@@ -199,6 +216,12 @@ final class RepositoryViewModel: ObservableObject {
         }
         selectedDestinationInfoItemID = nil
         selectedDetailDestination = destination
+
+        if destination == .issues, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadIssuesIfNeeded(for: repo)
+            }
+        }
     }
 
     func closeDetailPanel() {
@@ -208,6 +231,9 @@ final class RepositoryViewModel: ObservableObject {
         issueDraftTitle = ""
         issueDraftBody = ""
         issueCommentDraft = ""
+        isIssueCommentsLoading = false
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
         selectedPullRequestID = nil
         selectedBranchID = nil
         selectedDestinationInfoItemID = nil
@@ -220,12 +246,12 @@ final class RepositoryViewModel: ObservableObject {
         selectedIssueID = nil
         isIssueComposerVisible = false
         issueCommentDraft = ""
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
     }
 
     func filteredIssues(for repo: RepoItem) -> [RepoIssueItem] {
-        let baseIssues = dataProvider.loadIssues(for: repo).map(resolveIssueComments)
-        let createdIssues = createdIssuesByRepositoryID[repo.id, default: []].map(resolveIssueComments)
-        let issues = createdIssues + baseIssues
+        let issues = loadedIssuesByRepositoryID[repo.id, default: []]
 
         switch selectedIssuesScope {
         case .all:
@@ -239,15 +265,39 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    func loadIssuesIfNeeded(for repo: RepoItem) async {
+        await loadIssues(for: repo, forceReload: false)
+    }
+
+    func reloadIssues(for repo: RepoItem) async {
+        await loadIssues(for: repo, forceReload: true)
+    }
+
+    func isLoadingIssues(for repo: RepoItem) -> Bool {
+        issuesLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func issuesLoadErrorMessage(for repo: RepoItem) -> String? {
+        issuesLoadErrorMessageByRepositoryID[repo.id]
+    }
+
     func selectIssue(_ issue: RepoIssueItem) {
         selectedIssueID = issue.id
         isIssueComposerVisible = false
         issueCommentDraft = ""
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
+
+        guard let selectedRepo else { return }
+        Task { [weak self] in
+            await self?.loadIssueCommentsIfNeeded(for: issue, in: selectedRepo)
+        }
     }
 
     func closeIssueDetails() {
         selectedIssueID = nil
         issueCommentDraft = ""
+        isIssueCommentsLoading = false
     }
 
     func selectedIssue(for repo: RepoItem) -> RepoIssueItem? {
@@ -260,6 +310,9 @@ final class RepositoryViewModel: ObservableObject {
         issueCommentDraft = ""
         issueDraftTitle = ""
         issueDraftBody = ""
+        isIssueCommentsLoading = false
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
         isIssueComposerVisible = true
     }
 
@@ -269,55 +322,67 @@ final class RepositoryViewModel: ObservableObject {
         issueDraftBody = ""
     }
 
-    func createIssue(in repo: RepoItem) {
+    func createIssue(in repo: RepoItem) async {
         let title = trimmedIssueDraftTitle
         guard !title.isEmpty else { return }
+        guard !isIssueCreating else { return }
 
         let description = trimmedIssueDraftBody
-        let currentIssues = dataProvider.loadIssues(for: repo)
-        let createdIssues = createdIssuesByRepositoryID[repo.id, default: []]
-        let nextNumber = (currentIssues + createdIssues).map(\.number).max() ?? 0
+        isIssueCreating = true
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
 
-        let createdIssue = RepoIssueItem(
-            id: "\(repo.id)-local-issue-\(UUID().uuidString)",
-            number: nextNumber + 1,
-            title: title,
-            body: description.isEmpty ? "No description provided." : description,
-            labels: [],
-            author: "you",
-            updatedAgo: "just now",
-            comments: 0,
-            commentItems: [],
-            isOpen: true,
-            isMine: true
-        )
+        defer { isIssueCreating = false }
 
-        var updatedIssues = createdIssues
-        updatedIssues.insert(createdIssue, at: 0)
-        createdIssuesByRepositoryID[repo.id] = updatedIssues
+        do {
+            let createdIssue = try await dataProvider.createIssue(
+                in: repo,
+                title: title,
+                body: description.isEmpty ? nil : description
+            )
 
-        selectedIssuesScope = .open
-        selectedIssueID = createdIssue.id
-        issueCommentDraft = ""
-        issueDraftTitle = ""
-        issueDraftBody = ""
-        isIssueComposerVisible = false
+            prependIssue(createdIssue, in: repo)
+
+            selectedIssuesScope = .open
+            selectedIssueID = createdIssue.id
+            issueCommentDraft = ""
+            issueDraftTitle = ""
+            issueDraftBody = ""
+            isIssueComposerVisible = false
+            issueActionStatusMessage = "Issue #\(createdIssue.number) created in \(repo.name)."
+        } catch {
+            issueActionErrorMessage = repositoryErrorDescription(error)
+        }
     }
 
-    func addIssueComment(to issue: RepoIssueItem) {
+    func addIssueComment(to issue: RepoIssueItem, in repo: RepoItem) async {
         let draft = trimmedIssueCommentDraft
         guard !draft.isEmpty else { return }
+        guard !isIssueCommentSubmitting else { return }
 
-        let currentItems = issueCommentItemsByIssueID[issue.id] ?? issue.commentItems
-        let newComment = RepoIssueCommentItem(
-            id: "\(issue.id)-comment-\(UUID().uuidString)",
-            author: "you",
-            body: draft,
-            updatedAgo: "just now"
-        )
+        isIssueCommentSubmitting = true
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
 
-        issueCommentItemsByIssueID[issue.id] = currentItems + [newComment]
-        issueCommentDraft = ""
+        defer { isIssueCommentSubmitting = false }
+
+        do {
+            let createdComment = try await dataProvider.addIssueComment(
+                to: issue,
+                in: repo,
+                body: draft
+            )
+
+            appendComment(createdComment, to: issue, in: repo)
+            issueCommentDraft = ""
+            issueActionStatusMessage = "Comment added to issue #\(issue.number)."
+        } catch {
+            issueActionErrorMessage = repositoryErrorDescription(error)
+        }
+    }
+
+    func isLoadingIssueComments(for issue: RepoIssueItem) -> Bool {
+        isIssueCommentsLoading && selectedIssueID == issue.id
     }
 
     func selectPullRequestsScope(_ scope: RepoPullRequestsScope) {
@@ -511,6 +576,152 @@ final class RepositoryViewModel: ObservableObject {
         return try operation()
     }
 
+    private func loadIssues(for repo: RepoItem, forceReload: Bool) async {
+        if issuesLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, loadedIssuesByRepositoryID[repo.id] != nil {
+            return
+        }
+
+        issuesLoadingRepositoryIDs.insert(repo.id)
+        issuesLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            issuesLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let issues = try await dataProvider.loadIssues(for: repo)
+            loadedIssuesByRepositoryID[repo.id] = issues
+            issuesLoadErrorMessageByRepositoryID[repo.id] = nil
+
+            if let selectedIssueID,
+               !issues.contains(where: { $0.id == selectedIssueID }) {
+                self.selectedIssueID = nil
+                issueCommentDraft = ""
+            }
+        } catch {
+            issuesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedIssuesByRepositoryID[repo.id] == nil {
+                loadedIssuesByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
+    private func loadIssueCommentsIfNeeded(for issue: RepoIssueItem, in repo: RepoItem) async {
+        guard issue.comments > 0 else {
+            return
+        }
+
+        guard !isIssueCommentsLoading else {
+            return
+        }
+
+        guard let currentIssue = issueItem(withID: issue.id, in: repo) else {
+            return
+        }
+
+        if !currentIssue.commentItems.isEmpty {
+            return
+        }
+
+        isIssueCommentsLoading = true
+        defer { isIssueCommentsLoading = false }
+
+        do {
+            let comments = try await dataProvider.loadIssueComments(for: currentIssue, in: repo)
+            replaceIssueComments(for: issue.id, in: repo, comments: comments)
+        } catch {
+            issueActionErrorMessage = repositoryErrorDescription(error)
+        }
+    }
+
+    private func prependIssue(_ issue: RepoIssueItem, in repo: RepoItem) {
+        var issues = loadedIssuesByRepositoryID[repo.id, default: []]
+        issues.removeAll(where: { $0.id == issue.id })
+        issues.insert(issue, at: 0)
+        loadedIssuesByRepositoryID[repo.id] = issues
+    }
+
+    private func replaceIssueComments(
+        for issueID: String,
+        in repo: RepoItem,
+        comments: [RepoIssueCommentItem]
+    ) {
+        var issues = loadedIssuesByRepositoryID[repo.id, default: []]
+        guard let index = issues.firstIndex(where: { $0.id == issueID }) else {
+            return
+        }
+
+        let sourceIssue = issues[index]
+        let updatedCommentsCount = max(sourceIssue.comments, comments.count)
+        issues[index] = makeIssueCopy(
+            from: sourceIssue,
+            comments: updatedCommentsCount,
+            commentItems: comments
+        )
+        loadedIssuesByRepositoryID[repo.id] = issues
+    }
+
+    private func appendComment(
+        _ comment: RepoIssueCommentItem,
+        to issue: RepoIssueItem,
+        in repo: RepoItem
+    ) {
+        var issues = loadedIssuesByRepositoryID[repo.id, default: []]
+        guard let index = issues.firstIndex(where: { $0.id == issue.id }) else {
+            return
+        }
+
+        let sourceIssue = issues[index]
+        var comments = sourceIssue.commentItems
+        if !comments.contains(where: { $0.id == comment.id }) {
+            comments.append(comment)
+        }
+
+        let updatedCommentsCount = max(sourceIssue.comments + 1, comments.count)
+        issues[index] = makeIssueCopy(
+            from: sourceIssue,
+            comments: updatedCommentsCount,
+            commentItems: comments
+        )
+        loadedIssuesByRepositoryID[repo.id] = issues
+    }
+
+    private func issueItem(withID issueID: String, in repo: RepoItem) -> RepoIssueItem? {
+        loadedIssuesByRepositoryID[repo.id, default: []].first(where: { $0.id == issueID })
+    }
+
+    private func makeIssueCopy(
+        from issue: RepoIssueItem,
+        comments: Int? = nil,
+        commentItems: [RepoIssueCommentItem]? = nil
+    ) -> RepoIssueItem {
+        RepoIssueItem(
+            id: issue.id,
+            number: issue.number,
+            title: issue.title,
+            body: issue.body,
+            labels: issue.labels,
+            author: issue.author,
+            updatedAgo: issue.updatedAgo,
+            comments: comments ?? issue.comments,
+            commentItems: commentItems ?? issue.commentItems,
+            isOpen: issue.isOpen,
+            isMine: issue.isMine
+        )
+    }
+
+    private func pruneIssuesCache(for repositories: [RepoItem]) {
+        let validRepositoryIDs = Set(repositories.map(\.id))
+        loadedIssuesByRepositoryID = loadedIssuesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        issuesLoadingRepositoryIDs = issuesLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        issuesLoadErrorMessageByRepositoryID = issuesLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+    }
+
     private func synchronizeSelectedRepo() {
         guard let selectedRepoID else { return }
 
@@ -556,28 +767,5 @@ final class RepositoryViewModel: ObservableObject {
 
     private var trimmedIssueDraftBody: String {
         issueDraftBody.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func resolveIssueComments(_ issue: RepoIssueItem) -> RepoIssueItem {
-        guard let overriddenComments = issueCommentItemsByIssueID[issue.id] else {
-            return issue
-        }
-
-        let unresolvedCommentsCount = max(0, issue.comments - issue.commentItems.count)
-        let resolvedCount = overriddenComments.count + unresolvedCommentsCount
-
-        return RepoIssueItem(
-            id: issue.id,
-            number: issue.number,
-            title: issue.title,
-            body: issue.body,
-            labels: issue.labels,
-            author: issue.author,
-            updatedAgo: issue.updatedAgo,
-            comments: resolvedCount,
-            commentItems: overriddenComments,
-            isOpen: issue.isOpen,
-            isMine: issue.isMine
-        )
     }
 }

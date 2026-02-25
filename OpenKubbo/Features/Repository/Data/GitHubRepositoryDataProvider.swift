@@ -27,10 +27,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
     }
 
     func loadRepositories() async throws -> [RepoItem] {
-        guard let token = gitHubTokenStore.token(),
-              !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw RepositoryDataError.notAuthenticated
-        }
+        let token = try accessToken()
 
         let repositories = try await gitHubAPIService.fetchRepositories(accessToken: token)
 
@@ -39,8 +36,76 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
     }
 
-    func loadIssues(for repository: RepoItem) -> [RepoIssueItem] {
-        fallbackIssuesProvider.loadIssues(for: repository)
+    func loadIssues(for repository: RepoItem) async throws -> [RepoIssueItem] {
+        let token = try accessToken()
+        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token).lowercased()
+        let issues = try await gitHubAPIService.fetchIssues(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        return issues.map { issue in
+            mapToIssueItem(issue, repositoryID: repository.id, viewerLogin: viewerLogin)
+        }
+    }
+
+    func loadIssueComments(
+        for issue: RepoIssueItem,
+        in repository: RepoItem
+    ) async throws -> [RepoIssueCommentItem] {
+        let token = try accessToken()
+        let comments = try await gitHubAPIService.fetchIssueComments(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            issueNumber: issue.number
+        )
+
+        return comments.map(mapToIssueCommentItem)
+    }
+
+    func createIssue(
+        in repository: RepoItem,
+        title: String,
+        body: String?
+    ) async throws -> RepoIssueItem {
+        let token = try accessToken()
+        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token)
+        let createdIssue = try await gitHubAPIService.createIssue(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            title: title,
+            body: body
+        )
+
+        return RepoIssueItem(
+            id: "\(repository.id)-issue-\(createdIssue.number)",
+            number: createdIssue.number,
+            title: createdIssue.title,
+            body: normalizedIssueBody(body),
+            labels: [],
+            author: viewerLogin,
+            updatedAgo: "just now",
+            comments: 0,
+            commentItems: [],
+            isOpen: true,
+            isMine: true
+        )
+    }
+
+    func addIssueComment(
+        to issue: RepoIssueItem,
+        in repository: RepoItem,
+        body: String
+    ) async throws -> RepoIssueCommentItem {
+        let token = try accessToken()
+        let createdComment = try await gitHubAPIService.createIssueComment(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            issueNumber: issue.number,
+            body: body
+        )
+
+        return mapToIssueCommentItem(createdComment)
     }
 
     func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {
@@ -56,6 +121,72 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
 
     func loadBranches(for repository: RepoItem) -> [RepoBranchItem] {
         fallbackIssuesProvider.loadBranches(for: repository)
+    }
+
+    private func accessToken() throws -> String {
+        guard let token = gitHubTokenStore.token(),
+              !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw RepositoryDataError.notAuthenticated
+        }
+
+        return token
+    }
+
+    private func mapToIssueItem(
+        _ issue: GitHubIssue,
+        repositoryID: String,
+        viewerLogin: String
+    ) -> RepoIssueItem {
+        let issueLabels = issue.labels.map {
+            RepoIssueLabel(
+                id: "\(repositoryID)-issue-label-\($0.id)",
+                title: $0.name,
+                kind: mapIssueLabelKind($0.name)
+            )
+        }
+
+        return RepoIssueItem(
+            id: issue.id,
+            number: issue.number,
+            title: issue.title,
+            body: normalizedIssueBody(issue.body),
+            labels: issueLabels,
+            author: issue.authorLogin,
+            updatedAgo: relativeTime(from: issue.updatedAt),
+            comments: issue.comments,
+            commentItems: [],
+            isOpen: issue.isOpen,
+            isMine: issue.authorLogin.lowercased() == viewerLogin
+        )
+    }
+
+    private func mapToIssueCommentItem(_ comment: GitHubIssueComment) -> RepoIssueCommentItem {
+        RepoIssueCommentItem(
+            id: comment.id,
+            author: comment.authorLogin,
+            body: comment.body,
+            updatedAgo: relativeTime(from: comment.updatedAt)
+        )
+    }
+
+    private func mapIssueLabelKind(_ label: String) -> RepoIssueLabelKind {
+        let normalized = label.lowercased()
+
+        if normalized.contains("bug") {
+            return .bug
+        }
+        if normalized.contains("help wanted") {
+            return .helpWanted
+        }
+        if normalized.contains("good first issue") {
+            return .goodFirstIssue
+        }
+        return .enhancement
+    }
+
+    private func normalizedIssueBody(_ value: String?) -> String {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "No description provided." : trimmed
     }
 
     private func mapToRepoItem(_ repository: GitHubRepository, index: Int) -> RepoItem {

@@ -33,6 +33,30 @@ struct GitHubCommitSummary: Equatable {
     let htmlURL: URL?
 }
 
+struct GitHubIssueLabel: Equatable {
+    let id: String
+    let name: String
+}
+
+struct GitHubIssue: Equatable {
+    let id: String
+    let number: Int
+    let title: String
+    let body: String
+    let authorLogin: String
+    let updatedAt: Date?
+    let comments: Int
+    let isOpen: Bool
+    let labels: [GitHubIssueLabel]
+}
+
+struct GitHubIssueComment: Equatable {
+    let id: String
+    let authorLogin: String
+    let body: String
+    let updatedAt: Date?
+}
+
 enum GitHubAPIError: LocalizedError {
     case invalidRepositoryFormat
     case invalidFilePath
@@ -69,13 +93,26 @@ enum GitHubAPIError: LocalizedError {
 }
 
 protocol GitHubAPIServicing {
+    func fetchViewerLogin(accessToken: String) async throws -> String
     func fetchRepositories(accessToken: String) async throws -> [GitHubRepository]
+    func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
+    func fetchIssueComments(
+        accessToken: String,
+        repositoryFullName: String,
+        issueNumber: Int
+    ) async throws -> [GitHubIssueComment]
     func createIssue(
         accessToken: String,
         repositoryFullName: String,
         title: String,
         body: String?
     ) async throws -> GitHubIssueSummary
+    func createIssueComment(
+        accessToken: String,
+        repositoryFullName: String,
+        issueNumber: Int,
+        body: String
+    ) async throws -> GitHubIssueComment
     func createPullRequest(
         accessToken: String,
         repositoryFullName: String,
@@ -111,6 +148,13 @@ final class GitHubAPIService: GitHubAPIServicing {
         self.decoder = decoder
         self.userAgent = userAgent
         self.apiVersion = apiVersion
+    }
+
+    func fetchViewerLogin(accessToken: String) async throws -> String {
+        let url = URL(string: "https://api.github.com/user")!
+        let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+        let response: ViewerResponse = try await perform(request)
+        return response.login
     }
 
     func fetchRepositories(accessToken: String) async throws -> [GitHubRepository] {
@@ -164,6 +208,111 @@ final class GitHubAPIService: GitHubAPIServicing {
         return repositories
     }
 
+    func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var issues: [GitHubIssue] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/issues")!
+            components.queryItems = [
+                URLQueryItem(name: "state", value: "all"),
+                URLQueryItem(name: "sort", value: "updated"),
+                URLQueryItem(name: "direction", value: "desc"),
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [IssueListResponse] = try await perform(request)
+
+            let pageIssues: [GitHubIssue] = response.compactMap { item in
+                guard item.pullRequest == nil else {
+                    return nil
+                }
+
+                return GitHubIssue(
+                    id: "\(repositoryFullName)-issue-\(item.number)",
+                    number: item.number,
+                    title: item.title,
+                    body: item.body ?? "",
+                    authorLogin: item.user.login,
+                    updatedAt: iso8601Formatter.date(from: item.updatedAt),
+                    comments: max(0, item.comments),
+                    isOpen: item.state.lowercased() == "open",
+                    labels: item.labels.map {
+                        GitHubIssueLabel(
+                            id: "\(repositoryFullName)-issue-label-\($0.id)",
+                            name: $0.name
+                        )
+                    }
+                )
+            }
+
+            issues.append(contentsOf: pageIssues)
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return issues
+    }
+
+    func fetchIssueComments(
+        accessToken: String,
+        repositoryFullName: String,
+        issueNumber: Int
+    ) async throws -> [GitHubIssueComment] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var comments: [GitHubIssueComment] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(
+                string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNumber)/comments"
+            )!
+            components.queryItems = [
+                URLQueryItem(name: "sort", value: "updated"),
+                URLQueryItem(name: "direction", value: "asc"),
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [IssueCommentResponse] = try await perform(request)
+
+            comments.append(
+                contentsOf: response.map {
+                    GitHubIssueComment(
+                        id: "\(repositoryFullName)-issue-comment-\($0.id)",
+                        authorLogin: $0.user.login,
+                        body: $0.body,
+                        updatedAt: iso8601Formatter.date(from: $0.updatedAt)
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return comments
+    }
+
     func createIssue(
         accessToken: String,
         repositoryFullName: String,
@@ -195,6 +344,36 @@ final class GitHubAPIService: GitHubAPIServicing {
             number: response.number,
             title: response.title,
             htmlURL: URL(string: response.htmlURL)
+        )
+    }
+
+    func createIssueComment(
+        accessToken: String,
+        repositoryFullName: String,
+        issueNumber: Int,
+        body: String
+    ) async throws -> GitHubIssueComment {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+
+        let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBody.isEmpty else {
+            throw GitHubAPIError.invalidParameters("Comment body is required.")
+        }
+
+        let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/issues/\(issueNumber)/comments")!
+        let request = try makeJSONRequest(
+            url: url,
+            method: "POST",
+            accessToken: accessToken,
+            jsonBody: ["body": trimmedBody]
+        )
+        let response: IssueCommentResponse = try await perform(request)
+
+        return GitHubIssueComment(
+            id: "\(repositoryFullName)-issue-comment-\(response.id)",
+            authorLogin: response.user.login,
+            body: response.body,
+            updatedAt: iso8601Formatter.date(from: response.updatedAt)
         )
     }
 
@@ -456,6 +635,45 @@ private struct RepositoryResponse: Decodable {
     }
 }
 
+private struct ViewerResponse: Decodable {
+    let login: String
+}
+
+private struct IssueListResponse: Decodable {
+    struct User: Decodable {
+        let login: String
+    }
+
+    struct Label: Decodable {
+        let id: Int64
+        let name: String
+    }
+
+    struct PullRequestRef: Decodable {}
+
+    let number: Int
+    let title: String
+    let body: String?
+    let user: User
+    let updatedAt: String
+    let comments: Int
+    let state: String
+    let labels: [Label]
+    let pullRequest: PullRequestRef?
+
+    enum CodingKeys: String, CodingKey {
+        case number
+        case title
+        case body
+        case user
+        case updatedAt = "updated_at"
+        case comments
+        case state
+        case labels
+        case pullRequest = "pull_request"
+    }
+}
+
 private struct IssueResponse: Decodable {
     let number: Int
     let title: String
@@ -465,6 +683,24 @@ private struct IssueResponse: Decodable {
         case number
         case title
         case htmlURL = "html_url"
+    }
+}
+
+private struct IssueCommentResponse: Decodable {
+    struct User: Decodable {
+        let login: String
+    }
+
+    let id: Int64
+    let body: String
+    let user: User
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case body
+        case user
+        case updatedAt = "updated_at"
     }
 }
 
