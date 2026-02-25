@@ -545,21 +545,6 @@ struct SettingsView: View {
                             }
                         }
 
-                        githubSectionCard {
-                            githubRepositoriesSection
-                        }
-
-                        githubSectionCard {
-                            githubIssueSection
-                        }
-
-                        githubSectionCard {
-                            githubPullRequestSection
-                        }
-
-                        githubSectionCard {
-                            githubCommitSection
-                        }
                     } else {
                         githubSectionCard {
                             Button {
@@ -644,18 +629,6 @@ struct SettingsView: View {
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(Color.red.opacity(0.85))
                         }
-
-                        if let githubActionStatusMessage = viewModel.githubActionStatusMessage {
-                            Text(githubActionStatusMessage)
-                                .font(.system(size: 12, weight: .medium, design: .rounded))
-                                .foregroundStyle(secondaryTextColor)
-                        }
-
-                        if let githubActionErrorMessage = viewModel.githubActionErrorMessage {
-                            Text(githubActionErrorMessage)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color.red.opacity(0.85))
-                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -706,65 +679,6 @@ struct SettingsView: View {
         .disabled(isDisabled)
     }
 
-    private var githubRepositoriesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Repositories")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(primaryTextColor)
-
-            HStack(spacing: 10) {
-                githubSecondaryButton("Load Repositories", isDisabled: viewModel.isGitHubLoadingRepositories) {
-                    Task {
-                        await viewModel.loadGitHubRepositories()
-                    }
-                }
-
-                if viewModel.isGitHubLoadingRepositories {
-                    ProgressView()
-                        .controlSize(.small)
-                }
-
-                Spacer()
-            }
-
-            TextField("Target repository (owner/repo)", text: $viewModel.githubTargetRepository)
-                .textFieldStyle(.roundedBorder)
-
-            if !viewModel.githubRepositorySuggestions.isEmpty {
-                Menu {
-                    ForEach(viewModel.githubRepositorySuggestions, id: \.self) { repository in
-                        Button(repository) {
-                            viewModel.githubTargetRepository = repository
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text("Use loaded repository")
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(githubSecondaryButtonTextColor)
-                    .padding(.horizontal, 12)
-                    .frame(height: 34)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(githubSecondaryButtonFillColor)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(githubSecondaryButtonStrokeColor, lineWidth: 1)
-                            )
-                    )
-                }
-                .menuStyle(.borderlessButton)
-
-                Text("Loaded \(viewModel.githubRepositorySuggestions.count) repositories.")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
-                    .foregroundStyle(tertiaryTextColor)
-            }
-        }
-    }
-
     private var githubLocalRepositoriesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Local Repositories Folder")
@@ -810,124 +724,6 @@ struct SettingsView: View {
                     viewModel.clearLocalRepositoriesRoot()
                 }
             }
-        }
-    }
-
-    private var githubIssueSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Create Issue")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(primaryTextColor)
-
-            TextField("Issue title", text: $viewModel.githubIssueTitle)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Issue body (optional)", text: $viewModel.githubIssueBody)
-                .textFieldStyle(.roundedBorder)
-
-            Button {
-                Task {
-                    await viewModel.createGitHubIssue()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    if viewModel.isGitHubCreatingIssue {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Text(viewModel.isGitHubCreatingIssue ? "Creating Issue..." : "Create Issue")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(githubPrimaryButtonTint)
-            .disabled(viewModel.isGitHubCreatingIssue || viewModel.githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-    }
-
-    private var githubPullRequestSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Create Pull Request")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(primaryTextColor)
-
-            TextField("Pull request title", text: $viewModel.githubPRTitle)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Head branch (ex: feature/my-branch)", text: $viewModel.githubPRHead)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Base branch (ex: main)", text: $viewModel.githubPRBase)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Pull request body (optional)", text: $viewModel.githubPRBody)
-                .textFieldStyle(.roundedBorder)
-
-            Button {
-                Task {
-                    await viewModel.createGitHubPullRequest()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    if viewModel.isGitHubCreatingPR {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Text(viewModel.isGitHubCreatingPR ? "Creating PR..." : "Create Pull Request")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(githubPrimaryButtonTint)
-            .disabled(viewModel.isGitHubCreatingPR || viewModel.githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-    }
-
-    private var githubCommitSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Commit File")
-                .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundStyle(primaryTextColor)
-
-            TextField("File path (ex: docs/notes.md)", text: $viewModel.githubCommitPath)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Commit message", text: $viewModel.githubCommitMessage)
-                .textFieldStyle(.roundedBorder)
-
-            TextField("Branch (ex: main)", text: $viewModel.githubCommitBranch)
-                .textFieldStyle(.roundedBorder)
-
-            TextEditor(text: $viewModel.githubCommitContent)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .frame(minHeight: 100, maxHeight: 100)
-                .padding(6)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(cardFillColor)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(cardStrokeColor, lineWidth: 1)
-                        )
-                )
-
-            Button {
-                Task {
-                    await viewModel.commitGitHubFile()
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    if viewModel.isGitHubCommittingFile {
-                        ProgressView()
-                            .controlSize(.small)
-                    }
-                    Text(viewModel.isGitHubCommittingFile ? "Committing..." : "Commit File")
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                }
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(githubPrimaryButtonTint)
-            .disabled(viewModel.isGitHubCommittingFile || viewModel.githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
     }
 
