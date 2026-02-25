@@ -126,6 +126,10 @@ final class RepositoryViewModel: ObservableObject {
         contributionCountsByDateKey.values.reduce(0, +)
     }
 
+    var isPrimaryPanelRefreshing: Bool {
+        isLoadingRepositories || isLoadingContributionCalendar
+    }
+
     func reloadPanelData() async {
         await reloadRepositories()
         await reloadContributionCalendar()

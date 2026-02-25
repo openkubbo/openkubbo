@@ -268,6 +268,16 @@ struct RepositoryPanelView: View {
                 .buttonStyle(.plain)
                 .repoCursorOnHover()
 
+                Button(action: refreshPrimaryPanel) {
+                    RepoHeaderIcon(
+                        symbol: viewModel.isPrimaryPanelRefreshing ? "arrow.triangle.2.circlepath.circle.fill" : "arrow.clockwise",
+                        isDarkTheme: isDarkTheme
+                    )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .disabled(viewModel.isPrimaryPanelRefreshing)
+
                 Button(action: closeWindow) {
                     RepoHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
                 }
@@ -2533,6 +2543,12 @@ struct RepositoryPanelView: View {
     private func openSettingsWindow() {
         openWindow(id: "settings")
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func refreshPrimaryPanel() {
+        Task {
+            await viewModel.reloadPanelData()
+        }
     }
 
     private func openDetailPanel(_ destination: RepoDetailDestination) {
