@@ -625,6 +625,7 @@ struct RepositoryPanelView: View {
     private func issuesOverlayPanel(for repo: RepoItem) -> some View {
         let issues = viewModel.filteredIssues(for: repo)
         let selectedIssue = viewModel.selectedIssue(for: repo)
+        let isComposerVisible = viewModel.isIssueComposerVisible
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
@@ -673,14 +674,150 @@ struct RepositoryPanelView: View {
                     }
                 }
             }
-            .allowsHitTesting(selectedIssue == nil)
+            .allowsHitTesting(selectedIssue == nil && !isComposerVisible)
 
-            if let selectedIssue {
+            if isComposerVisible {
+                issueComposerOverlayPanel(for: repo)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            } else if let selectedIssue {
                 issueDetailsOverlayPanel(for: selectedIssue, in: repo)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.18), value: selectedIssue?.id)
+        .animation(
+            .easeInOut(duration: 0.18),
+            value: "\(selectedIssue?.id ?? "none")-\(isComposerVisible ? "composer" : "list")"
+        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private func issueComposerOverlayPanel(for repo: RepoItem) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: closeIssueComposer) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                        .background(
+                            Circle()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Circle()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+
+                Text("Create Issue")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .lineLimit(1)
+
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Title")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                TextField("Issue title", text: $viewModel.issueDraftTitle)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(actionCardFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(actionCardStrokeColor, lineWidth: 1)
+                            )
+                    )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Description")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                TextField("Issue description (optional)", text: $viewModel.issueDraftBody, axis: .vertical)
+                    .lineLimit(5...10)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(actionCardFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(actionCardStrokeColor, lineWidth: 1)
+                            )
+                    )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Spacer(minLength: 0)
+
+                Button(action: {
+                    createIssue(in: repo)
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("Create Issue")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundStyle(.white.opacity(0.95))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(accentColor)
+                            .overlay(
+                                Capsule()
+                                    .stroke(accentColor.opacity(0.6), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .disabled(!viewModel.canCreateIssue)
+                .opacity(viewModel.canCreateIssue ? 1 : 0.55)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+        }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1642,7 +1779,9 @@ struct RepositoryPanelView: View {
 
     private var newIssueButton: some View {
         Button {
-            // TODO: Connect with GitHub issue creation flow.
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.openIssueComposer()
+            }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus")
@@ -2207,6 +2346,18 @@ struct RepositoryPanelView: View {
     private func closeIssueDetails() {
         withAnimation(.easeInOut(duration: 0.18)) {
             viewModel.closeIssueDetails()
+        }
+    }
+
+    private func closeIssueComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.closeIssueComposer()
+        }
+    }
+
+    private func createIssue(in repo: RepoItem) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            viewModel.createIssue(in: repo)
         }
     }
 

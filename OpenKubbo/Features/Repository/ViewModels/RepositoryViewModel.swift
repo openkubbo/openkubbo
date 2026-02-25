@@ -31,6 +31,9 @@ final class RepositoryViewModel: ObservableObject {
         didSet {
             selectedDetailDestination = nil
             selectedIssueID = nil
+            isIssueComposerVisible = false
+            issueDraftTitle = ""
+            issueDraftBody = ""
             issueCommentDraft = ""
             selectedPullRequestID = nil
             selectedBranchID = nil
@@ -43,6 +46,9 @@ final class RepositoryViewModel: ObservableObject {
     @Published var selectedDetailDestination: RepoDetailDestination?
     @Published var selectedIssuesScope: RepoIssuesScope = .open
     @Published var selectedIssueID: String?
+    @Published var isIssueComposerVisible = false
+    @Published var issueDraftTitle = ""
+    @Published var issueDraftBody = ""
     @Published var issueCommentDraft = ""
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
@@ -57,6 +63,7 @@ final class RepositoryViewModel: ObservableObject {
     private let localActionService: RepositoryLocalActionServicing
     private let gitHubTokenStore: GitHubTokenStoring
     private var hasUserCustomizedPins = false
+    private var createdIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
     private var issueCommentItemsByIssueID: [String: [RepoIssueCommentItem]] = [:]
 
     init(
@@ -95,6 +102,10 @@ final class RepositoryViewModel: ObservableObject {
 
     var canSubmitIssueComment: Bool {
         !trimmedIssueCommentDraft.isEmpty
+    }
+
+    var canCreateIssue: Bool {
+        !trimmedIssueDraftTitle.isEmpty
     }
 
     func reloadRepositories() async {
@@ -150,6 +161,9 @@ final class RepositoryViewModel: ObservableObject {
     func closeRepositorySelection() {
         selectedDetailDestination = nil
         selectedIssueID = nil
+        isIssueComposerVisible = false
+        issueDraftTitle = ""
+        issueDraftBody = ""
         issueCommentDraft = ""
         selectedPullRequestID = nil
         selectedBranchID = nil
@@ -163,8 +177,14 @@ final class RepositoryViewModel: ObservableObject {
         if destination == .issues {
             selectedIssuesScope = .open
             selectedIssueID = nil
+            isIssueComposerVisible = false
+            issueDraftTitle = ""
+            issueDraftBody = ""
             issueCommentDraft = ""
         } else {
+            isIssueComposerVisible = false
+            issueDraftTitle = ""
+            issueDraftBody = ""
             issueCommentDraft = ""
         }
         if destination == .pullRequests {
@@ -184,6 +204,9 @@ final class RepositoryViewModel: ObservableObject {
     func closeDetailPanel() {
         selectedDetailDestination = nil
         selectedIssueID = nil
+        isIssueComposerVisible = false
+        issueDraftTitle = ""
+        issueDraftBody = ""
         issueCommentDraft = ""
         selectedPullRequestID = nil
         selectedBranchID = nil
@@ -195,11 +218,14 @@ final class RepositoryViewModel: ObservableObject {
     func selectIssuesScope(_ scope: RepoIssuesScope) {
         selectedIssuesScope = scope
         selectedIssueID = nil
+        isIssueComposerVisible = false
         issueCommentDraft = ""
     }
 
     func filteredIssues(for repo: RepoItem) -> [RepoIssueItem] {
-        let issues = dataProvider.loadIssues(for: repo).map(resolveIssueComments)
+        let baseIssues = dataProvider.loadIssues(for: repo).map(resolveIssueComments)
+        let createdIssues = createdIssuesByRepositoryID[repo.id, default: []].map(resolveIssueComments)
+        let issues = createdIssues + baseIssues
 
         switch selectedIssuesScope {
         case .all:
@@ -215,6 +241,7 @@ final class RepositoryViewModel: ObservableObject {
 
     func selectIssue(_ issue: RepoIssueItem) {
         selectedIssueID = issue.id
+        isIssueComposerVisible = false
         issueCommentDraft = ""
     }
 
@@ -226,6 +253,55 @@ final class RepositoryViewModel: ObservableObject {
     func selectedIssue(for repo: RepoItem) -> RepoIssueItem? {
         guard let selectedIssueID else { return nil }
         return filteredIssues(for: repo).first(where: { $0.id == selectedIssueID })
+    }
+
+    func openIssueComposer() {
+        selectedIssueID = nil
+        issueCommentDraft = ""
+        issueDraftTitle = ""
+        issueDraftBody = ""
+        isIssueComposerVisible = true
+    }
+
+    func closeIssueComposer() {
+        isIssueComposerVisible = false
+        issueDraftTitle = ""
+        issueDraftBody = ""
+    }
+
+    func createIssue(in repo: RepoItem) {
+        let title = trimmedIssueDraftTitle
+        guard !title.isEmpty else { return }
+
+        let description = trimmedIssueDraftBody
+        let currentIssues = dataProvider.loadIssues(for: repo)
+        let createdIssues = createdIssuesByRepositoryID[repo.id, default: []]
+        let nextNumber = (currentIssues + createdIssues).map(\.number).max() ?? 0
+
+        let createdIssue = RepoIssueItem(
+            id: "\(repo.id)-local-issue-\(UUID().uuidString)",
+            number: nextNumber + 1,
+            title: title,
+            body: description.isEmpty ? "No description provided." : description,
+            labels: [],
+            author: "you",
+            updatedAgo: "just now",
+            comments: 0,
+            commentItems: [],
+            isOpen: true,
+            isMine: true
+        )
+
+        var updatedIssues = createdIssues
+        updatedIssues.insert(createdIssue, at: 0)
+        createdIssuesByRepositoryID[repo.id] = updatedIssues
+
+        selectedIssuesScope = .open
+        selectedIssueID = createdIssue.id
+        issueCommentDraft = ""
+        issueDraftTitle = ""
+        issueDraftBody = ""
+        isIssueComposerVisible = false
     }
 
     func addIssueComment(to issue: RepoIssueItem) {
@@ -472,6 +548,14 @@ final class RepositoryViewModel: ObservableObject {
 
     private var trimmedIssueCommentDraft: String {
         issueCommentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedIssueDraftTitle: String {
+        issueDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedIssueDraftBody: String {
+        issueDraftBody.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func resolveIssueComments(_ issue: RepoIssueItem) -> RepoIssueItem {
