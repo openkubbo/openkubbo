@@ -549,7 +549,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             isPinned: index < 5,
             isWork: repository.isPrivate,
             releases: metric("\(repository.fullName)-releases", min: 0, max: 28),
-            ciRuns: metric("\(repository.fullName)-ci", min: 8, max: 3200),
+            ciRuns: 0,
             discussions: metric("\(repository.fullName)-discussions", min: 0, max: 22),
             tags: metric("\(repository.fullName)-tags", min: 0, max: 34),
             branches: metric("\(repository.fullName)-branches", min: 1, max: 12),

@@ -1136,7 +1136,8 @@ final class RepositoryViewModel: ObservableObject {
             return
         }
 
-        if !forceReload, loadedCIRunsByRepositoryID[repo.id] != nil {
+        if !forceReload, let cachedCIRuns = loadedCIRunsByRepositoryID[repo.id] {
+            updateCIRunsMetricCount(for: repo.id, count: cachedCIRuns.count)
             return
         }
 
@@ -1150,6 +1151,7 @@ final class RepositoryViewModel: ObservableObject {
             let ciRuns = try await dataProvider.loadCIRuns(for: repo)
             loadedCIRunsByRepositoryID[repo.id] = ciRuns
             ciRunsLoadErrorMessageByRepositoryID[repo.id] = nil
+            updateCIRunsMetricCount(for: repo.id, count: ciRuns.count)
 
             if let selectedDestinationInfoItemID,
                !ciRuns.contains(where: { $0.id == selectedDestinationInfoItemID }),
@@ -1277,6 +1279,15 @@ final class RepositoryViewModel: ObservableObject {
             isOpen: issue.isOpen,
             isMine: issue.isMine
         )
+    }
+
+    private func updateCIRunsMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(ciRuns: count)
+        }
     }
 
     private func pruneIssuesCache(for repositories: [RepoItem]) {

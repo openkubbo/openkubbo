@@ -490,6 +490,32 @@ struct RepoItem: Identifiable, Equatable {
     let openCommits: Int
 }
 
+extension RepoItem {
+    func updating(ciRuns: Int) -> RepoItem {
+        RepoItem(
+            id: id,
+            name: name,
+            sshCloneURL: sshCloneURL,
+            httpsCloneURL: httpsCloneURL,
+            visibility: visibility,
+            issues: issues,
+            prs: prs,
+            stars: stars,
+            branch: branch,
+            updatedAgo: updatedAgo,
+            isPinned: isPinned,
+            isWork: isWork,
+            releases: releases,
+            ciRuns: max(0, ciRuns),
+            discussions: discussions,
+            tags: tags,
+            branches: branches,
+            contributors: contributors,
+            openCommits: openCommits
+        )
+    }
+}
+
 struct RepoMetric: Identifiable {
     let id: String
     let icon: String
