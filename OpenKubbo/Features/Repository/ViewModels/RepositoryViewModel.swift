@@ -38,6 +38,7 @@ final class RepositoryViewModel: ObservableObject {
             issueDraftBody = ""
             issueCommentDraft = ""
             issueBranchDraftName = ""
+            isIssueBranchComposerVisible = false
             selectedPullRequestID = nil
             selectedBranchID = nil
             selectedDestinationInfoItemID = nil
@@ -63,6 +64,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published var issueDraftBody = ""
     @Published var issueCommentDraft = ""
     @Published var issueBranchDraftName = ""
+    @Published var isIssueBranchComposerVisible = false
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
     @Published var selectedBranchID: String?
@@ -228,6 +230,7 @@ final class RepositoryViewModel: ObservableObject {
         issueDraftBody = ""
         issueCommentDraft = ""
         issueBranchDraftName = ""
+        isIssueBranchComposerVisible = false
         isIssueCommentsLoading = false
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
@@ -248,6 +251,7 @@ final class RepositoryViewModel: ObservableObject {
             issueDraftBody = ""
             issueCommentDraft = ""
             issueBranchDraftName = ""
+            isIssueBranchComposerVisible = false
             issueActionErrorMessage = nil
             issueActionStatusMessage = nil
         } else {
@@ -256,6 +260,7 @@ final class RepositoryViewModel: ObservableObject {
             issueDraftBody = ""
             issueCommentDraft = ""
             issueBranchDraftName = ""
+            isIssueBranchComposerVisible = false
         }
         if destination == .pullRequests {
             selectedPullRequestsScope = .open
@@ -290,6 +295,7 @@ final class RepositoryViewModel: ObservableObject {
         issueDraftBody = ""
         issueCommentDraft = ""
         issueBranchDraftName = ""
+        isIssueBranchComposerVisible = false
         isIssueCommentsLoading = false
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
@@ -306,6 +312,7 @@ final class RepositoryViewModel: ObservableObject {
         isIssueComposerVisible = false
         issueCommentDraft = ""
         issueBranchDraftName = ""
+        isIssueBranchComposerVisible = false
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
     }
@@ -345,7 +352,8 @@ final class RepositoryViewModel: ObservableObject {
         selectedIssueID = issue.id
         isIssueComposerVisible = false
         issueCommentDraft = ""
-        issueBranchDraftName = defaultIssueBranchName(for: issue)
+        issueBranchDraftName = ""
+        isIssueBranchComposerVisible = false
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
 
@@ -359,6 +367,7 @@ final class RepositoryViewModel: ObservableObject {
         selectedIssueID = nil
         issueCommentDraft = ""
         issueBranchDraftName = ""
+        isIssueBranchComposerVisible = false
         isIssueCommentsLoading = false
     }
 
@@ -371,6 +380,7 @@ final class RepositoryViewModel: ObservableObject {
         selectedIssueID = nil
         issueCommentDraft = ""
         issueBranchDraftName = ""
+        isIssueBranchComposerVisible = false
         issueDraftTitle = ""
         issueDraftBody = ""
         isIssueCommentsLoading = false
@@ -409,7 +419,8 @@ final class RepositoryViewModel: ObservableObject {
             selectedIssuesScope = .open
             selectedIssueID = createdIssue.id
             issueCommentDraft = ""
-            issueBranchDraftName = defaultIssueBranchName(for: createdIssue)
+            issueBranchDraftName = ""
+            isIssueBranchComposerVisible = false
             issueDraftTitle = ""
             issueDraftBody = ""
             isIssueComposerVisible = false
@@ -447,6 +458,7 @@ final class RepositoryViewModel: ObservableObject {
 
     func createBranchFromIssue(_ issue: RepoIssueItem, in repo: RepoItem) async {
         guard !isIssueBranchCreating else { return }
+        guard issueBranches(for: issue, in: repo).isEmpty else { return }
 
         isIssueBranchCreating = true
         issueActionErrorMessage = nil
@@ -462,6 +474,7 @@ final class RepositoryViewModel: ObservableObject {
                 branchName: requestedBranchName
             )
             issueBranchDraftName = branchName
+            isIssueBranchComposerVisible = false
             markBranchAsOptimistic(named: branchName, in: repo)
             upsertBranch(named: branchName, in: repo)
             registerBranchLink(named: branchName, for: issue, in: repo)
@@ -504,12 +517,14 @@ final class RepositoryViewModel: ObservableObject {
                 selectedIssueID = nil
                 issueCommentDraft = ""
                 issueBranchDraftName = ""
+                isIssueBranchComposerVisible = false
                 return
             }
 
             selectedIssueID = refreshedIssue.id
-            if issueBranchDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                issueBranchDraftName = defaultIssueBranchName(for: refreshedIssue)
+            if !issueBranches(for: refreshedIssue, in: repo).isEmpty {
+                isIssueBranchComposerVisible = false
+                issueBranchDraftName = ""
             }
             await loadIssueComments(for: refreshedIssue, in: repo, forceReload: true)
         } catch {
@@ -530,6 +545,20 @@ final class RepositoryViewModel: ObservableObject {
         if trimmed.isEmpty {
             issueBranchDraftName = defaultIssueBranchName(for: issue)
         }
+    }
+
+    func openIssueBranchComposer(for issue: RepoIssueItem, in repo: RepoItem) {
+        guard issue.isOpen else { return }
+        guard issueBranches(for: issue, in: repo).isEmpty else { return }
+        prepareIssueBranchDraft(for: issue)
+        isIssueBranchComposerVisible = true
+        issueActionErrorMessage = nil
+        issueActionStatusMessage = nil
+    }
+
+    func closeIssueBranchComposer() {
+        isIssueBranchComposerVisible = false
+        issueBranchDraftName = ""
     }
 
     func selectPullRequestsScope(_ scope: RepoPullRequestsScope) {

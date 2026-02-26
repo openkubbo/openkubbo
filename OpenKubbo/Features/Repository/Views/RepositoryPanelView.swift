@@ -913,6 +913,8 @@ struct RepositoryPanelView: View {
         let isLoadingComments = viewModel.isLoadingIssueComments(for: issue)
         let isRefreshingIssue = viewModel.isRefreshingIssue(issue)
         let issueBranches = viewModel.issueBranches(for: issue, in: repo)
+        let canCreateBranch = issue.isOpen && issueBranches.isEmpty
+        let isBranchComposerVisible = canCreateBranch && viewModel.isIssueBranchComposerVisible
 
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -940,30 +942,12 @@ struct RepositoryPanelView: View {
 
                 Spacer()
 
-                Button {
-                    Task {
-                        await createIssueBranch(from: issue, in: repo)
-                    }
-                } label: {
-                    if viewModel.isIssueBranchCreating {
-                        HStack(spacing: 6) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Creating...")
+                if canCreateBranch {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            viewModel.openIssueBranchComposer(for: issue, in: repo)
                         }
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(secondaryTextColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule()
-                                .fill(actionCardFillColor)
-                                .overlay(
-                                    Capsule()
-                                        .stroke(actionCardStrokeColor, lineWidth: 1)
-                                )
-                        )
-                    } else {
+                    } label: {
                         Text("Create Branch")
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
@@ -978,12 +962,12 @@ struct RepositoryPanelView: View {
                                     )
                             )
                     }
+                    .buttonStyle(.plain)
+                    .repoCursorOnHover()
+                    .help("Create branch from this issue")
+                    .disabled(viewModel.isIssueBranchCreating)
+                    .opacity(viewModel.isIssueBranchCreating ? 0.7 : 1)
                 }
-                .buttonStyle(.plain)
-                .repoCursorOnHover()
-                .help("Create branch from this issue")
-                .disabled(viewModel.isIssueBranchCreating || !issue.isOpen)
-                .opacity((viewModel.isIssueBranchCreating || !issue.isOpen) ? 0.7 : 1)
 
                 Button {
                     Task {
@@ -1070,25 +1054,6 @@ struct RepositoryPanelView: View {
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    Text("Branch name")
-                        .font(.system(size: 11, weight: .bold, design: .rounded))
-                        .foregroundStyle(secondaryTextColor)
-
-                    TextField("issue/\(issue.number)-short-description", text: $viewModel.issueBranchDraftName)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(primaryTextColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(actionCardFillColor)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .stroke(actionCardStrokeColor, lineWidth: 1)
-                                )
-                        )
-
                     if !issueBranches.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text(issueBranches.count == 1 ? "Linked branch" : "Linked branches")
@@ -1103,6 +1068,80 @@ struct RepositoryPanelView: View {
                                 }
                                 .padding(.vertical, 2)
                             }
+                        }
+                    } else if isBranchComposerVisible {
+                        Text("Branch name")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+
+                        TextField("issue/\(issue.number)-short-description", text: $viewModel.issueBranchDraftName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(primaryTextColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+
+                        HStack(spacing: 8) {
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.18)) {
+                                    viewModel.closeIssueBranchComposer()
+                                }
+                            } label: {
+                                Text("Cancel")
+                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(actionCardFillColor)
+                                            .overlay(
+                                                Capsule()
+                                                    .stroke(actionCardStrokeColor, lineWidth: 1)
+                                            )
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .repoCursorOnHover()
+
+                            Button {
+                                Task {
+                                    await createIssueBranch(from: issue, in: repo)
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    if viewModel.isIssueBranchCreating {
+                                        ProgressView()
+                                            .controlSize(.small)
+                                            .tint(.white.opacity(0.95))
+                                    }
+                                    Text(viewModel.isIssueBranchCreating ? "Creating..." : "Create Branch")
+                                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                }
+                                .foregroundStyle(.white.opacity(0.95))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(accentColor)
+                                        .overlay(
+                                            Capsule()
+                                                .stroke(accentColor.opacity(0.6), lineWidth: 1)
+                                        )
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .repoCursorOnHover()
+                            .disabled(viewModel.isIssueBranchCreating)
+                            .opacity(viewModel.isIssueBranchCreating ? 0.7 : 1)
                         }
                     }
 
@@ -1232,9 +1271,6 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .onAppear {
-            viewModel.prepareIssueBranchDraft(for: issue)
-        }
     }
 
     private func pullRequestsOverlayPanel(for repo: RepoItem) -> some View {
