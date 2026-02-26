@@ -912,6 +912,7 @@ struct RepositoryPanelView: View {
     private func issueDetailsOverlayPanel(for issue: RepoIssueItem, in repo: RepoItem) -> some View {
         let isLoadingComments = viewModel.isLoadingIssueComments(for: issue)
         let isRefreshingIssue = viewModel.isRefreshingIssue(issue)
+        let issueBranches = viewModel.issueBranches(for: issue, in: repo)
 
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -945,27 +946,34 @@ struct RepositoryPanelView: View {
                     }
                 } label: {
                     if viewModel.isIssueBranchCreating {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 28, height: 28)
-                            .background(
-                                Circle()
-                                    .fill(actionCardFillColor)
-                                    .overlay(
-                                        Circle()
-                                            .stroke(actionCardStrokeColor, lineWidth: 1)
-                                    )
-                            )
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Creating...")
+                        }
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(
+                            Capsule()
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
                     } else {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 13, weight: .semibold))
+                        Text("Create Branch")
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
-                            .frame(width: 28, height: 28)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
                             .background(
-                                Circle()
+                                Capsule()
                                     .fill(actionCardFillColor)
                                     .overlay(
-                                        Circle()
+                                        Capsule()
                                             .stroke(actionCardStrokeColor, lineWidth: 1)
                                     )
                             )
@@ -1061,6 +1069,42 @@ struct RepositoryPanelView: View {
                     Text("#\(issue.number) \(issue.author) \(issue.updatedAgo)")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
+
+                    Text("Branch name")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    TextField("issue/\(issue.number)-short-description", text: $viewModel.issueBranchDraftName)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(primaryTextColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(actionCardFillColor)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                                )
+                        )
+
+                    if !issueBranches.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(issueBranches.count == 1 ? "Linked branch" : "Linked branches")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 6) {
+                                    ForEach(issueBranches, id: \.self) { branchName in
+                                        issueBranchTag(title: branchName)
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                    }
 
                     Rectangle()
                         .fill(dividerColor)
@@ -1188,6 +1232,9 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+        .onAppear {
+            viewModel.prepareIssueBranchDraft(for: issue)
+        }
     }
 
     private func pullRequestsOverlayPanel(for repo: RepoItem) -> some View {
@@ -2399,7 +2446,9 @@ struct RepositoryPanelView: View {
         isSelected: Bool,
         showDivider: Bool
     ) -> some View {
-        Button {
+        let issueBranches = viewModel.issueBranches(for: issue, in: repo)
+
+        return Button {
             withAnimation(.easeInOut(duration: 0.18)) {
                 viewModel.selectIssue(issue, in: repo)
             }
@@ -2443,6 +2492,18 @@ struct RepositoryPanelView: View {
                     Text("#\(issue.number) \(issue.author) \(issue.updatedAgo)")
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
+
+                    if !issueBranches.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 6) {
+                                ForEach(issueBranches, id: \.self) { branchName in
+                                    issueBranchTag(title: branchName)
+                                }
+                            }
+                            .padding(.vertical, 1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 13)
@@ -2460,6 +2521,27 @@ struct RepositoryPanelView: View {
         }
         .buttonStyle(.plain)
         .repoCursorOnHover()
+    }
+
+    private func issueBranchTag(title: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.triangle.branch")
+                .font(.system(size: 9, weight: .semibold))
+            Text(title)
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .lineLimit(1)
+        }
+        .foregroundStyle(secondaryTextColor)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(
+            Capsule()
+                .fill(actionCardFillColor)
+                .overlay(
+                    Capsule()
+                        .stroke(actionCardStrokeColor, lineWidth: 1)
+                )
+        )
     }
 
     private func issueLabelPill(_ label: RepoIssueLabel) -> some View {

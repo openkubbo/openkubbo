@@ -37,6 +37,7 @@ final class RepositoryViewModel: ObservableObject {
             issueDraftTitle = ""
             issueDraftBody = ""
             issueCommentDraft = ""
+            issueBranchDraftName = ""
             selectedPullRequestID = nil
             selectedBranchID = nil
             selectedDestinationInfoItemID = nil
@@ -61,6 +62,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published var issueDraftTitle = ""
     @Published var issueDraftBody = ""
     @Published var issueCommentDraft = ""
+    @Published var issueBranchDraftName = ""
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
     @Published var selectedBranchID: String?
@@ -74,12 +76,14 @@ final class RepositoryViewModel: ObservableObject {
     private let localActionService: RepositoryLocalActionServicing
     private let gitHubTokenStore: GitHubTokenStoring
     private var hasUserCustomizedPins = false
+    private var optimisticBranchNamesByRepositoryID: [String: Set<String>] = [:]
     @Published private(set) var loadedIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
     @Published private(set) var issuesLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var issuesLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var loadedBranchesByRepositoryID: [String: [RepoBranchItem]] = [:]
     @Published private(set) var branchesLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var branchesLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
 
     init(
         dataProvider: RepositoryDataProviding,
@@ -160,6 +164,8 @@ final class RepositoryViewModel: ObservableObject {
             loadedBranchesByRepositoryID = [:]
             branchesLoadingRepositoryIDs = []
             branchesLoadErrorMessageByRepositoryID = [:]
+            issueBranchNamesByIssueKey = [:]
+            optimisticBranchNamesByRepositoryID = [:]
             closeRepositorySelection()
             repositoryLoadErrorMessage = repositoryErrorDescription(error)
         }
@@ -221,6 +227,7 @@ final class RepositoryViewModel: ObservableObject {
         issueDraftTitle = ""
         issueDraftBody = ""
         issueCommentDraft = ""
+        issueBranchDraftName = ""
         isIssueCommentsLoading = false
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
@@ -240,6 +247,7 @@ final class RepositoryViewModel: ObservableObject {
             issueDraftTitle = ""
             issueDraftBody = ""
             issueCommentDraft = ""
+            issueBranchDraftName = ""
             issueActionErrorMessage = nil
             issueActionStatusMessage = nil
         } else {
@@ -247,6 +255,7 @@ final class RepositoryViewModel: ObservableObject {
             issueDraftTitle = ""
             issueDraftBody = ""
             issueCommentDraft = ""
+            issueBranchDraftName = ""
         }
         if destination == .pullRequests {
             selectedPullRequestsScope = .open
@@ -263,6 +272,7 @@ final class RepositoryViewModel: ObservableObject {
 
         if destination == .issues, let repo = selectedRepo {
             Task { [weak self] in
+                await self?.loadBranchesIfNeeded(for: repo)
                 await self?.loadIssuesIfNeeded(for: repo)
             }
         } else if destination == .branches, let repo = selectedRepo {
@@ -279,6 +289,7 @@ final class RepositoryViewModel: ObservableObject {
         issueDraftTitle = ""
         issueDraftBody = ""
         issueCommentDraft = ""
+        issueBranchDraftName = ""
         isIssueCommentsLoading = false
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
@@ -294,6 +305,7 @@ final class RepositoryViewModel: ObservableObject {
         selectedIssueID = nil
         isIssueComposerVisible = false
         issueCommentDraft = ""
+        issueBranchDraftName = ""
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
     }
@@ -333,10 +345,12 @@ final class RepositoryViewModel: ObservableObject {
         selectedIssueID = issue.id
         isIssueComposerVisible = false
         issueCommentDraft = ""
+        issueBranchDraftName = defaultIssueBranchName(for: issue)
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
 
         Task { [weak self] in
+            await self?.loadBranchesIfNeeded(for: repo)
             await self?.refreshIssue(issue, in: repo)
         }
     }
@@ -344,6 +358,7 @@ final class RepositoryViewModel: ObservableObject {
     func closeIssueDetails() {
         selectedIssueID = nil
         issueCommentDraft = ""
+        issueBranchDraftName = ""
         isIssueCommentsLoading = false
     }
 
@@ -355,6 +370,7 @@ final class RepositoryViewModel: ObservableObject {
     func openIssueComposer() {
         selectedIssueID = nil
         issueCommentDraft = ""
+        issueBranchDraftName = ""
         issueDraftTitle = ""
         issueDraftBody = ""
         isIssueCommentsLoading = false
@@ -393,6 +409,7 @@ final class RepositoryViewModel: ObservableObject {
             selectedIssuesScope = .open
             selectedIssueID = createdIssue.id
             issueCommentDraft = ""
+            issueBranchDraftName = defaultIssueBranchName(for: createdIssue)
             issueDraftTitle = ""
             issueDraftBody = ""
             isIssueComposerVisible = false
@@ -438,7 +455,16 @@ final class RepositoryViewModel: ObservableObject {
         defer { isIssueBranchCreating = false }
 
         do {
-            let branchName = try await dataProvider.createBranch(from: issue, in: repo)
+            let requestedBranchName = normalizedIssueBranchNameInput(issueBranchDraftName, for: issue)
+            let branchName = try await dataProvider.createBranch(
+                from: issue,
+                in: repo,
+                branchName: requestedBranchName
+            )
+            issueBranchDraftName = branchName
+            markBranchAsOptimistic(named: branchName, in: repo)
+            upsertBranch(named: branchName, in: repo)
+            registerBranchLink(named: branchName, for: issue, in: repo)
             issueActionStatusMessage = "Branch \(branchName) created from issue #\(issue.number)."
             await reloadBranches(for: repo)
         } catch {
@@ -471,18 +497,38 @@ final class RepositoryViewModel: ObservableObject {
         do {
             let issues = try await dataProvider.loadIssues(for: repo)
             loadedIssuesByRepositoryID[repo.id] = issues
+            synchronizeIssueBranchLinks(for: repo)
             issuesLoadErrorMessageByRepositoryID[repo.id] = nil
 
             guard let refreshedIssue = issues.first(where: { $0.id == issue.id }) else {
                 selectedIssueID = nil
                 issueCommentDraft = ""
+                issueBranchDraftName = ""
                 return
             }
 
             selectedIssueID = refreshedIssue.id
+            if issueBranchDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                issueBranchDraftName = defaultIssueBranchName(for: refreshedIssue)
+            }
             await loadIssueComments(for: refreshedIssue, in: repo, forceReload: true)
         } catch {
             issueActionErrorMessage = repositoryErrorDescription(error)
+        }
+    }
+
+    func issueBranches(for issue: RepoIssueItem, in repo: RepoItem) -> [String] {
+        let key = issueBranchKey(issue: issue, in: repo)
+        let linked = issueBranchNamesByIssueKey[key] ?? []
+        return linked.sorted { lhs, rhs in
+            lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
+    }
+
+    func prepareIssueBranchDraft(for issue: RepoIssueItem) {
+        let trimmed = issueBranchDraftName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            issueBranchDraftName = defaultIssueBranchName(for: issue)
         }
     }
 
@@ -720,6 +766,7 @@ final class RepositoryViewModel: ObservableObject {
         do {
             let issues = try await dataProvider.loadIssues(for: repo)
             loadedIssuesByRepositoryID[repo.id] = issues
+            synchronizeIssueBranchLinks(for: repo)
             issuesLoadErrorMessageByRepositoryID[repo.id] = nil
 
             if let selectedIssueID,
@@ -753,6 +800,8 @@ final class RepositoryViewModel: ObservableObject {
         do {
             let branches = try await dataProvider.loadBranches(for: repo)
             loadedBranchesByRepositoryID[repo.id] = branches
+            preserveOptimisticBranches(in: repo)
+            synchronizeIssueBranchLinks(for: repo)
             branchesLoadErrorMessageByRepositoryID[repo.id] = nil
 
             if let selectedBranchID,
@@ -887,6 +936,12 @@ final class RepositoryViewModel: ObservableObject {
         branchesLoadErrorMessageByRepositoryID = branchesLoadErrorMessageByRepositoryID.filter {
             validRepositoryIDs.contains($0.key)
         }
+        issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in
+            validRepositoryIDs.contains(issueRepositoryID(fromIssueBranchKey: key))
+        }
+        optimisticBranchNamesByRepositoryID = optimisticBranchNamesByRepositoryID.filter { key, _ in
+            validRepositoryIDs.contains(key)
+        }
     }
 
     private func synchronizeSelectedRepo() {
@@ -912,6 +967,150 @@ final class RepositoryViewModel: ObservableObject {
         }
 
         pinnedRepositoryIDs = Set(repositories.filter(\.isPinned).map(\.id))
+    }
+
+    private func defaultIssueBranchName(for issue: RepoIssueItem) -> String {
+        let normalized = issue.title
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        let suffix = normalized.isEmpty ? "issue" : normalized
+        return "issue/\(issue.number)-\(suffix)"
+    }
+
+    private func normalizedIssueBranchNameInput(_ value: String, for issue: RepoIssueItem) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return defaultIssueBranchName(for: issue)
+        }
+
+        let collapsedWhitespace = trimmed.replacingOccurrences(
+            of: "\\s+",
+            with: "-",
+            options: .regularExpression
+        )
+        let normalizedSeparators = collapsedWhitespace.replacingOccurrences(
+            of: "-+",
+            with: "-",
+            options: .regularExpression
+        )
+        let sanitized = normalizedSeparators.trimmingCharacters(in: CharacterSet(charactersIn: "-/"))
+        return sanitized.isEmpty ? defaultIssueBranchName(for: issue) : sanitized
+    }
+
+    private func upsertBranch(named branchName: String, in repo: RepoItem) {
+        var branches = loadedBranchesByRepositoryID[repo.id, default: []]
+        guard !branches.contains(where: { $0.name == branchName }) else { return }
+
+        let newBranch = RepoBranchItem(
+            id: "\(repo.id)-branch-\(branchName)",
+            name: branchName,
+            isDefault: false,
+            isCurrent: false,
+            aheadBy: 1,
+            behindBy: 0,
+            hasOpenPullRequest: false,
+            updatedAgo: "just now"
+        )
+
+        if let defaultIndex = branches.firstIndex(where: { $0.isDefault }) {
+            branches.insert(newBranch, at: min(defaultIndex + 1, branches.count))
+        } else {
+            branches.insert(newBranch, at: 0)
+        }
+
+        loadedBranchesByRepositoryID[repo.id] = branches
+    }
+
+    private func markBranchAsOptimistic(named branchName: String, in repo: RepoItem) {
+        var optimisticNames = optimisticBranchNamesByRepositoryID[repo.id, default: []]
+        optimisticNames.insert(branchName)
+        optimisticBranchNamesByRepositoryID[repo.id] = optimisticNames
+    }
+
+    private func preserveOptimisticBranches(in repo: RepoItem) {
+        let optimisticNames = optimisticBranchNamesByRepositoryID[repo.id, default: []]
+        guard !optimisticNames.isEmpty else { return }
+
+        let loadedNames = Set(loadedBranchesByRepositoryID[repo.id, default: []].map(\.name))
+        let unresolvedNames = optimisticNames.subtracting(loadedNames)
+
+        if unresolvedNames.isEmpty {
+            optimisticBranchNamesByRepositoryID.removeValue(forKey: repo.id)
+            return
+        }
+
+        for unresolvedName in unresolvedNames {
+            upsertBranch(named: unresolvedName, in: repo)
+        }
+
+        optimisticBranchNamesByRepositoryID[repo.id] = unresolvedNames
+    }
+
+    private func registerBranchLink(named branchName: String, for issue: RepoIssueItem, in repo: RepoItem) {
+        let key = issueBranchKey(issue: issue, in: repo)
+        var linked = Set(issueBranchNamesByIssueKey[key] ?? [])
+        linked.insert(branchName)
+        issueBranchNamesByIssueKey[key] = linked.sorted()
+    }
+
+    private func synchronizeIssueBranchLinks(for repo: RepoItem) {
+        let issues = loadedIssuesByRepositoryID[repo.id, default: []]
+        let branchNames = loadedBranchesByRepositoryID[repo.id, default: []].map(\.name)
+        let branchNameSet = Set(branchNames)
+        let validIssueKeys = Set(issues.map { issueBranchKey(issue: $0, in: repo) })
+
+        issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in
+            guard issueRepositoryID(fromIssueBranchKey: key) == repo.id else {
+                return true
+            }
+            return validIssueKeys.contains(key)
+        }
+
+        for issue in issues {
+            let key = issueBranchKey(issue: issue, in: repo)
+            var linked = Set(issueBranchNamesByIssueKey[key] ?? [])
+            linked = linked.intersection(branchNameSet)
+
+            for branchName in branchNames where isBranchName(branchName, linkedToIssueNumber: issue.number) {
+                linked.insert(branchName)
+            }
+
+            if linked.isEmpty {
+                issueBranchNamesByIssueKey.removeValue(forKey: key)
+            } else {
+                issueBranchNamesByIssueKey[key] = linked.sorted()
+            }
+        }
+    }
+
+    private func isBranchName(_ branchName: String, linkedToIssueNumber issueNumber: Int) -> Bool {
+        let lowercased = branchName.lowercased()
+        let normalized = lowercased.replacingOccurrences(of: "_", with: "-")
+        let issueNumberToken = "\(issueNumber)"
+
+        if normalized == "issue/\(issueNumberToken)" || normalized.hasPrefix("issue/\(issueNumberToken)-") {
+            return true
+        }
+        if normalized == "issue-\(issueNumberToken)" || normalized.hasPrefix("issue-\(issueNumberToken)-") {
+            return true
+        }
+        if normalized.hasPrefix("issues/\(issueNumberToken)-") || normalized.hasPrefix("issues-\(issueNumberToken)-") {
+            return true
+        }
+        return false
+    }
+
+    private func issueBranchKey(issue: RepoIssueItem, in repo: RepoItem) -> String {
+        "\(repo.id)#\(issue.number)"
+    }
+
+    private func issueRepositoryID(fromIssueBranchKey key: String) -> String {
+        guard let separatorIndex = key.lastIndex(of: "#") else {
+            return key
+        }
+        return String(key[..<separatorIndex])
     }
 
     private func repositoryErrorDescription(_ error: Error) -> String {

@@ -20,7 +20,8 @@ protocol RepositoryDataProviding {
     ) async throws -> RepoIssueCommentItem
     func createBranch(
         from issue: RepoIssueItem,
-        in repository: RepoItem
+        in repository: RepoItem,
+        branchName: String
     ) async throws -> String
     func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem]
     func loadPullRequestCommits(
@@ -366,8 +367,15 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
 
     func createBranch(
         from issue: RepoIssueItem,
-        in repository: RepoItem
+        in repository: RepoItem,
+        branchName: String
     ) async throws -> String {
+        _ = repository
+        let trimmed = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+
         let normalized = issue.title
             .lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)

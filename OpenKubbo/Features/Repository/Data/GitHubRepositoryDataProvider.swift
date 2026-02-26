@@ -122,7 +122,8 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
 
     func createBranch(
         from issue: RepoIssueItem,
-        in repository: RepoItem
+        in repository: RepoItem,
+        branchName: String
     ) async throws -> String {
         let token = try accessToken()
         let fetchedBranches = try await gitHubAPIService.fetchBranches(
@@ -135,11 +136,14 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             throw GitHubAPIError.invalidParameters("Base branch not found for this repository.")
         }
 
-        let branchName = issueBranchName(for: issue)
+        let normalizedRequestedBranchName = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedBranchName = normalizedRequestedBranchName.isEmpty
+            ? issueBranchName(for: issue)
+            : normalizedRequestedBranchName
         let createdBranch = try await gitHubAPIService.createBranch(
             accessToken: token,
             repositoryFullName: repository.name,
-            branchName: branchName,
+            branchName: resolvedBranchName,
             fromCommitSHA: baseBranch.commitSHA
         )
         return createdBranch.name
