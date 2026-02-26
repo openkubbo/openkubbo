@@ -550,7 +550,10 @@ struct RepositoryPanelView: View {
     }
 
     private func branchStatusSection(for repo: RepoItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let localCurrentBranch = viewModel.localCurrentBranch(for: repo)
+        let displayedBranch = localCurrentBranch ?? repo.branch
+
+        return VStack(alignment: .leading, spacing: 8) {
             Rectangle()
                 .fill(dividerColor)
                 .frame(height: 1)
@@ -560,7 +563,7 @@ struct RepositoryPanelView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(primaryTextColor)
 
-                Text(repo.branch)
+                Text(displayedBranch)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(primaryTextColor)
 
@@ -572,6 +575,12 @@ struct RepositoryPanelView: View {
             Text("Upstream origin/\(repo.branch) - Fetched 1 min. ago")
                 .font(.system(size: 12, weight: .medium, design: .rounded))
                 .foregroundStyle(secondaryTextColor)
+
+            if let localCurrentBranch {
+                Text("Current local branch: \(localCurrentBranch)")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+            }
 
             HStack(spacing: 12) {
                 secondaryPillButton(icon: "arrow.clockwise", title: "Sync") {}

@@ -37,6 +37,7 @@ protocol RepositoryLocalActionServicing {
     func openInFinder(at localURL: URL) throws
     func openInTerminal(at localURL: URL) throws
     func checkoutBranch(named branchName: String, at localURL: URL) throws
+    func currentBranchName(at localURL: URL) throws -> String?
     func cloneRepository(
         sshCloneURL: String?,
         httpsCloneURL: String?,
@@ -196,6 +197,68 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
             }
 
             throw RepositoryLocalActionError.commandFailed("Unable to checkout branch '\(trimmedBranchName)'.")
+        }
+    }
+
+    func currentBranchName(at localURL: URL) throws -> String? {
+        try ensureDirectory(at: localURL)
+
+        let gitExecutablePaths = availableGitExecutablePaths()
+        guard !gitExecutablePaths.isEmpty else {
+            throw RepositoryLocalActionError.gitNotAvailable
+        }
+
+        return try withSecurityScopedAccess(to: localURL) {
+            var hasSandboxBlockedGit = false
+
+            for executablePath in gitExecutablePaths {
+                let symbolicRefResult = try runProcessSyncWithOutput(
+                    executablePath: executablePath,
+                    arguments: ["symbolic-ref", "--short", "HEAD"],
+                    currentDirectoryURL: localURL
+                )
+
+                if isSandboxBlockedXcrunError(stderr: symbolicRefResult.stderr, stdout: symbolicRefResult.stdout) {
+                    hasSandboxBlockedGit = true
+                    continue
+                }
+
+                let symbolicBranch = normalizedCommandOutput(
+                    stderr: symbolicRefResult.stderr,
+                    stdout: symbolicRefResult.stdout
+                )
+                if symbolicRefResult.exitCode == 0, !symbolicBranch.isEmpty {
+                    return symbolicBranch
+                }
+
+                let revParseResult = try runProcessSyncWithOutput(
+                    executablePath: executablePath,
+                    arguments: ["rev-parse", "--abbrev-ref", "HEAD"],
+                    currentDirectoryURL: localURL
+                )
+
+                if isSandboxBlockedXcrunError(stderr: revParseResult.stderr, stdout: revParseResult.stdout) {
+                    hasSandboxBlockedGit = true
+                    continue
+                }
+
+                if revParseResult.exitCode != 0 {
+                    continue
+                }
+
+                let parsedBranch = normalizedCommandOutput(stderr: revParseResult.stderr, stdout: revParseResult.stdout)
+                if parsedBranch.isEmpty || parsedBranch == "HEAD" {
+                    continue
+                }
+
+                return parsedBranch
+            }
+
+            if hasSandboxBlockedGit {
+                throw RepositoryLocalActionError.gitBlockedBySandbox
+            }
+
+            return nil
         }
     }
 

@@ -88,6 +88,7 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var branchesLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var branchesLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
+    @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
 
     init(
         dataProvider: RepositoryDataProviding,
@@ -170,6 +171,7 @@ final class RepositoryViewModel: ObservableObject {
             branchesLoadErrorMessageByRepositoryID = [:]
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
+            localCurrentBranchByRepositoryID = [:]
             closeRepositorySelection()
             repositoryLoadErrorMessage = repositoryErrorDescription(error)
         }
@@ -202,6 +204,7 @@ final class RepositoryViewModel: ObservableObject {
 
     func selectRepository(_ repo: RepoItem) {
         selectedRepoID = repo.id
+        refreshLocalCurrentBranch(for: repo)
     }
 
     func repository(withID repositoryID: String) -> RepoItem? {
@@ -611,10 +614,12 @@ final class RepositoryViewModel: ObservableObject {
 
     func loadBranchesIfNeeded(for repo: RepoItem) async {
         await loadBranches(for: repo, forceReload: false)
+        refreshLocalCurrentBranch(for: repo)
     }
 
     func reloadBranches(for repo: RepoItem) async {
         await loadBranches(for: repo, forceReload: true)
+        refreshLocalCurrentBranch(for: repo)
     }
 
     func isLoadingBranches(for repo: RepoItem) -> Bool {
@@ -628,6 +633,10 @@ final class RepositoryViewModel: ObservableObject {
     func selectedBranch(for repo: RepoItem) -> RepoBranchItem? {
         guard let selectedBranchID else { return nil }
         return branches(for: repo).first(where: { $0.id == selectedBranchID })
+    }
+
+    func localCurrentBranch(for repo: RepoItem) -> String? {
+        localCurrentBranchByRepositoryID[repo.id]
     }
 
     func selectBranch(_ branch: RepoBranchItem) {
@@ -738,7 +747,7 @@ final class RepositoryViewModel: ObservableObject {
                     into: rootURL,
                     directoryName: directoryName
                 )
-
+                refreshLocalCurrentBranch(for: repo)
                 return .cloned(localPath: destinationURL.path)
             }
         } catch {
@@ -770,6 +779,7 @@ final class RepositoryViewModel: ObservableObject {
                         try localActionService.openInTerminal(at: localURL)
                     }
                 }
+                refreshLocalCurrentBranch(for: repo)
                 return .opened
             }
         } catch {
@@ -846,6 +856,9 @@ final class RepositoryViewModel: ObservableObject {
             loadedBranchesByRepositoryID[repo.id] = branches
             preserveOptimisticBranches(in: repo)
             synchronizeIssueBranchLinks(for: repo)
+            if let localBranch = localCurrentBranchByRepositoryID[repo.id] {
+                markCurrentBranch(named: localBranch, in: repo)
+            }
             branchesLoadErrorMessageByRepositoryID[repo.id] = nil
 
             if let selectedBranchID,
@@ -986,6 +999,9 @@ final class RepositoryViewModel: ObservableObject {
         optimisticBranchNamesByRepositoryID = optimisticBranchNamesByRepositoryID.filter { key, _ in
             validRepositoryIDs.contains(key)
         }
+        localCurrentBranchByRepositoryID = localCurrentBranchByRepositoryID.filter { key, _ in
+            validRepositoryIDs.contains(key)
+        }
     }
 
     private func synchronizeSelectedRepo() {
@@ -1065,6 +1081,61 @@ final class RepositoryViewModel: ObservableObject {
         }
 
         loadedBranchesByRepositoryID[repo.id] = branches
+    }
+
+    private func markCurrentBranch(named branchName: String, in repo: RepoItem) {
+        let trimmedBranchName = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBranchName.isEmpty else { return }
+
+        var branches = loadedBranchesByRepositoryID[repo.id, default: []]
+        guard branches.contains(where: { $0.name == trimmedBranchName }) else { return }
+
+        branches = branches.map { branch in
+            RepoBranchItem(
+                id: branch.id,
+                name: branch.name,
+                isDefault: branch.isDefault,
+                isCurrent: branch.name == trimmedBranchName,
+                aheadBy: branch.aheadBy,
+                behindBy: branch.behindBy,
+                hasOpenPullRequest: branch.hasOpenPullRequest,
+                updatedAgo: branch.updatedAgo
+            )
+        }
+
+        loadedBranchesByRepositoryID[repo.id] = branches
+    }
+
+    private func refreshLocalCurrentBranch(for repo: RepoItem) {
+        do {
+            let rootURL = try localRootProvider.currentRootURL()
+            let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
+
+            switch localMatch {
+            case .rootNotConfigured, .missing:
+                localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
+            case .matched(let localURL):
+                let localBranchName = try withRootAccess(rootURL: rootURL) {
+                    try localActionService.currentBranchName(at: localURL)
+                }
+
+                guard let localBranchName else {
+                    localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
+                    return
+                }
+
+                let trimmedLocalBranch = localBranchName.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedLocalBranch.isEmpty else {
+                    localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
+                    return
+                }
+
+                localCurrentBranchByRepositoryID[repo.id] = trimmedLocalBranch
+                markCurrentBranch(named: trimmedLocalBranch, in: repo)
+            }
+        } catch {
+            localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
+        }
     }
 
     private func markBranchAsOptimistic(named branchName: String, in repo: RepoItem) {
