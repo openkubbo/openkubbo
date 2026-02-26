@@ -228,22 +228,31 @@ final class GitHubAPIService: GitHubAPIServicing {
             let response: [PullRequestListResponse] = try await perform(request)
 
             pullRequests.append(
-                contentsOf: response.map { item in
-                    GitHubPullRequest(
-                        id: "\(repositoryFullName)-pr-\(item.number)",
-                        number: item.number,
-                        title: item.title,
+                contentsOf: response.compactMap { item in
+                    guard let number = item.number,
+                          let title = item.title,
+                          !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        return nil
+                    }
+
+                    return GitHubPullRequest(
+                        id: "\(repositoryFullName)-pr-\(number)",
+                        number: number,
+                        title: title,
                         body: item.body ?? "",
-                        authorLogin: item.user.login,
-                        sourceBranch: item.head.ref,
-                        targetBranch: item.base.ref,
-                        updatedAt: iso8601Formatter.date(from: item.updatedAt),
-                        comments: max(0, item.comments),
+                        authorLogin: item.user?.login ?? "unknown",
+                        sourceBranch: item.head?.ref ?? "unknown",
+                        targetBranch: item.base?.ref ?? "unknown",
+                        updatedAt: {
+                            guard let updatedAt = item.updatedAt else { return nil }
+                            return iso8601Formatter.date(from: updatedAt)
+                        }(),
+                        comments: max(0, item.comments ?? 0),
                         changedFiles: max(0, item.changedFiles ?? 0),
                         commits: max(0, item.commits ?? 0),
                         additions: max(0, item.additions ?? 0),
                         deletions: max(0, item.deletions ?? 0),
-                        isOpen: item.state.lowercased() == "open",
+                        isOpen: (item.state ?? "").lowercased() == "open",
                         isMerged: item.mergedAt != nil
                     )
                 }
@@ -285,14 +294,20 @@ final class GitHubAPIService: GitHubAPIServicing {
             let response: [PullRequestCommitResponse] = try await perform(request)
 
             commits.append(
-                contentsOf: response.map { item in
-                    GitHubPullRequestCommit(
-                        id: "\(repositoryFullName)-pr-\(pullRequestNumber)-commit-\(item.sha)",
-                        sha: item.sha,
-                        message: item.commit.message,
-                        authorLogin: item.author?.login ?? item.commit.author?.name ?? "unknown",
+                contentsOf: response.compactMap { item in
+                    guard let sha = item.sha,
+                          let message = item.commit?.message,
+                          !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                        return nil
+                    }
+
+                    return GitHubPullRequestCommit(
+                        id: "\(repositoryFullName)-pr-\(pullRequestNumber)-commit-\(sha)",
+                        sha: sha,
+                        message: message,
+                        authorLogin: item.author?.login ?? item.commit?.author?.name ?? "unknown",
                         committedAt: {
-                            guard let date = item.commit.author?.date else { return nil }
+                            guard let date = item.commit?.author?.date else { return nil }
                             return iso8601Formatter.date(from: date)
                         }()
                     )
@@ -861,26 +876,26 @@ private struct PullRequestResponse: Decodable {
 
 private struct PullRequestListResponse: Decodable {
     struct User: Decodable {
-        let login: String
+        let login: String?
     }
 
     struct BranchRef: Decodable {
-        let ref: String
+        let ref: String?
     }
 
-    let number: Int
-    let title: String
+    let number: Int?
+    let title: String?
     let body: String?
-    let user: User
-    let head: BranchRef
-    let base: BranchRef
-    let updatedAt: String
-    let comments: Int
+    let user: User?
+    let head: BranchRef?
+    let base: BranchRef?
+    let updatedAt: String?
+    let comments: Int?
     let changedFiles: Int?
     let commits: Int?
     let additions: Int?
     let deletions: Int?
-    let state: String
+    let state: String?
     let mergedAt: String?
 
     enum CodingKeys: String, CodingKey {
@@ -903,7 +918,7 @@ private struct PullRequestListResponse: Decodable {
 
 private struct PullRequestCommitResponse: Decodable {
     struct User: Decodable {
-        let login: String
+        let login: String?
     }
 
     struct Commit: Decodable {
@@ -912,13 +927,13 @@ private struct PullRequestCommitResponse: Decodable {
             let date: String?
         }
 
-        let message: String
+        let message: String?
         let author: Author?
     }
 
-    let sha: String
+    let sha: String?
     let author: User?
-    let commit: Commit
+    let commit: Commit?
 }
 
 private struct FileContentResponse: Decodable {
