@@ -28,9 +28,34 @@ struct RepositoryPanelView: View {
     private var isDetailsVisible: Bool { viewModel.isDetailsVisible }
     private var selectedDetailDestination: RepoDetailDestination? { viewModel.selectedDetailDestination }
 
-    private enum PendingLocalAction: String {
+    private enum PendingLocalAction {
         case finder
         case terminal
+        case checkout(branchName: String)
+        case terminalOnBranch(branchName: String)
+
+        var key: String {
+            switch self {
+            case .finder:
+                return "finder"
+            case .terminal:
+                return "terminal"
+            case .checkout(let branchName):
+                return "checkout-\(Self.sanitized(branchName))"
+            case .terminalOnBranch(let branchName):
+                return "terminal-\(Self.sanitized(branchName))"
+            }
+        }
+
+        private static func sanitized(_ value: String) -> String {
+            let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+            let mappedScalars = value.unicodeScalars.map { scalar in
+                allowed.contains(scalar) ? Character(scalar) : "-"
+            }
+            return String(mappedScalars)
+                .replacingOccurrences(of: "-+", with: "-", options: .regularExpression)
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        }
     }
 
     private struct PendingCloneRequest: Identifiable {
@@ -40,7 +65,7 @@ struct RepositoryPanelView: View {
         let action: PendingLocalAction
 
         var id: String {
-            "\(repoID)-\(action.rawValue)"
+            "\(repoID)-\(action.key)"
         }
     }
 
@@ -1718,8 +1743,12 @@ struct RepositoryPanelView: View {
                 .frame(height: 1)
 
             VStack(alignment: .leading, spacing: 10) {
-                detailNavigationRow(icon: "arrow.triangle.branch", title: "Checkout Branch") {}
-                detailNavigationRow(icon: "terminal", title: "Open in Terminal") {}
+                detailNavigationRow(icon: "arrow.triangle.branch", title: "Checkout Branch") {
+                    handleLocalAction(for: repo, action: .checkout(branchName: branch.name))
+                }
+                detailNavigationRow(icon: "terminal", title: "Open in Terminal") {
+                    handleLocalAction(for: repo, action: .terminalOnBranch(branchName: branch.name))
+                }
 
                 Button {
                     openPullRequestComposer(from: branch, in: repo)
@@ -2800,6 +2829,22 @@ struct RepositoryPanelView: View {
             result = viewModel.openInFinder(for: repo)
         case .terminal:
             result = viewModel.openInTerminal(for: repo)
+        case .checkout(let branchName):
+            guard let branch = viewModel.branches(for: repo).first(where: { $0.name == branchName }) else {
+                localActionAlertState = LocalActionAlertState(
+                    kind: .failed("Branch '\(branchName)' is not available anymore.")
+                )
+                return
+            }
+            result = viewModel.checkoutBranch(branch, in: repo)
+        case .terminalOnBranch(let branchName):
+            guard let branch = viewModel.branches(for: repo).first(where: { $0.name == branchName }) else {
+                localActionAlertState = LocalActionAlertState(
+                    kind: .failed("Branch '\(branchName)' is not available anymore.")
+                )
+                return
+            }
+            result = viewModel.openInTerminal(for: repo, on: branch)
         }
 
         handleLocalActionResult(result, for: repo, action: action)

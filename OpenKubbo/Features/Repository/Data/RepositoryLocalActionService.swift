@@ -8,6 +8,7 @@ enum RepositoryLocalActionError: LocalizedError {
     case destinationNotDirectory(String)
     case gitNotAvailable
     case gitBlockedBySandbox
+    case checkoutBlockedByLocalChanges
     case commandFailed(String)
 
     var errorDescription: String? {
@@ -24,6 +25,8 @@ enum RepositoryLocalActionError: LocalizedError {
             return "Git is not available in common system locations."
         case .gitBlockedBySandbox:
             return "Git clone is blocked by App Sandbox for the available Git binary. Install Git via Homebrew (for example /opt/homebrew/bin/git) and try again."
+        case .checkoutBlockedByLocalChanges:
+            return "Cannot switch branch because this repository has local uncommitted changes. Commit, stash, or discard your changes, then try again."
         case .commandFailed(let message):
             return message
         }
@@ -33,6 +36,7 @@ enum RepositoryLocalActionError: LocalizedError {
 protocol RepositoryLocalActionServicing {
     func openInFinder(at localURL: URL) throws
     func openInTerminal(at localURL: URL) throws
+    func checkoutBranch(named branchName: String, at localURL: URL) throws
     func cloneRepository(
         sshCloneURL: String?,
         httpsCloneURL: String?,
@@ -44,6 +48,11 @@ protocol RepositoryLocalActionServicing {
 
 struct RepositoryLocalActionService: RepositoryLocalActionServicing {
     private let fileManager: FileManager
+    private enum CheckoutBranchResult {
+        case success
+        case sandboxBlocked
+        case failed(String)
+    }
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -70,6 +79,123 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
             if terminalStatus != 0 {
                 throw RepositoryLocalActionError.commandFailed("Unable to open Terminal at local repository path.")
             }
+        }
+    }
+
+    func checkoutBranch(named branchName: String, at localURL: URL) throws {
+        try ensureDirectory(at: localURL)
+
+        let trimmedBranchName = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBranchName.isEmpty else {
+            throw RepositoryLocalActionError.commandFailed("Branch name is empty.")
+        }
+
+        let gitExecutablePaths = availableGitExecutablePaths()
+        guard !gitExecutablePaths.isEmpty else {
+            throw RepositoryLocalActionError.gitNotAvailable
+        }
+
+        try withSecurityScopedAccess(to: localURL) {
+            var hasSandboxBlockedGit = false
+
+            for executablePath in gitExecutablePaths {
+                let localBranchRef = "refs/heads/\(trimmedBranchName)"
+                let localBranchProbe = try runProcessSyncWithOutput(
+                    executablePath: executablePath,
+                    arguments: ["show-ref", "--verify", "--quiet", localBranchRef],
+                    currentDirectoryURL: localURL
+                )
+
+                if isSandboxBlockedXcrunError(stderr: localBranchProbe.stderr, stdout: localBranchProbe.stdout) {
+                    hasSandboxBlockedGit = true
+                    continue
+                }
+
+                let probeFailure = normalizedCommandOutput(
+                    stderr: localBranchProbe.stderr,
+                    stdout: localBranchProbe.stdout
+                )
+                if localBranchProbe.exitCode != 0 && localBranchProbe.exitCode != 1 && !probeFailure.isEmpty {
+                    throw RepositoryLocalActionError.commandFailed(probeFailure)
+                }
+
+                if localBranchProbe.exitCode == 0 {
+                    let localCheckout = try attemptCheckoutBranch(
+                        named: trimmedBranchName,
+                        using: executablePath,
+                        in: localURL,
+                        attempts: [
+                            ["switch", trimmedBranchName],
+                            ["checkout", trimmedBranchName]
+                        ],
+                        allowExistingBranchRecovery: false
+                    )
+
+                    switch localCheckout {
+                    case .success:
+                        return
+                    case .sandboxBlocked:
+                        hasSandboxBlockedGit = true
+                        continue
+                    case .failed(let message):
+                        if isCheckoutBlockedByLocalChanges(message) {
+                            throw RepositoryLocalActionError.checkoutBlockedByLocalChanges
+                        }
+                        throw RepositoryLocalActionError.commandFailed(message)
+                    }
+                }
+
+                let fetchResult = try runProcessSyncWithOutput(
+                    executablePath: executablePath,
+                    arguments: ["fetch", "--quiet", "origin", trimmedBranchName],
+                    currentDirectoryURL: localURL
+                )
+
+                if isSandboxBlockedXcrunError(stderr: fetchResult.stderr, stdout: fetchResult.stdout) {
+                    hasSandboxBlockedGit = true
+                    continue
+                }
+
+                if fetchResult.exitCode != 0 {
+                    let failure = normalizedCommandOutput(stderr: fetchResult.stderr, stdout: fetchResult.stdout)
+                    throw RepositoryLocalActionError.commandFailed(
+                        failure.isEmpty ? "Unable to fetch branch '\(trimmedBranchName)' from origin." : failure
+                    )
+                }
+
+                let remoteCheckout = try attemptCheckoutBranch(
+                    named: trimmedBranchName,
+                    using: executablePath,
+                    in: localURL,
+                    attempts: [
+                        ["switch", "--track", "origin/\(trimmedBranchName)"],
+                        ["checkout", "--track", "-b", trimmedBranchName, "origin/\(trimmedBranchName)"],
+                        ["checkout", "-t", "origin/\(trimmedBranchName)"],
+                        ["switch", trimmedBranchName],
+                        ["checkout", trimmedBranchName]
+                    ],
+                    allowExistingBranchRecovery: true
+                )
+
+                switch remoteCheckout {
+                case .success:
+                    return
+                case .sandboxBlocked:
+                    hasSandboxBlockedGit = true
+                    continue
+                case .failed(let message):
+                    if isCheckoutBlockedByLocalChanges(message) {
+                        throw RepositoryLocalActionError.checkoutBlockedByLocalChanges
+                    }
+                    throw RepositoryLocalActionError.commandFailed(message)
+                }
+            }
+
+            if hasSandboxBlockedGit {
+                throw RepositoryLocalActionError.gitBlockedBySandbox
+            }
+
+            throw RepositoryLocalActionError.commandFailed("Unable to checkout branch '\(trimmedBranchName)'.")
         }
     }
 
@@ -311,6 +437,118 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         } catch {
             throw RepositoryLocalActionError.commandFailed("Failed to execute local command.")
         }
+    }
+
+    private func runProcessSyncWithOutput(
+        executablePath: String,
+        arguments: [String],
+        currentDirectoryURL: URL?
+    ) throws -> (exitCode: Int32, stdout: String, stderr: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectoryURL
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+            let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+
+            return (process.terminationStatus, stdout, stderr)
+        } catch {
+            throw RepositoryLocalActionError.commandFailed("Failed to execute local command.")
+        }
+    }
+
+    private func normalizedCommandOutput(stderr: String, stdout: String) -> String {
+        let trimmedError = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedError.isEmpty {
+            return trimmedError
+        }
+        return stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func attemptCheckoutBranch(
+        named branchName: String,
+        using executablePath: String,
+        in localURL: URL,
+        attempts: [[String]],
+        allowExistingBranchRecovery: Bool
+    ) throws -> CheckoutBranchResult {
+        var lastFailureMessage: String?
+
+        for arguments in attempts {
+            let result = try runProcessSyncWithOutput(
+                executablePath: executablePath,
+                arguments: arguments,
+                currentDirectoryURL: localURL
+            )
+
+            if result.exitCode == 0 {
+                return .success
+            }
+
+            if isSandboxBlockedXcrunError(stderr: result.stderr, stdout: result.stdout) {
+                return .sandboxBlocked
+            }
+
+            let failure = normalizedCommandOutput(stderr: result.stderr, stdout: result.stdout)
+            if failure.isEmpty {
+                continue
+            }
+
+            if isCheckoutBlockedByLocalChanges(failure) {
+                return .failed(failure)
+            }
+
+            if allowExistingBranchRecovery && isBranchAlreadyExistsError(failure, branchName: branchName) {
+                let recovery = try runProcessSyncWithOutput(
+                    executablePath: executablePath,
+                    arguments: ["checkout", branchName],
+                    currentDirectoryURL: localURL
+                )
+
+                if recovery.exitCode == 0 {
+                    return .success
+                }
+
+                if isSandboxBlockedXcrunError(stderr: recovery.stderr, stdout: recovery.stdout) {
+                    return .sandboxBlocked
+                }
+
+                let recoveryFailure = normalizedCommandOutput(stderr: recovery.stderr, stdout: recovery.stdout)
+                if !recoveryFailure.isEmpty {
+                    return .failed(recoveryFailure)
+                }
+            }
+
+            lastFailureMessage = failure
+        }
+
+        return .failed(lastFailureMessage ?? "Unable to checkout branch '\(branchName)'.")
+    }
+
+    private func isBranchAlreadyExistsError(_ message: String, branchName: String) -> Bool {
+        let lowercasedMessage = message.lowercased()
+        let lowercasedBranchName = branchName.lowercased()
+        return lowercasedMessage.contains("a branch named '\(lowercasedBranchName)' already exists")
+            || lowercasedMessage.contains("branch '\(lowercasedBranchName)' already exists")
+            || lowercasedMessage.contains("already exists")
+    }
+
+    private func isCheckoutBlockedByLocalChanges(_ message: String) -> Bool {
+        let lowercasedMessage = message.lowercased()
+        return lowercasedMessage.contains("would be overwritten by checkout")
+            || lowercasedMessage.contains("please commit your changes or stash them before you switch branches")
     }
 
     private func runProcess(

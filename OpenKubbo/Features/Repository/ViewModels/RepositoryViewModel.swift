@@ -4,6 +4,8 @@ import Foundation
 enum RepositoryLocalActionKind {
     case finder
     case terminal
+    case checkout(branchName: String)
+    case terminalOnBranch(branchName: String)
 }
 
 enum RepositoryLocalActionResult {
@@ -707,6 +709,14 @@ final class RepositoryViewModel: ObservableObject {
         performLocalAction(.terminal, for: repo)
     }
 
+    func checkoutBranch(_ branch: RepoBranchItem, in repo: RepoItem) -> RepositoryLocalActionResult {
+        performLocalAction(.checkout(branchName: branch.name), for: repo)
+    }
+
+    func openInTerminal(for repo: RepoItem, on branch: RepoBranchItem) -> RepositoryLocalActionResult {
+        performLocalAction(.terminalOnBranch(branchName: branch.name), for: repo)
+    }
+
     func cloneLocalRepository(for repo: RepoItem) async -> RepositoryLocalActionResult {
         do {
             guard let rootURL = try localRootProvider.currentRootURL() else {
@@ -752,6 +762,11 @@ final class RepositoryViewModel: ObservableObject {
                     case .finder:
                         try localActionService.openInFinder(at: localURL)
                     case .terminal:
+                        try localActionService.openInTerminal(at: localURL)
+                    case .checkout(let branchName):
+                        try localActionService.checkoutBranch(named: branchName, at: localURL)
+                    case .terminalOnBranch(let branchName):
+                        try localActionService.checkoutBranch(named: branchName, at: localURL)
                         try localActionService.openInTerminal(at: localURL)
                     }
                 }
