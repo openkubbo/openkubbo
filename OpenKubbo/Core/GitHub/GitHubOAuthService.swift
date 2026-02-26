@@ -1,54 +1,5 @@
 import Foundation
 
-struct GitHubAuthenticatedUser: Equatable {
-    let login: String
-    let name: String?
-    let avatarURL: URL?
-}
-
-struct GitHubDeviceCode {
-    let deviceCode: String
-    let userCode: String
-    let verificationURI: String
-    let expiresIn: Int
-    let interval: Int
-}
-
-enum GitHubOAuthError: LocalizedError {
-    case invalidClientID
-    case timeout
-    case cancelled
-    case malformedResponse
-    case accessDenied
-    case expiredToken
-    case unknown(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidClientID:
-            return "GitHub OAuth Client ID is invalid."
-        case .timeout:
-            return "GitHub authorization timed out."
-        case .cancelled:
-            return "GitHub authorization was cancelled."
-        case .malformedResponse:
-            return "Unexpected response from GitHub."
-        case .accessDenied:
-            return "GitHub authorization was denied."
-        case .expiredToken:
-            return "The GitHub device code expired. Please try again."
-        case .unknown(let message):
-            return message
-        }
-    }
-}
-
-protocol GitHubOAuthServicing {
-    func requestDeviceCode(clientID: String, scope: String) async throws -> GitHubDeviceCode
-    func pollAccessToken(clientID: String, deviceCode: String, interval: Int, expiresIn: Int) async throws -> String
-    func fetchViewer(accessToken: String) async throws -> GitHubAuthenticatedUser
-}
-
 final class GitHubOAuthService: GitHubOAuthServicing {
     private let session: URLSession
     private let decoder: JSONDecoder

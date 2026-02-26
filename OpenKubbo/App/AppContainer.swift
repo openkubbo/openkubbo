@@ -25,7 +25,6 @@ final class AppContainer: ObservableObject {
             repository: repository,
             themeStore: themeStore,
             gitHubOAuthService: gitHubOAuthService,
-            gitHubAPIService: gitHubAPIService,
             gitHubTokenStore: gitHubTokenStore
         )
         self.menuBarViewModel = MenuBarViewModel()

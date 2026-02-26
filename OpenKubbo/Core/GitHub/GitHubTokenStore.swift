@@ -1,12 +1,6 @@
 import Foundation
 import Security
 
-protocol GitHubTokenStoring {
-    func token() -> String?
-    func save(token: String)
-    func clear()
-}
-
 final class KeychainGitHubTokenStore: GitHubTokenStoring {
     private let service: String
     private let account: String

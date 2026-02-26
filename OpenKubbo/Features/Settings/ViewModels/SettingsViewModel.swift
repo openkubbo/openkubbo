@@ -36,29 +36,6 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var githubVerificationURL: URL?
     @Published private(set) var githubAuthenticatedUser: GitHubAuthenticatedUser?
 
-    @Published private(set) var githubRepositories: [GitHubRepository] = []
-    @Published private(set) var isGitHubLoadingRepositories = false
-    @Published var githubTargetRepository = ""
-
-    @Published var githubIssueTitle = ""
-    @Published var githubIssueBody = ""
-    @Published private(set) var isGitHubCreatingIssue = false
-
-    @Published var githubPRTitle = ""
-    @Published var githubPRBody = ""
-    @Published var githubPRHead = ""
-    @Published var githubPRBase = "main"
-    @Published private(set) var isGitHubCreatingPR = false
-
-    @Published var githubCommitPath = ""
-    @Published var githubCommitMessage = ""
-    @Published var githubCommitBranch = "main"
-    @Published var githubCommitContent = ""
-    @Published private(set) var isGitHubCommittingFile = false
-
-    @Published private(set) var githubActionStatusMessage: String?
-    @Published private(set) var githubActionErrorMessage: String?
-
     let executablePath = "/usr/local/bin/codex"
     let apiKeyMasked = "••••••••••••••••"
     let models = ["Gemini 1.5 Pro", "GPT-4.1", "Claude 3.7 Sonnet"]
@@ -68,7 +45,6 @@ final class SettingsViewModel: ObservableObject {
     private let repository: SettingsRepository
     private let themeStore: AppThemeStore
     private let gitHubOAuthService: GitHubOAuthServicing
-    private let gitHubAPIService: GitHubAPIServicing
     private let gitHubTokenStore: GitHubTokenStoring
     private var localRepositoriesRootBookmarkData: Data?
 
@@ -78,14 +54,12 @@ final class SettingsViewModel: ObservableObject {
         repository: SettingsRepository,
         themeStore: AppThemeStore,
         gitHubOAuthService: GitHubOAuthServicing,
-        gitHubAPIService: GitHubAPIServicing,
         gitHubTokenStore: GitHubTokenStoring,
         shortcutGroups: [ShortcutGroup]? = nil
     ) {
         self.repository = repository
         self.themeStore = themeStore
         self.gitHubOAuthService = gitHubOAuthService
-        self.gitHubAPIService = gitHubAPIService
         self.gitHubTokenStore = gitHubTokenStore
         self.shortcutGroups = shortcutGroups ?? ShortcutGroup.defaults
 
@@ -138,7 +112,7 @@ final class SettingsViewModel: ObservableObject {
     }
 
     var isGitHubBusy: Bool {
-        isGitHubAuthenticating || isGitHubLoadingRepositories || isGitHubCreatingIssue || isGitHubCreatingPR || isGitHubCommittingFile
+        isGitHubAuthenticating
     }
 
     var githubDisplayName: String {
@@ -148,10 +122,6 @@ final class SettingsViewModel: ObservableObject {
         }
 
         return githubAuthenticatedUser?.login ?? ""
-    }
-
-    var githubRepositorySuggestions: [String] {
-        githubRepositories.map(\.fullName)
     }
 
     var hasLocalRepositoriesRootConfigured: Bool {
@@ -240,13 +210,10 @@ final class SettingsViewModel: ObservableObject {
             githubUserCode = nil
             githubVerificationURL = nil
             githubStatusMessage = "Connected as \(user.login)."
-
-            await loadGitHubRepositories()
         } catch {
             gitHubTokenStore.clear()
             githubAuthenticatedUser = nil
             githubStatusMessage = "Not connected."
-            githubRepositories = []
 
             githubErrorMessage = gitHubErrorDescription(error)
         }
@@ -259,208 +226,6 @@ final class SettingsViewModel: ObservableObject {
         githubVerificationURL = nil
         githubErrorMessage = nil
         githubStatusMessage = "Not connected."
-
-        githubRepositories = []
-        githubTargetRepository = ""
-        githubIssueTitle = ""
-        githubIssueBody = ""
-        githubPRTitle = ""
-        githubPRBody = ""
-        githubPRHead = ""
-        githubPRBase = "main"
-        githubCommitPath = ""
-        githubCommitMessage = ""
-        githubCommitBranch = "main"
-        githubCommitContent = ""
-        githubActionStatusMessage = nil
-        githubActionErrorMessage = nil
-    }
-
-    func loadGitHubRepositories() async {
-        guard let token = prepareGitHubAction() else {
-            return
-        }
-
-        if isGitHubLoadingRepositories {
-            return
-        }
-
-        isGitHubLoadingRepositories = true
-        defer {
-            isGitHubLoadingRepositories = false
-        }
-
-        do {
-            let repositories = try await gitHubAPIService.fetchRepositories(accessToken: token)
-            githubRepositories = repositories
-            updateDefaultRepositorySelection(with: repositories)
-
-            if repositories.isEmpty {
-                githubActionStatusMessage = "No repositories found for this account."
-            } else {
-                githubActionStatusMessage = "Loaded \(repositories.count) repositories."
-            }
-        } catch {
-            githubActionErrorMessage = gitHubErrorDescription(error)
-        }
-    }
-
-    func createGitHubIssue() async {
-        guard let token = prepareGitHubAction() else {
-            return
-        }
-
-        if isGitHubCreatingIssue {
-            return
-        }
-
-        let repository = normalizedRepository()
-        guard !repository.isEmpty else {
-            githubActionErrorMessage = "Select a repository (owner/repo) for the issue."
-            return
-        }
-
-        let title = githubIssueTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else {
-            githubActionErrorMessage = "Issue title is required."
-            return
-        }
-
-        isGitHubCreatingIssue = true
-        defer {
-            isGitHubCreatingIssue = false
-        }
-
-        do {
-            let issue = try await gitHubAPIService.createIssue(
-                accessToken: token,
-                repositoryFullName: repository,
-                title: title,
-                body: githubIssueBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : githubIssueBody
-            )
-
-            githubActionErrorMessage = nil
-            githubActionStatusMessage = "Issue #\(issue.number) created in \(repository)."
-            githubIssueTitle = ""
-            githubIssueBody = ""
-        } catch {
-            githubActionErrorMessage = gitHubErrorDescription(error)
-        }
-    }
-
-    func createGitHubPullRequest() async {
-        guard let token = prepareGitHubAction() else {
-            return
-        }
-
-        if isGitHubCreatingPR {
-            return
-        }
-
-        let repository = normalizedRepository()
-        guard !repository.isEmpty else {
-            githubActionErrorMessage = "Select a repository (owner/repo) for the pull request."
-            return
-        }
-
-        let title = githubPRTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let head = githubPRHead.trimmingCharacters(in: .whitespacesAndNewlines)
-        let base = githubPRBase.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !title.isEmpty else {
-            githubActionErrorMessage = "Pull request title is required."
-            return
-        }
-        guard !head.isEmpty else {
-            githubActionErrorMessage = "Head branch is required."
-            return
-        }
-        guard !base.isEmpty else {
-            githubActionErrorMessage = "Base branch is required."
-            return
-        }
-
-        isGitHubCreatingPR = true
-        defer {
-            isGitHubCreatingPR = false
-        }
-
-        do {
-            let pullRequest = try await gitHubAPIService.createPullRequest(
-                accessToken: token,
-                repositoryFullName: repository,
-                title: title,
-                body: githubPRBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : githubPRBody,
-                head: head,
-                base: base
-            )
-
-            githubActionErrorMessage = nil
-            githubActionStatusMessage = "Pull request #\(pullRequest.number) created in \(repository)."
-            githubPRTitle = ""
-            githubPRBody = ""
-        } catch {
-            githubActionErrorMessage = gitHubErrorDescription(error)
-        }
-    }
-
-    func commitGitHubFile() async {
-        guard let token = prepareGitHubAction() else {
-            return
-        }
-
-        if isGitHubCommittingFile {
-            return
-        }
-
-        let repository = normalizedRepository()
-        guard !repository.isEmpty else {
-            githubActionErrorMessage = "Select a repository (owner/repo) for the commit."
-            return
-        }
-
-        let path = githubCommitPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        let message = githubCommitMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-        let branch = githubCommitBranch.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !path.isEmpty else {
-            githubActionErrorMessage = "File path is required."
-            return
-        }
-        guard !message.isEmpty else {
-            githubActionErrorMessage = "Commit message is required."
-            return
-        }
-        guard !branch.isEmpty else {
-            githubActionErrorMessage = "Commit branch is required."
-            return
-        }
-        guard !githubCommitContent.isEmpty else {
-            githubActionErrorMessage = "File content is required."
-            return
-        }
-
-        isGitHubCommittingFile = true
-        defer {
-            isGitHubCommittingFile = false
-        }
-
-        do {
-            let commit = try await gitHubAPIService.commitFile(
-                accessToken: token,
-                repositoryFullName: repository,
-                path: path,
-                branch: branch,
-                message: message,
-                content: githubCommitContent
-            )
-
-            githubActionErrorMessage = nil
-            githubActionStatusMessage = "Commit \(String(commit.sha.prefix(7))) created in \(repository)."
-            githubCommitMessage = ""
-        } catch {
-            githubActionErrorMessage = gitHubErrorDescription(error)
-        }
     }
 
     private func restoreGitHubSessionIfPossible() {
@@ -479,70 +244,13 @@ final class SettingsViewModel: ObservableObject {
                     self.githubAuthenticatedUser = user
                     self.githubStatusMessage = "Connected as \(user.login)."
                 }
-                await self.loadGitHubRepositories()
             } catch {
                 self.gitHubTokenStore.clear()
                 await MainActor.run {
                     self.githubAuthenticatedUser = nil
                     self.githubStatusMessage = "Not connected."
-                    self.githubRepositories = []
                 }
             }
-        }
-    }
-
-    private func prepareGitHubAction() -> String? {
-        guard isGitHubConnected else {
-            githubActionErrorMessage = "Connect your GitHub account first."
-            return nil
-        }
-
-        guard let token = currentGitHubAccessToken() else {
-            githubActionErrorMessage = "GitHub session not found. Please login again."
-            return nil
-        }
-
-        githubActionErrorMessage = nil
-        githubActionStatusMessage = nil
-        return token
-    }
-
-    private func currentGitHubAccessToken() -> String? {
-        guard let token = gitHubTokenStore.token(), !token.isEmpty else {
-            return nil
-        }
-
-        return token
-    }
-
-    private func normalizedRepository() -> String {
-        let trimmed = githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            return trimmed
-        }
-
-        if let first = githubRepositories.first {
-            return first.fullName
-        }
-
-        return ""
-    }
-
-    private func updateDefaultRepositorySelection(with repositories: [GitHubRepository]) {
-        guard let first = repositories.first else {
-            return
-        }
-
-        if githubTargetRepository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            githubTargetRepository = first.fullName
-        }
-
-        if githubPRBase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || githubPRBase == "main" {
-            githubPRBase = first.defaultBranch
-        }
-
-        if githubCommitBranch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || githubCommitBranch == "main" {
-            githubCommitBranch = first.defaultBranch
         }
     }
 
