@@ -592,15 +592,15 @@ struct RepositoryPanelView: View {
 
     private func metricsSection(for repo: RepoItem) -> some View {
         let metrics = [
-            RepoMetric(id: "issues", icon: "exclamationmark.circle", title: "Issues", value: repo.issues, destination: .issues),
             RepoMetric(id: "prs", icon: "arrow.triangle.pull", title: "Pull Requests", value: repo.prs, destination: .pullRequests),
-            RepoMetric(id: "releases", icon: "shippingbox", title: "Releases", value: repo.releases, destination: .releases),
             RepoMetric(id: "ci", icon: "bolt", title: "CI Runs", value: repo.ciRuns, destination: .ciRuns),
-            RepoMetric(id: "discussions", icon: "bubble.left", title: "Discussions", value: repo.discussions, destination: .discussions),
-            RepoMetric(id: "tags", icon: "tag", title: "Tags", value: repo.tags, destination: .tags),
+            RepoMetric(id: "issues", icon: "exclamationmark.circle", title: "Issues", value: repo.issues, destination: .issues),
+            RepoMetric(id: "commits", icon: "clock.arrow.circlepath", title: "Open Commits", value: repo.openCommits, destination: .openCommits),
             RepoMetric(id: "branches", icon: "arrow.triangle.branch", title: "Branches", value: repo.branches, destination: .branches),
+            RepoMetric(id: "tags", icon: "tag", title: "Tags", value: repo.tags, destination: .tags),
+            RepoMetric(id: "releases", icon: "shippingbox", title: "Releases", value: repo.releases, destination: .releases),
+            RepoMetric(id: "discussions", icon: "bubble.left", title: "Discussions", value: repo.discussions, destination: .discussions),
             RepoMetric(id: "contributors", icon: "person.2", title: "Contributors", value: repo.contributors, destination: .contributors),
-            RepoMetric(id: "commits", icon: "clock.arrow.circlepath", title: "Open Commits", value: repo.openCommits, destination: .openCommits)
         ]
 
         return VStack(alignment: .leading, spacing: 0) {
