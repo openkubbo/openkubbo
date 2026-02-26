@@ -1719,7 +1719,6 @@ struct RepositoryPanelView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 detailNavigationRow(icon: "arrow.triangle.branch", title: "Checkout Branch") {}
-                detailNavigationRow(icon: "folder", title: "Open in Finder") {}
                 detailNavigationRow(icon: "terminal", title: "Open in Terminal") {}
 
                 Button {
