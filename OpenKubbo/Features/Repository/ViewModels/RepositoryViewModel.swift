@@ -42,6 +42,11 @@ final class RepositoryViewModel: ObservableObject {
             issueBranchDraftName = ""
             isIssueBranchComposerVisible = false
             selectedPullRequestID = nil
+            isPullRequestCreating = false
+            pullRequestActionErrorMessage = nil
+            pullRequestActionStatusMessage = nil
+            pullRequestDraftTitle = ""
+            pullRequestDraftBody = ""
             selectedBranchID = nil
             selectedDestinationInfoItemID = nil
             isPullRequestComposerVisible = false
@@ -69,6 +74,11 @@ final class RepositoryViewModel: ObservableObject {
     @Published var isIssueBranchComposerVisible = false
     @Published var selectedPullRequestsScope: RepoPullRequestsScope = .open
     @Published var selectedPullRequestID: String?
+    @Published private(set) var isPullRequestCreating = false
+    @Published private(set) var pullRequestActionErrorMessage: String?
+    @Published private(set) var pullRequestActionStatusMessage: String?
+    @Published var pullRequestDraftTitle = ""
+    @Published var pullRequestDraftBody = ""
     @Published var selectedBranchID: String?
     @Published var selectedDestinationInfoItemID: String?
     @Published var isPullRequestComposerVisible = false
@@ -87,6 +97,12 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var loadedBranchesByRepositoryID: [String: [RepoBranchItem]] = [:]
     @Published private(set) var branchesLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var branchesLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedPullRequestsByRepositoryID: [String: [RepoPullRequestItem]] = [:]
+    @Published private(set) var pullRequestsLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var pullRequestsLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedPullRequestCommitsByPullRequestID: [String: [RepoPullRequestCommitItem]] = [:]
+    @Published private(set) var pullRequestCommitsLoadingPullRequestIDs: Set<String> = []
+    @Published private(set) var pullRequestCommitsLoadErrorMessageByPullRequestID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
     @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
 
@@ -132,6 +148,10 @@ final class RepositoryViewModel: ObservableObject {
         !trimmedIssueDraftTitle.isEmpty
     }
 
+    var canCreatePullRequest: Bool {
+        !trimmedPullRequestDraftTitle.isEmpty && pullRequestDraftHeadBranch != nil
+    }
+
     var totalContributionsLast12Months: Int {
         contributionCountsByDateKey.values.reduce(0, +)
     }
@@ -169,6 +189,12 @@ final class RepositoryViewModel: ObservableObject {
             loadedBranchesByRepositoryID = [:]
             branchesLoadingRepositoryIDs = []
             branchesLoadErrorMessageByRepositoryID = [:]
+            loadedPullRequestsByRepositoryID = [:]
+            pullRequestsLoadingRepositoryIDs = []
+            pullRequestsLoadErrorMessageByRepositoryID = [:]
+            loadedPullRequestCommitsByPullRequestID = [:]
+            pullRequestCommitsLoadingPullRequestIDs = []
+            pullRequestCommitsLoadErrorMessageByPullRequestID = [:]
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
             localCurrentBranchByRepositoryID = [:]
@@ -240,6 +266,11 @@ final class RepositoryViewModel: ObservableObject {
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
         selectedPullRequestID = nil
+        isPullRequestCreating = false
+        pullRequestActionErrorMessage = nil
+        pullRequestActionStatusMessage = nil
+        pullRequestDraftTitle = ""
+        pullRequestDraftBody = ""
         selectedBranchID = nil
         selectedDestinationInfoItemID = nil
         isPullRequestComposerVisible = false
@@ -270,8 +301,18 @@ final class RepositoryViewModel: ObservableObject {
         if destination == .pullRequests {
             selectedPullRequestsScope = .open
             isPullRequestComposerVisible = false
+            isPullRequestCreating = false
+            pullRequestActionErrorMessage = nil
+            pullRequestActionStatusMessage = nil
+            pullRequestDraftTitle = ""
+            pullRequestDraftBody = ""
         } else {
             isPullRequestComposerVisible = false
+            isPullRequestCreating = false
+            pullRequestActionErrorMessage = nil
+            pullRequestActionStatusMessage = nil
+            pullRequestDraftTitle = ""
+            pullRequestDraftBody = ""
         }
         selectedPullRequestID = nil
         if destination != .branches {
@@ -284,6 +325,11 @@ final class RepositoryViewModel: ObservableObject {
             Task { [weak self] in
                 await self?.loadBranchesIfNeeded(for: repo)
                 await self?.loadIssuesIfNeeded(for: repo)
+            }
+        } else if destination == .pullRequests, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadBranchesIfNeeded(for: repo)
+                await self?.loadPullRequestsIfNeeded(for: repo)
             }
         } else if destination == .branches, let repo = selectedRepo {
             Task { [weak self] in
@@ -305,6 +351,11 @@ final class RepositoryViewModel: ObservableObject {
         issueActionErrorMessage = nil
         issueActionStatusMessage = nil
         selectedPullRequestID = nil
+        isPullRequestCreating = false
+        pullRequestActionErrorMessage = nil
+        pullRequestActionStatusMessage = nil
+        pullRequestDraftTitle = ""
+        pullRequestDraftBody = ""
         selectedBranchID = nil
         selectedDestinationInfoItemID = nil
         isPullRequestComposerVisible = false
@@ -570,10 +621,28 @@ final class RepositoryViewModel: ObservableObject {
         selectedPullRequestsScope = scope
         selectedPullRequestID = nil
         isPullRequestComposerVisible = false
+        pullRequestActionErrorMessage = nil
+        pullRequestActionStatusMessage = nil
+    }
+
+    func loadPullRequestsIfNeeded(for repo: RepoItem) async {
+        await loadPullRequests(for: repo, forceReload: false)
+    }
+
+    func reloadPullRequests(for repo: RepoItem) async {
+        await loadPullRequests(for: repo, forceReload: true)
+    }
+
+    func isLoadingPullRequests(for repo: RepoItem) -> Bool {
+        pullRequestsLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func pullRequestsLoadErrorMessage(for repo: RepoItem) -> String? {
+        pullRequestsLoadErrorMessageByRepositoryID[repo.id]
     }
 
     func filteredPullRequests(for repo: RepoItem) -> [RepoPullRequestItem] {
-        let pullRequests = dataProvider.loadPullRequests(for: repo)
+        let pullRequests = loadedPullRequestsByRepositoryID[repo.id, default: []]
 
         switch selectedPullRequestsScope {
         case .all:
@@ -587,9 +656,14 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
-    func selectPullRequest(_ pullRequest: RepoPullRequestItem) {
+    func selectPullRequest(_ pullRequest: RepoPullRequestItem, in repo: RepoItem) {
         isPullRequestComposerVisible = false
         selectedPullRequestID = pullRequest.id
+        pullRequestActionErrorMessage = nil
+        pullRequestActionStatusMessage = nil
+        Task { [weak self] in
+            await self?.loadPullRequestCommits(for: pullRequest, in: repo, forceReload: false)
+        }
     }
 
     func closePullRequestDetails() {
@@ -605,7 +679,72 @@ final class RepositoryViewModel: ObservableObject {
         for pullRequest: RepoPullRequestItem,
         in repo: RepoItem
     ) -> [RepoPullRequestCommitItem] {
-        dataProvider.loadPullRequestCommits(for: pullRequest, in: repo)
+        _ = repo
+        return loadedPullRequestCommitsByPullRequestID[pullRequest.id, default: []]
+    }
+
+    func isLoadingPullRequestCommits(for pullRequest: RepoPullRequestItem) -> Bool {
+        pullRequestCommitsLoadingPullRequestIDs.contains(pullRequest.id)
+    }
+
+    func pullRequestCommitsLoadErrorMessage(for pullRequest: RepoPullRequestItem) -> String? {
+        pullRequestCommitsLoadErrorMessageByPullRequestID[pullRequest.id]
+    }
+
+    func loadPullRequestCommitsIfNeeded(
+        for pullRequest: RepoPullRequestItem,
+        in repo: RepoItem
+    ) async {
+        await loadPullRequestCommits(for: pullRequest, in: repo, forceReload: false)
+    }
+
+    func reloadPullRequestCommits(
+        for pullRequest: RepoPullRequestItem,
+        in repo: RepoItem
+    ) async {
+        await loadPullRequestCommits(for: pullRequest, in: repo, forceReload: true)
+    }
+
+    func createPullRequest(in repo: RepoItem) async {
+        let title = trimmedPullRequestDraftTitle
+        guard !title.isEmpty else { return }
+        guard !isPullRequestCreating else { return }
+
+        guard let headBranch = pullRequestDraftHeadBranch?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !headBranch.isEmpty else {
+            pullRequestActionErrorMessage = "Select a head branch first."
+            return
+        }
+
+        let body = trimmedPullRequestDraftBody
+        isPullRequestCreating = true
+        pullRequestActionErrorMessage = nil
+        pullRequestActionStatusMessage = nil
+
+        defer { isPullRequestCreating = false }
+
+        do {
+            let createdPullRequest = try await dataProvider.createPullRequest(
+                in: repo,
+                title: title,
+                body: body.isEmpty ? nil : body,
+                headBranch: headBranch,
+                baseBranch: repo.branch
+            )
+
+            prependPullRequest(createdPullRequest, in: repo)
+            selectedPullRequestsScope = .open
+            selectedPullRequestID = createdPullRequest.id
+            isPullRequestComposerVisible = false
+            pullRequestDraftTitle = ""
+            pullRequestDraftBody = ""
+            pullRequestDraftHeadBranch = nil
+            pullRequestActionStatusMessage = "Pull request #\(createdPullRequest.number) created in \(repo.name)."
+            applyPullRequestBranchFlags(for: repo)
+            await loadPullRequestCommits(for: createdPullRequest, in: repo, forceReload: true)
+        } catch {
+            pullRequestActionErrorMessage = repositoryErrorDescription(error)
+        }
     }
 
     func branches(for repo: RepoItem) -> [RepoBranchItem] {
@@ -679,6 +818,8 @@ final class RepositoryViewModel: ObservableObject {
         selectedPullRequestID = nil
         selectedBranchID = nil
         isPullRequestComposerVisible = true
+        pullRequestActionErrorMessage = nil
+        pullRequestActionStatusMessage = nil
         if let preferredHeadBranch, !preferredHeadBranch.isEmpty {
             pullRequestDraftHeadBranch = preferredHeadBranch
         }
@@ -691,13 +832,26 @@ final class RepositoryViewModel: ObservableObject {
                     if self.pullRequestDraftHeadBranch == nil {
                         self.pullRequestDraftHeadBranch = self.eligiblePullRequestBranches(for: repo).first?.name
                     }
+                    if self.trimmedPullRequestDraftTitle.isEmpty,
+                       let headBranch = self.pullRequestDraftHeadBranch {
+                        self.pullRequestDraftTitle = self.defaultPullRequestTitle(
+                            headBranch: headBranch,
+                            baseBranch: repo.branch
+                        )
+                    }
                 }
             }
+        }
+        if trimmedPullRequestDraftTitle.isEmpty,
+           let headBranch = pullRequestDraftHeadBranch {
+            pullRequestDraftTitle = defaultPullRequestTitle(headBranch: headBranch, baseBranch: repo.branch)
         }
     }
 
     func closePullRequestComposer() {
         isPullRequestComposerVisible = false
+        pullRequestDraftTitle = ""
+        pullRequestDraftBody = ""
     }
 
     func eligiblePullRequestBranches(for repo: RepoItem) -> [RepoBranchItem] {
@@ -706,8 +860,11 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
-    func selectPullRequestDraftHeadBranch(_ branch: RepoBranchItem) {
+    func selectPullRequestDraftHeadBranch(_ branch: RepoBranchItem, baseBranch: String) {
         pullRequestDraftHeadBranch = branch.name
+        if trimmedPullRequestDraftTitle.isEmpty {
+            pullRequestDraftTitle = defaultPullRequestTitle(headBranch: branch.name, baseBranch: baseBranch)
+        }
     }
 
     func openInFinder(for repo: RepoItem) -> RepositoryLocalActionResult {
@@ -856,6 +1013,7 @@ final class RepositoryViewModel: ObservableObject {
             loadedBranchesByRepositoryID[repo.id] = branches
             preserveOptimisticBranches(in: repo)
             synchronizeIssueBranchLinks(for: repo)
+            applyPullRequestBranchFlags(for: repo)
             if let localBranch = localCurrentBranchByRepositoryID[repo.id] {
                 markCurrentBranch(named: localBranch, in: repo)
             }
@@ -869,6 +1027,75 @@ final class RepositoryViewModel: ObservableObject {
             branchesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedBranchesByRepositoryID[repo.id] == nil {
                 loadedBranchesByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
+    private func loadPullRequests(for repo: RepoItem, forceReload: Bool) async {
+        if pullRequestsLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, loadedPullRequestsByRepositoryID[repo.id] != nil {
+            return
+        }
+
+        pullRequestsLoadingRepositoryIDs.insert(repo.id)
+        pullRequestsLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            pullRequestsLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let pullRequests = try await dataProvider.loadPullRequests(for: repo)
+            loadedPullRequestsByRepositoryID[repo.id] = pullRequests
+            pullRequestsLoadErrorMessageByRepositoryID[repo.id] = nil
+            applyPullRequestBranchFlags(for: repo)
+
+            if let selectedPullRequestID,
+               !pullRequests.contains(where: { $0.id == selectedPullRequestID }) {
+                self.selectedPullRequestID = nil
+            }
+        } catch {
+            pullRequestsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedPullRequestsByRepositoryID[repo.id] == nil {
+                loadedPullRequestsByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
+    private func loadPullRequestCommits(
+        for pullRequest: RepoPullRequestItem,
+        in repo: RepoItem,
+        forceReload: Bool
+    ) async {
+        let commitKey = pullRequest.id
+
+        if pullRequestCommitsLoadingPullRequestIDs.contains(commitKey) {
+            return
+        }
+
+        if !forceReload, loadedPullRequestCommitsByPullRequestID[commitKey] != nil {
+            return
+        }
+
+        pullRequestCommitsLoadingPullRequestIDs.insert(commitKey)
+        pullRequestCommitsLoadErrorMessageByPullRequestID[commitKey] = nil
+        defer {
+            pullRequestCommitsLoadingPullRequestIDs.remove(commitKey)
+        }
+
+        do {
+            let commits = try await dataProvider.loadPullRequestCommits(
+                for: pullRequest,
+                in: repo
+            )
+            loadedPullRequestCommitsByPullRequestID[commitKey] = commits
+            pullRequestCommitsLoadErrorMessageByPullRequestID[commitKey] = nil
+        } catch {
+            pullRequestCommitsLoadErrorMessageByPullRequestID[commitKey] = repositoryErrorDescription(error)
+            if loadedPullRequestCommitsByPullRequestID[commitKey] == nil {
+                loadedPullRequestCommitsByPullRequestID[commitKey] = []
             }
         }
     }
@@ -910,6 +1137,13 @@ final class RepositoryViewModel: ObservableObject {
         issues.removeAll(where: { $0.id == issue.id })
         issues.insert(issue, at: 0)
         loadedIssuesByRepositoryID[repo.id] = issues
+    }
+
+    private func prependPullRequest(_ pullRequest: RepoPullRequestItem, in repo: RepoItem) {
+        var pullRequests = loadedPullRequestsByRepositoryID[repo.id, default: []]
+        pullRequests.removeAll { $0.id == pullRequest.id || $0.number == pullRequest.number }
+        pullRequests.insert(pullRequest, at: 0)
+        loadedPullRequestsByRepositoryID[repo.id] = pullRequests
     }
 
     private func replaceIssueComments(
@@ -993,6 +1227,19 @@ final class RepositoryViewModel: ObservableObject {
         branchesLoadErrorMessageByRepositoryID = branchesLoadErrorMessageByRepositoryID.filter {
             validRepositoryIDs.contains($0.key)
         }
+        loadedPullRequestsByRepositoryID = loadedPullRequestsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        pullRequestsLoadingRepositoryIDs = pullRequestsLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        pullRequestsLoadErrorMessageByRepositoryID = pullRequestsLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        let validPullRequestIDs = Set(loadedPullRequestsByRepositoryID.values.flatMap { $0.map(\.id) })
+        loadedPullRequestCommitsByPullRequestID = loadedPullRequestCommitsByPullRequestID.filter {
+            validPullRequestIDs.contains($0.key)
+        }
+        pullRequestCommitsLoadingPullRequestIDs = pullRequestCommitsLoadingPullRequestIDs.intersection(validPullRequestIDs)
+        pullRequestCommitsLoadErrorMessageByPullRequestID = pullRequestCommitsLoadErrorMessageByPullRequestID.filter {
+            validPullRequestIDs.contains($0.key)
+        }
         issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in
             validRepositoryIDs.contains(issueRepositoryID(fromIssueBranchKey: key))
         }
@@ -1037,6 +1284,10 @@ final class RepositoryViewModel: ObservableObject {
             .joined(separator: "-")
         let suffix = normalized.isEmpty ? "issue" : normalized
         return "issue/\(issue.number)-\(suffix)"
+    }
+
+    private func defaultPullRequestTitle(headBranch: String, baseBranch: String) -> String {
+        "Merge \(headBranch) into \(baseBranch)"
     }
 
     private func normalizedIssueBranchNameInput(_ value: String, for issue: RepoIssueItem) -> String {
@@ -1099,6 +1350,32 @@ final class RepositoryViewModel: ObservableObject {
                 aheadBy: branch.aheadBy,
                 behindBy: branch.behindBy,
                 hasOpenPullRequest: branch.hasOpenPullRequest,
+                updatedAgo: branch.updatedAgo
+            )
+        }
+
+        loadedBranchesByRepositoryID[repo.id] = branches
+    }
+
+    private func applyPullRequestBranchFlags(for repo: RepoItem) {
+        var branches = loadedBranchesByRepositoryID[repo.id, default: []]
+        guard !branches.isEmpty else { return }
+
+        let branchesWithOpenPullRequests = Set(
+            loadedPullRequestsByRepositoryID[repo.id, default: []]
+                .filter(\.isOpen)
+                .map(\.sourceBranch)
+        )
+
+        branches = branches.map { branch in
+            RepoBranchItem(
+                id: branch.id,
+                name: branch.name,
+                isDefault: branch.isDefault,
+                isCurrent: branch.isCurrent,
+                aheadBy: branch.aheadBy,
+                behindBy: branch.behindBy,
+                hasOpenPullRequest: branchesWithOpenPullRequests.contains(branch.name),
                 updatedAgo: branch.updatedAgo
             )
         }
@@ -1248,5 +1525,13 @@ final class RepositoryViewModel: ObservableObject {
 
     private var trimmedIssueDraftBody: String {
         issueDraftBody.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedPullRequestDraftTitle: String {
+        pullRequestDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedPullRequestDraftBody: String {
+        pullRequestDraftBody.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

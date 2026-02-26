@@ -1311,10 +1311,19 @@ struct RepositoryPanelView: View {
         let pullRequests = viewModel.filteredPullRequests(for: repo)
         let selectedPullRequest = viewModel.selectedPullRequest(for: repo)
         let isComposerVisible = viewModel.isPullRequestComposerVisible
+        let isLoadingPullRequests = viewModel.isLoadingPullRequests(for: repo)
+        let pullRequestsLoadErrorMessage = viewModel.pullRequestsLoadErrorMessage(for: repo)
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
-                overlayTopBar(title: "Open Pull Requests")
+                overlayTopBar(
+                    title: "Open Pull Requests",
+                    onRefresh: {
+                        Task {
+                            await viewModel.reloadPullRequests(for: repo)
+                        }
+                    }
+                )
 
                 Rectangle()
                     .fill(dividerColor)
@@ -1334,13 +1343,50 @@ struct RepositoryPanelView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
 
+                if let statusMessage = viewModel.pullRequestActionStatusMessage {
+                    issueFeedbackBanner(statusMessage, isError: false)
+                } else if let errorMessage = viewModel.pullRequestActionErrorMessage {
+                    issueFeedbackBanner(errorMessage, isError: true)
+                }
+
                 Rectangle()
                     .fill(dividerColor)
                     .frame(height: 1)
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 0) {
-                        if pullRequests.isEmpty {
+                        if isLoadingPullRequests && pullRequests.isEmpty {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading pull requests...")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if let pullRequestsLoadErrorMessage, pullRequests.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(pullRequestsLoadErrorMessage)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.red.opacity(isDarkTheme ? 0.86 : 0.72))
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Button("Retry") {
+                                    Task {
+                                        await viewModel.reloadPullRequests(for: repo)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                                .repoCursorOnHover()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if pullRequests.isEmpty {
                             Text("No pull requests for this filter.")
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(secondaryTextColor)
@@ -1351,6 +1397,7 @@ struct RepositoryPanelView: View {
                             ForEach(Array(pullRequests.enumerated()), id: \.element.id) { index, pullRequest in
                                 pullRequestRow(
                                     pullRequest,
+                                    in: repo,
                                     isSelected: selectedPullRequest?.id == pullRequest.id,
                                     showDivider: index < pullRequests.count - 1
                                 )
@@ -1382,6 +1429,10 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+        .task(id: "pull-requests-\(repo.id)") {
+            await viewModel.loadPullRequestsIfNeeded(for: repo)
+            await viewModel.loadBranchesIfNeeded(for: repo)
+        }
     }
 
     private func pullRequestComposerOverlayPanel(for repo: RepoItem) -> some View {
@@ -1443,6 +1494,61 @@ struct RepositoryPanelView: View {
                 .fill(dividerColor)
                 .frame(height: 1)
 
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Title")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                TextField("Pull request title", text: $viewModel.pullRequestDraftTitle)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(actionCardFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(actionCardStrokeColor, lineWidth: 1)
+                            )
+                    )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Description")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                TextField("Description (optional)", text: $viewModel.pullRequestDraftBody, axis: .vertical)
+                    .lineLimit(3...8)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(actionCardFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(actionCardStrokeColor, lineWidth: 1)
+                            )
+                    )
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 0) {
                     if eligibleBranches.isEmpty {
@@ -1456,6 +1562,7 @@ struct RepositoryPanelView: View {
                         ForEach(Array(eligibleBranches.enumerated()), id: \.element.id) { index, branch in
                             pullRequestComposerBranchRow(
                                 branch,
+                                in: repo,
                                 isSelected: selectedHeadBranch == branch.name,
                                 showDivider: index < eligibleBranches.count - 1
                             )
@@ -1463,6 +1570,46 @@ struct RepositoryPanelView: View {
                     }
                 }
             }
+
+            HStack {
+                Spacer(minLength: 0)
+
+                Button(action: {
+                    Task {
+                        await createPullRequest(in: repo)
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        if viewModel.isPullRequestCreating {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white.opacity(0.95))
+                        } else {
+                            Image(systemName: "arrow.triangle.pull")
+                                .font(.system(size: 11, weight: .bold))
+                            Text("Create PR")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        }
+                    }
+                    .foregroundStyle(.white.opacity(0.95))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(
+                        Capsule()
+                            .fill(accentColor)
+                            .overlay(
+                                Capsule()
+                                    .stroke(accentColor.opacity(0.6), lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .disabled(!viewModel.canCreatePullRequest || viewModel.isPullRequestCreating)
+                .opacity((viewModel.canCreatePullRequest && !viewModel.isPullRequestCreating) ? 1 : 0.55)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
@@ -1480,6 +1627,8 @@ struct RepositoryPanelView: View {
         in repo: RepoItem
     ) -> some View {
         let commits = viewModel.pullRequestCommits(for: pullRequest, in: repo)
+        let isLoadingCommits = viewModel.isLoadingPullRequestCommits(for: pullRequest)
+        let commitsLoadErrorMessage = viewModel.pullRequestCommitsLoadErrorMessage(for: pullRequest)
 
         return VStack(spacing: 0) {
             HStack(spacing: 10) {
@@ -1516,6 +1665,43 @@ struct RepositoryPanelView: View {
                         Capsule()
                             .fill(pullRequest.isMerged ? Color.green.opacity(0.7) : accentColor)
                     )
+
+                Button {
+                    Task {
+                        await viewModel.reloadPullRequestCommits(for: pullRequest, in: repo)
+                    }
+                } label: {
+                    if isLoadingCommits {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(width: 28, height: 28)
+                            .background(
+                                Circle()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Circle()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    }
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .disabled(isLoadingCommits)
+                .opacity(isLoadingCommits ? 0.7 : 1)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
@@ -1556,7 +1742,38 @@ struct RepositoryPanelView: View {
 
             ScrollView(showsIndicators: false) {
                 LazyVStack(spacing: 0) {
-                    if commits.isEmpty {
+                    if isLoadingCommits && commits.isEmpty {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Loading commits...")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 18)
+                    } else if let commitsLoadErrorMessage, commits.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(commitsLoadErrorMessage)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.red.opacity(isDarkTheme ? 0.86 : 0.72))
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            Button("Retry") {
+                                Task {
+                                    await viewModel.reloadPullRequestCommits(for: pullRequest, in: repo)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(accentColor)
+                            .repoCursorOnHover()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 18)
+                    } else if commits.isEmpty {
                         Text("No commits for this pull request.")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
@@ -1580,6 +1797,9 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+        .task(id: "pull-request-commits-\(pullRequest.id)") {
+            await viewModel.loadPullRequestCommitsIfNeeded(for: pullRequest, in: repo)
+        }
     }
 
     private func branchesOverlayPanel(for repo: RepoItem) -> some View {
@@ -2211,11 +2431,12 @@ struct RepositoryPanelView: View {
 
     private func pullRequestComposerBranchRow(
         _ branch: RepoBranchItem,
+        in repo: RepoItem,
         isSelected: Bool,
         showDivider: Bool
     ) -> some View {
         Button {
-            viewModel.selectPullRequestDraftHeadBranch(branch)
+            viewModel.selectPullRequestDraftHeadBranch(branch, baseBranch: repo.branch)
         } label: {
             VStack(spacing: 0) {
                 HStack(spacing: 10) {
@@ -2399,12 +2620,13 @@ struct RepositoryPanelView: View {
 
     private func pullRequestRow(
         _ pullRequest: RepoPullRequestItem,
+        in repo: RepoItem,
         isSelected: Bool,
         showDivider: Bool
     ) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.18)) {
-                viewModel.selectPullRequest(pullRequest)
+                viewModel.selectPullRequest(pullRequest, in: repo)
             }
         } label: {
             VStack(spacing: 0) {
@@ -2789,6 +3011,10 @@ struct RepositoryPanelView: View {
     private func addIssueComment(in repo: RepoItem) async {
         guard let issue = viewModel.selectedIssue(for: repo) else { return }
         await viewModel.addIssueComment(to: issue, in: repo)
+    }
+
+    private func createPullRequest(in repo: RepoItem) async {
+        await viewModel.createPullRequest(in: repo)
     }
 
     private func createIssueBranch(from issue: RepoIssueItem, in repo: RepoItem) async {

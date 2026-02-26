@@ -82,6 +82,32 @@ struct GitHubPullRequestSummary: Equatable {
     let htmlURL: URL?
 }
 
+struct GitHubPullRequest: Equatable {
+    let id: String
+    let number: Int
+    let title: String
+    let body: String
+    let authorLogin: String
+    let sourceBranch: String
+    let targetBranch: String
+    let updatedAt: Date?
+    let comments: Int
+    let changedFiles: Int
+    let commits: Int
+    let additions: Int
+    let deletions: Int
+    let isOpen: Bool
+    let isMerged: Bool
+}
+
+struct GitHubPullRequestCommit: Equatable {
+    let id: String
+    let sha: String
+    let message: String
+    let authorLogin: String
+    let committedAt: Date?
+}
+
 struct GitHubCommitSummary: Equatable {
     let sha: String
     let message: String
@@ -173,6 +199,12 @@ protocol GitHubAPIServicing {
         branchName: String,
         fromCommitSHA: String
     ) async throws -> GitHubBranch
+    func fetchPullRequests(accessToken: String, repositoryFullName: String) async throws -> [GitHubPullRequest]
+    func fetchPullRequestCommits(
+        accessToken: String,
+        repositoryFullName: String,
+        pullRequestNumber: Int
+    ) async throws -> [GitHubPullRequestCommit]
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(
         accessToken: String,

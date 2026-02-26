@@ -239,8 +239,13 @@ private struct StubGitHubAPIService: GitHubAPIServicing {
                 name: "openkubbo",
                 fullName: "octocat/openkubbo",
                 ownerLogin: "octocat",
+                sshCloneURL: "git@github.com:octocat/openkubbo.git",
+                httpsCloneURL: "https://github.com/octocat/openkubbo.git",
                 isPrivate: false,
                 defaultBranch: "main",
+                openIssuesCount: 0,
+                stargazersCount: 0,
+                updatedAt: nil,
                 htmlURL: nil
             )
         ]
@@ -267,12 +272,71 @@ private struct StubGitHubAPIService: GitHubAPIServicing {
         )
     )
 
+    func fetchViewerLogin(accessToken: String) async throws -> String {
+        "octocat"
+    }
+
     func fetchRepositories(accessToken: String) async throws -> [GitHubRepository] {
         try repositoriesResult.get()
     }
 
+    func fetchContributionCalendar(accessToken: String) async throws -> GitHubContributionCalendar {
+        GitHubContributionCalendar(days: [])
+    }
+
+    func fetchBranches(accessToken: String, repositoryFullName: String) async throws -> [GitHubBranch] {
+        []
+    }
+
+    func createBranch(
+        accessToken: String,
+        repositoryFullName: String,
+        branchName: String,
+        fromCommitSHA: String
+    ) async throws -> GitHubBranch {
+        GitHubBranch(name: branchName, isProtected: false, commitSHA: fromCommitSHA)
+    }
+
+    func fetchPullRequests(accessToken: String, repositoryFullName: String) async throws -> [GitHubPullRequest] {
+        []
+    }
+
+    func fetchPullRequestCommits(
+        accessToken: String,
+        repositoryFullName: String,
+        pullRequestNumber: Int
+    ) async throws -> [GitHubPullRequestCommit] {
+        []
+    }
+
+    func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue] {
+        []
+    }
+
+    func fetchIssueComments(
+        accessToken: String,
+        repositoryFullName: String,
+        issueNumber: Int
+    ) async throws -> [GitHubIssueComment] {
+        []
+    }
+
     func createIssue(accessToken: String, repositoryFullName: String, title: String, body: String?) async throws -> GitHubIssueSummary {
         try issueResult.get()
+    }
+
+    func createIssueComment(
+        accessToken: String,
+        repositoryFullName: String,
+        issueNumber: Int,
+        body: String
+    ) async throws -> GitHubIssueComment {
+        GitHubIssueComment(
+            id: "comment-1",
+            authorLogin: "octocat",
+            body: body,
+            updatedAt: nil
+        )
     }
 
     func createPullRequest(

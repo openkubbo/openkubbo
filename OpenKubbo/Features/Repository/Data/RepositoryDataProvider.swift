@@ -23,11 +23,18 @@ protocol RepositoryDataProviding {
         in repository: RepoItem,
         branchName: String
     ) async throws -> String
-    func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem]
+    func loadPullRequests(for repository: RepoItem) async throws -> [RepoPullRequestItem]
     func loadPullRequestCommits(
         for pullRequest: RepoPullRequestItem,
         in repository: RepoItem
-    ) -> [RepoPullRequestCommitItem]
+    ) async throws -> [RepoPullRequestCommitItem]
+    func createPullRequest(
+        in repository: RepoItem,
+        title: String,
+        body: String?,
+        headBranch: String,
+        baseBranch: String
+    ) async throws -> RepoPullRequestItem
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem]
 }
 
@@ -385,7 +392,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
         return "issue/\(issue.number)-\(suffix)"
     }
 
-    func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {
+    func loadPullRequests(for repository: RepoItem) async throws -> [RepoPullRequestItem] {
         [
             RepoPullRequestItem(
                 id: "\(repository.id)-pr-91",
@@ -478,7 +485,7 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
     func loadPullRequestCommits(
         for pullRequest: RepoPullRequestItem,
         in repository: RepoItem
-    ) -> [RepoPullRequestCommitItem] {
+    ) async throws -> [RepoPullRequestCommitItem] {
         [
             RepoPullRequestCommitItem(
                 id: "\(pullRequest.id)-c1",
@@ -509,6 +516,37 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
                 committedAgo: "11 min. ago"
             )
         ]
+    }
+
+    func createPullRequest(
+        in repository: RepoItem,
+        title: String,
+        body: String?,
+        headBranch: String,
+        baseBranch: String
+    ) async throws -> RepoPullRequestItem {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = body?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let currentPullRequests = try await loadPullRequests(for: repository)
+        let nextNumber = currentPullRequests.map(\.number).max() ?? 0
+
+        return RepoPullRequestItem(
+            id: "\(repository.id)-local-pr-\(UUID().uuidString)",
+            number: nextNumber + 1,
+            title: trimmedTitle,
+            author: "you",
+            sourceBranch: headBranch,
+            targetBranch: baseBranch,
+            updatedAgo: "just now",
+            comments: 0,
+            changedFiles: 0,
+            commits: 0,
+            additions: max(0, trimmedBody.isEmpty ? 0 : 1),
+            deletions: 0,
+            isOpen: true,
+            isMerged: false,
+            isMine: true
+        )
     }
 
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {

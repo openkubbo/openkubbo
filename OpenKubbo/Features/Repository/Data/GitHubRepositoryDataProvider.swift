@@ -14,16 +14,13 @@ enum RepositoryDataError: LocalizedError {
 struct GitHubRepositoryDataProvider: RepositoryDataProviding {
     private let gitHubAPIService: GitHubAPIServicing
     private let gitHubTokenStore: GitHubTokenStoring
-    private let fallbackIssuesProvider: MockRepositoryDataProvider
 
     init(
         gitHubAPIService: GitHubAPIServicing,
-        gitHubTokenStore: GitHubTokenStoring,
-        fallbackIssuesProvider: MockRepositoryDataProvider = MockRepositoryDataProvider()
+        gitHubTokenStore: GitHubTokenStoring
     ) {
         self.gitHubAPIService = gitHubAPIService
         self.gitHubTokenStore = gitHubTokenStore
-        self.fallbackIssuesProvider = fallbackIssuesProvider
     }
 
     func loadRepositories() async throws -> [RepoItem] {
@@ -149,15 +146,85 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         return createdBranch.name
     }
 
-    func loadPullRequests(for repository: RepoItem) -> [RepoPullRequestItem] {
-        fallbackIssuesProvider.loadPullRequests(for: repository)
+    func loadPullRequests(for repository: RepoItem) async throws -> [RepoPullRequestItem] {
+        let token = try accessToken()
+        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token).lowercased()
+        let pullRequests = try await gitHubAPIService.fetchPullRequests(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        return pullRequests.map { pullRequest in
+            mapToPullRequestItem(
+                pullRequest,
+                repositoryID: repository.id,
+                viewerLogin: viewerLogin
+            )
+        }
     }
 
     func loadPullRequestCommits(
         for pullRequest: RepoPullRequestItem,
         in repository: RepoItem
-    ) -> [RepoPullRequestCommitItem] {
-        fallbackIssuesProvider.loadPullRequestCommits(for: pullRequest, in: repository)
+    ) async throws -> [RepoPullRequestCommitItem] {
+        let token = try accessToken()
+        let commits = try await gitHubAPIService.fetchPullRequestCommits(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            pullRequestNumber: pullRequest.number
+        )
+
+        return commits.map(mapToPullRequestCommitItem)
+    }
+
+    func createPullRequest(
+        in repository: RepoItem,
+        title: String,
+        body: String?,
+        headBranch: String,
+        baseBranch: String
+    ) async throws -> RepoPullRequestItem {
+        let token = try accessToken()
+        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token).lowercased()
+        let createdPullRequest = try await gitHubAPIService.createPullRequest(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            title: title,
+            body: body,
+            head: headBranch,
+            base: baseBranch
+        )
+
+        let pullRequests = try await gitHubAPIService.fetchPullRequests(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        if let matchedPullRequest = pullRequests.first(where: { $0.number == createdPullRequest.number }) {
+            return mapToPullRequestItem(
+                matchedPullRequest,
+                repositoryID: repository.id,
+                viewerLogin: viewerLogin
+            )
+        }
+
+        return RepoPullRequestItem(
+            id: "\(repository.id)-pr-\(createdPullRequest.number)",
+            number: createdPullRequest.number,
+            title: createdPullRequest.title,
+            author: viewerLogin,
+            sourceBranch: headBranch,
+            targetBranch: baseBranch,
+            updatedAgo: "just now",
+            comments: 0,
+            changedFiles: 0,
+            commits: 0,
+            additions: 0,
+            deletions: 0,
+            isOpen: true,
+            isMerged: false,
+            isMine: true
+        )
     }
 
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
@@ -222,6 +289,40 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             author: comment.authorLogin,
             body: comment.body,
             updatedAgo: relativeTime(from: comment.updatedAt)
+        )
+    }
+
+    private func mapToPullRequestItem(
+        _ pullRequest: GitHubPullRequest,
+        repositoryID: String,
+        viewerLogin: String
+    ) -> RepoPullRequestItem {
+        RepoPullRequestItem(
+            id: "\(repositoryID)-pr-\(pullRequest.number)",
+            number: pullRequest.number,
+            title: pullRequest.title,
+            author: pullRequest.authorLogin,
+            sourceBranch: pullRequest.sourceBranch,
+            targetBranch: pullRequest.targetBranch,
+            updatedAgo: relativeTime(from: pullRequest.updatedAt),
+            comments: max(0, pullRequest.comments),
+            changedFiles: max(0, pullRequest.changedFiles),
+            commits: max(0, pullRequest.commits),
+            additions: max(0, pullRequest.additions),
+            deletions: max(0, pullRequest.deletions),
+            isOpen: pullRequest.isOpen,
+            isMerged: pullRequest.isMerged,
+            isMine: pullRequest.authorLogin.lowercased() == viewerLogin
+        )
+    }
+
+    private func mapToPullRequestCommitItem(_ commit: GitHubPullRequestCommit) -> RepoPullRequestCommitItem {
+        RepoPullRequestCommitItem(
+            id: commit.id,
+            sha: String(commit.sha.prefix(7)),
+            message: commit.message,
+            author: commit.authorLogin,
+            committedAgo: relativeTime(from: commit.committedAt)
         )
     }
 

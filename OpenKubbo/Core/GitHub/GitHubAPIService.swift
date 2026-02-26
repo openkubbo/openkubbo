@@ -205,6 +205,110 @@ final class GitHubAPIService: GitHubAPIServicing {
         )
     }
 
+    func fetchPullRequests(accessToken: String, repositoryFullName: String) async throws -> [GitHubPullRequest] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var pullRequests: [GitHubPullRequest] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/pulls")!
+            components.queryItems = [
+                URLQueryItem(name: "state", value: "all"),
+                URLQueryItem(name: "sort", value: "updated"),
+                URLQueryItem(name: "direction", value: "desc"),
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [PullRequestListResponse] = try await perform(request)
+
+            pullRequests.append(
+                contentsOf: response.map { item in
+                    GitHubPullRequest(
+                        id: "\(repositoryFullName)-pr-\(item.number)",
+                        number: item.number,
+                        title: item.title,
+                        body: item.body ?? "",
+                        authorLogin: item.user.login,
+                        sourceBranch: item.head.ref,
+                        targetBranch: item.base.ref,
+                        updatedAt: iso8601Formatter.date(from: item.updatedAt),
+                        comments: max(0, item.comments),
+                        changedFiles: max(0, item.changedFiles ?? 0),
+                        commits: max(0, item.commits ?? 0),
+                        additions: max(0, item.additions ?? 0),
+                        deletions: max(0, item.deletions ?? 0),
+                        isOpen: item.state.lowercased() == "open",
+                        isMerged: item.mergedAt != nil
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return pullRequests
+    }
+
+    func fetchPullRequestCommits(
+        accessToken: String,
+        repositoryFullName: String,
+        pullRequestNumber: Int
+    ) async throws -> [GitHubPullRequestCommit] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var commits: [GitHubPullRequestCommit] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(
+                string: "https://api.github.com/repos/\(owner)/\(repo)/pulls/\(pullRequestNumber)/commits"
+            )!
+            components.queryItems = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [PullRequestCommitResponse] = try await perform(request)
+
+            commits.append(
+                contentsOf: response.map { item in
+                    GitHubPullRequestCommit(
+                        id: "\(repositoryFullName)-pr-\(pullRequestNumber)-commit-\(item.sha)",
+                        sha: item.sha,
+                        message: item.commit.message,
+                        authorLogin: item.author?.login ?? item.commit.author?.name ?? "unknown",
+                        committedAt: {
+                            guard let date = item.commit.author?.date else { return nil }
+                            return iso8601Formatter.date(from: date)
+                        }()
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return commits
+    }
+
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue] {
         let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
         var issues: [GitHubIssue] = []
@@ -753,6 +857,68 @@ private struct PullRequestResponse: Decodable {
         case title
         case htmlURL = "html_url"
     }
+}
+
+private struct PullRequestListResponse: Decodable {
+    struct User: Decodable {
+        let login: String
+    }
+
+    struct BranchRef: Decodable {
+        let ref: String
+    }
+
+    let number: Int
+    let title: String
+    let body: String?
+    let user: User
+    let head: BranchRef
+    let base: BranchRef
+    let updatedAt: String
+    let comments: Int
+    let changedFiles: Int?
+    let commits: Int?
+    let additions: Int?
+    let deletions: Int?
+    let state: String
+    let mergedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case number
+        case title
+        case body
+        case user
+        case head
+        case base
+        case updatedAt = "updated_at"
+        case comments
+        case changedFiles = "changed_files"
+        case commits
+        case additions
+        case deletions
+        case state
+        case mergedAt = "merged_at"
+    }
+}
+
+private struct PullRequestCommitResponse: Decodable {
+    struct User: Decodable {
+        let login: String
+    }
+
+    struct Commit: Decodable {
+        struct Author: Decodable {
+            let name: String?
+            let date: String?
+        }
+
+        let message: String
+        let author: Author?
+    }
+
+    let sha: String
+    let author: User?
+    let commit: Commit
 }
 
 private struct FileContentResponse: Decodable {
