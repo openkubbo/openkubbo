@@ -103,6 +103,9 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var loadedPullRequestCommitsByPullRequestID: [String: [RepoPullRequestCommitItem]] = [:]
     @Published private(set) var pullRequestCommitsLoadingPullRequestIDs: Set<String> = []
     @Published private(set) var pullRequestCommitsLoadErrorMessageByPullRequestID: [String: String] = [:]
+    @Published private(set) var loadedCIRunsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
+    @Published private(set) var ciRunsLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var ciRunsLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
     @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
 
@@ -195,6 +198,9 @@ final class RepositoryViewModel: ObservableObject {
             loadedPullRequestCommitsByPullRequestID = [:]
             pullRequestCommitsLoadingPullRequestIDs = []
             pullRequestCommitsLoadErrorMessageByPullRequestID = [:]
+            loadedCIRunsByRepositoryID = [:]
+            ciRunsLoadingRepositoryIDs = []
+            ciRunsLoadErrorMessageByRepositoryID = [:]
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
             localCurrentBranchByRepositoryID = [:]
@@ -330,6 +336,10 @@ final class RepositoryViewModel: ObservableObject {
             Task { [weak self] in
                 await self?.loadBranchesIfNeeded(for: repo)
                 await self?.loadPullRequestsIfNeeded(for: repo)
+            }
+        } else if destination == .ciRuns, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadCIRunsIfNeeded(for: repo)
             }
         } else if destination == .branches, let repo = selectedRepo {
             Task { [weak self] in
@@ -786,11 +796,32 @@ final class RepositoryViewModel: ObservableObject {
         selectedBranchID = nil
     }
 
+    func loadCIRunsIfNeeded(for repo: RepoItem) async {
+        await loadCIRuns(for: repo, forceReload: false)
+    }
+
+    func reloadCIRuns(for repo: RepoItem) async {
+        await loadCIRuns(for: repo, forceReload: true)
+    }
+
+    func isLoadingCIRuns(for repo: RepoItem) -> Bool {
+        ciRunsLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func ciRunsLoadErrorMessage(for repo: RepoItem) -> String? {
+        ciRunsLoadErrorMessageByRepositoryID[repo.id]
+    }
+
     func destinationInfoItems(
         for repo: RepoItem,
         destination: RepoDetailDestination
     ) -> [RepoDestinationInfoItem] {
-        destination.mockInfoItems(repoName: repo.name, branch: repo.branch)
+        switch destination {
+        case .ciRuns:
+            return loadedCIRunsByRepositoryID[repo.id, default: []]
+        default:
+            return destination.mockInfoItems(repoName: repo.name, branch: repo.branch)
+        }
     }
 
     func selectDestinationInfoItem(_ item: RepoDestinationInfoItem) {
@@ -1100,6 +1131,39 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadCIRuns(for repo: RepoItem, forceReload: Bool) async {
+        if ciRunsLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, loadedCIRunsByRepositoryID[repo.id] != nil {
+            return
+        }
+
+        ciRunsLoadingRepositoryIDs.insert(repo.id)
+        ciRunsLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            ciRunsLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let ciRuns = try await dataProvider.loadCIRuns(for: repo)
+            loadedCIRunsByRepositoryID[repo.id] = ciRuns
+            ciRunsLoadErrorMessageByRepositoryID[repo.id] = nil
+
+            if let selectedDestinationInfoItemID,
+               !ciRuns.contains(where: { $0.id == selectedDestinationInfoItemID }),
+               selectedDetailDestination == .ciRuns {
+                self.selectedDestinationInfoItemID = nil
+            }
+        } catch {
+            ciRunsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedCIRunsByRepositoryID[repo.id] == nil {
+                loadedCIRunsByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -1239,6 +1303,11 @@ final class RepositoryViewModel: ObservableObject {
         pullRequestCommitsLoadingPullRequestIDs = pullRequestCommitsLoadingPullRequestIDs.intersection(validPullRequestIDs)
         pullRequestCommitsLoadErrorMessageByPullRequestID = pullRequestCommitsLoadErrorMessageByPullRequestID.filter {
             validPullRequestIDs.contains($0.key)
+        }
+        loadedCIRunsByRepositoryID = loadedCIRunsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        ciRunsLoadingRepositoryIDs = ciRunsLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        ciRunsLoadErrorMessageByRepositoryID = ciRunsLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
         }
         issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in
             validRepositoryIDs.contains(issueRepositoryID(fromIssueBranchKey: key))

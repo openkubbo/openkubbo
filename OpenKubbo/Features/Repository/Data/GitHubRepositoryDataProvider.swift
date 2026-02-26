@@ -227,6 +227,18 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         )
     }
 
+    func loadCIRuns(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        let token = try accessToken()
+        let workflowRuns = try await gitHubAPIService.fetchWorkflowRuns(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        return workflowRuns.map { run in
+            mapToCIRunInfoItem(run, repository: repository)
+        }
+    }
+
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
         let token = try accessToken()
         let fetchedBranches = try await gitHubAPIService.fetchBranches(
@@ -324,6 +336,133 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             author: commit.authorLogin,
             committedAgo: relativeTime(from: commit.committedAt)
         )
+    }
+
+    private func mapToCIRunInfoItem(
+        _ run: GitHubWorkflowRun,
+        repository: RepoItem
+    ) -> RepoDestinationInfoItem {
+        let statusText = ciRunStatusText(status: run.status, conclusion: run.conclusion)
+        let branchName = {
+            let trimmed = run.headBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? repository.branch : trimmed
+        }()
+        let metadataDate = run.startedAt ?? run.createdAt ?? run.updatedAt
+        let metadata = metadataDate.map { "Started \(relativeTime(from: $0))" } ?? "Updated recently"
+        let summary = "Workflow run for \(ciLabel(run.event)) on \(branchName) is \(statusText.lowercased())."
+
+        var bulletPoints: [String] = []
+        if let event = run.event?.trimmingCharacters(in: .whitespacesAndNewlines), !event.isEmpty {
+            bulletPoints.append("Event: \(ciLabel(event))")
+        }
+        if let actor = run.actorLogin?.trimmingCharacters(in: .whitespacesAndNewlines), !actor.isEmpty {
+            bulletPoints.append("Actor: \(actor)")
+        }
+        if let headSHA = run.headSHA?.trimmingCharacters(in: .whitespacesAndNewlines), !headSHA.isEmpty {
+            bulletPoints.append("Commit: \(String(headSHA.prefix(7)))")
+        }
+        if let detailsURL = run.htmlURL?.absoluteString, !detailsURL.isEmpty {
+            bulletPoints.append("Details: \(detailsURL)")
+        }
+
+        return RepoDestinationInfoItem(
+            id: run.id,
+            title: run.name,
+            subtitle: "Run #\(run.runNumber) • \(branchName)",
+            status: statusText,
+            metadata: metadata,
+            summary: summary,
+            bulletPoints: bulletPoints,
+            trailingValue: ciRunDuration(
+                status: run.status,
+                startedAt: run.startedAt ?? run.createdAt,
+                updatedAt: run.updatedAt
+            )
+        )
+    }
+
+    private func ciRunStatusText(status: String, conclusion: String?) -> String {
+        let normalizedStatus = status.lowercased()
+
+        if normalizedStatus == "completed" {
+            switch conclusion?.lowercased() {
+            case "success":
+                return "Success"
+            case "failure":
+                return "Failure"
+            case "cancelled":
+                return "Cancelled"
+            case "timed_out":
+                return "Timed Out"
+            case "neutral":
+                return "Neutral"
+            case "skipped":
+                return "Skipped"
+            case "action_required":
+                return "Action Required"
+            case "startup_failure":
+                return "Startup Failure"
+            case "stale":
+                return "Stale"
+            default:
+                return "Completed"
+            }
+        }
+
+        if normalizedStatus == "in_progress" {
+            return "In Progress"
+        }
+
+        if normalizedStatus == "queued" {
+            return "Queued"
+        }
+
+        if normalizedStatus == "requested" {
+            return "Requested"
+        }
+
+        return ciLabel(normalizedStatus)
+    }
+
+    private func ciRunDuration(status: String, startedAt: Date?, updatedAt: Date?) -> String? {
+        guard let startedAt else { return nil }
+
+        let normalizedStatus = status.lowercased()
+        let endDate: Date
+        if normalizedStatus == "in_progress" {
+            endDate = Date()
+        } else if let updatedAt {
+            endDate = updatedAt
+        } else {
+            return nil
+        }
+
+        let duration = max(0, Int(endDate.timeIntervalSince(startedAt)))
+        if duration < 60 {
+            return "\(duration)s"
+        }
+
+        let hours = duration / 3_600
+        let minutes = (duration % 3_600) / 60
+        let seconds = duration % 60
+
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+
+        return "\(minutes)m \(seconds)s"
+    }
+
+    private func ciLabel(_ value: String?) -> String {
+        guard let value, !value.isEmpty else {
+            return "workflow"
+        }
+
+        return value
+            .replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .map { $0.capitalized }
+            .joined(separator: " ")
     }
 
     private func mapIssueLabelKind(_ label: String) -> RepoIssueLabelKind {

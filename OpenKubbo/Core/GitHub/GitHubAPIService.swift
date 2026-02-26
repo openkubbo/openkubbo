@@ -324,6 +324,78 @@ final class GitHubAPIService: GitHubAPIServicing {
         return commits
     }
 
+    func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var workflowRuns: [GitHubWorkflowRun] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/actions/runs")!
+            components.queryItems = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: WorkflowRunsResponse = try await perform(request)
+
+            workflowRuns.append(
+                contentsOf: response.workflowRuns.compactMap { run in
+                    guard let id = run.id,
+                          let runNumber = run.runNumber else {
+                        return nil
+                    }
+
+                    let name = run.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let resolvedName: String
+                    if let name, !name.isEmpty {
+                        resolvedName = name
+                    } else if let displayTitle = run.displayTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                              !displayTitle.isEmpty {
+                        resolvedName = displayTitle
+                    } else {
+                        resolvedName = "Workflow #\(runNumber)"
+                    }
+
+                    return GitHubWorkflowRun(
+                        id: "\(repositoryFullName)-workflow-run-\(id)",
+                        runNumber: runNumber,
+                        name: resolvedName,
+                        status: run.status ?? "unknown",
+                        conclusion: run.conclusion,
+                        event: run.event,
+                        headBranch: run.headBranch,
+                        headSHA: run.headSHA,
+                        actorLogin: run.actor?.login,
+                        createdAt: parseISO8601(run.createdAt),
+                        updatedAt: parseISO8601(run.updatedAt),
+                        startedAt: parseISO8601(run.runStartedAt),
+                        htmlURL: {
+                            guard let htmlURL = run.htmlURL else { return nil }
+                            return URL(string: htmlURL)
+                        }()
+                    )
+                }
+            )
+
+            if response.workflowRuns.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return workflowRuns.sorted { lhs, rhs in
+            let leftDate = lhs.updatedAt ?? lhs.startedAt ?? lhs.createdAt ?? .distantPast
+            let rightDate = rhs.updatedAt ?? rhs.startedAt ?? rhs.createdAt ?? .distantPast
+            return leftDate > rightDate
+        }
+    }
+
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue] {
         let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
         var issues: [GitHubIssue] = []
@@ -653,6 +725,14 @@ final class GitHubAPIService: GitHubAPIServicing {
         return gitRef
     }
 
+    private func parseISO8601(_ value: String?) -> Date? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return iso8601Formatter.date(from: value)
+    }
+
     private func encodePath(_ path: String) throws -> String {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalized = trimmed.hasPrefix("/") ? String(trimmed.dropFirst()) : trimmed
@@ -934,6 +1014,52 @@ private struct PullRequestCommitResponse: Decodable {
     let sha: String?
     let author: User?
     let commit: Commit?
+}
+
+private struct WorkflowRunsResponse: Decodable {
+    let workflowRuns: [WorkflowRunResponse]
+
+    enum CodingKeys: String, CodingKey {
+        case workflowRuns = "workflow_runs"
+    }
+}
+
+private struct WorkflowRunResponse: Decodable {
+    struct Actor: Decodable {
+        let login: String?
+    }
+
+    let id: Int64?
+    let runNumber: Int?
+    let name: String?
+    let displayTitle: String?
+    let status: String?
+    let conclusion: String?
+    let event: String?
+    let headBranch: String?
+    let headSHA: String?
+    let actor: Actor?
+    let createdAt: String?
+    let updatedAt: String?
+    let runStartedAt: String?
+    let htmlURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case runNumber = "run_number"
+        case name
+        case displayTitle = "display_title"
+        case status
+        case conclusion
+        case event
+        case headBranch = "head_branch"
+        case headSHA = "head_sha"
+        case actor
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case runStartedAt = "run_started_at"
+        case htmlURL = "html_url"
+    }
 }
 
 private struct FileContentResponse: Decodable {

@@ -2025,12 +2025,22 @@ struct RepositoryPanelView: View {
         for repo: RepoItem,
         destination: RepoDetailDestination
     ) -> some View {
+        let isCIRuns = destination == .ciRuns
         let items = viewModel.destinationInfoItems(for: repo, destination: destination)
         let selectedItem = viewModel.selectedDestinationInfoItem(for: repo, destination: destination)
+        let isLoadingItems = isCIRuns && viewModel.isLoadingCIRuns(for: repo)
+        let loadErrorMessage = isCIRuns ? viewModel.ciRunsLoadErrorMessage(for: repo) : nil
+        let onRefresh: (() -> Void)? = isCIRuns
+            ? {
+                Task {
+                    await viewModel.reloadCIRuns(for: repo)
+                }
+            }
+            : nil
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
-                overlayTopBar(title: "Open \(destination.title)")
+                overlayTopBar(title: "Open \(destination.title)", onRefresh: onRefresh)
 
                 Rectangle()
                     .fill(dividerColor)
@@ -2038,7 +2048,38 @@ struct RepositoryPanelView: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 0) {
-                        if items.isEmpty {
+                        if isLoadingItems && items.isEmpty {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Loading \(destination.title.lowercased())...")
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(secondaryTextColor)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if let loadErrorMessage, items.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(loadErrorMessage)
+                                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(Color.red.opacity(isDarkTheme ? 0.86 : 0.72))
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Button("Retry") {
+                                    Task {
+                                        await viewModel.reloadCIRuns(for: repo)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                                .repoCursorOnHover()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                        } else if items.isEmpty {
                             Text("No items available.")
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(secondaryTextColor)
@@ -2075,6 +2116,11 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+        .task(id: "destination-\(destination.rawValue)-\(repo.id)") {
+            if isCIRuns {
+                await viewModel.loadCIRunsIfNeeded(for: repo)
+            }
+        }
     }
 
     private func destinationInfoDetailsOverlayPanel(

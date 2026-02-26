@@ -35,6 +35,7 @@ protocol RepositoryDataProviding {
         headBranch: String,
         baseBranch: String
     ) async throws -> RepoPullRequestItem
+    func loadCIRuns(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem]
 }
 
@@ -546,6 +547,13 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
             isOpen: true,
             isMerged: false,
             isMine: true
+        )
+    }
+
+    func loadCIRuns(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        RepoDetailDestination.ciRuns.mockInfoItems(
+            repoName: repository.name,
+            branch: repository.branch
         )
     }
 

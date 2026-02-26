@@ -309,6 +309,10 @@ private struct StubGitHubAPIService: GitHubAPIServicing {
         []
     }
 
+    func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
+        []
+    }
+
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue] {
         []
     }

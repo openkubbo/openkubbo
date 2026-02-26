@@ -108,6 +108,22 @@ struct GitHubPullRequestCommit: Equatable {
     let committedAt: Date?
 }
 
+struct GitHubWorkflowRun: Equatable {
+    let id: String
+    let runNumber: Int
+    let name: String
+    let status: String
+    let conclusion: String?
+    let event: String?
+    let headBranch: String?
+    let headSHA: String?
+    let actorLogin: String?
+    let createdAt: Date?
+    let updatedAt: Date?
+    let startedAt: Date?
+    let htmlURL: URL?
+}
+
 struct GitHubCommitSummary: Equatable {
     let sha: String
     let message: String
@@ -205,6 +221,7 @@ protocol GitHubAPIServicing {
         repositoryFullName: String,
         pullRequestNumber: Int
     ) async throws -> [GitHubPullRequestCommit]
+    func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun]
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(
         accessToken: String,
