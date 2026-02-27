@@ -2025,7 +2025,7 @@ struct RepositoryPanelView: View {
         for repo: RepoItem,
         destination: RepoDetailDestination
     ) -> some View {
-        let supportsRemoteLoading = destination == .ciRuns || destination == .openCommits
+        let supportsRemoteLoading = destination == .ciRuns || destination == .openCommits || destination == .tags
         let items = viewModel.destinationInfoItems(for: repo, destination: destination)
         let selectedItem = viewModel.selectedDestinationInfoItem(for: repo, destination: destination)
         let isLoadingItems: Bool
@@ -2047,6 +2047,14 @@ struct RepositoryPanelView: View {
             onRefresh = {
                 Task {
                     await viewModel.reloadOpenCommits(for: repo)
+                }
+            }
+        case .tags:
+            isLoadingItems = viewModel.isLoadingTags(for: repo)
+            loadErrorMessage = viewModel.tagsLoadErrorMessage(for: repo)
+            onRefresh = {
+                Task {
+                    await viewModel.reloadTags(for: repo)
                 }
             }
         default:
@@ -2090,6 +2098,8 @@ struct RepositoryPanelView: View {
                                             await viewModel.reloadCIRuns(for: repo)
                                         case .openCommits:
                                             await viewModel.reloadOpenCommits(for: repo)
+                                        case .tags:
+                                            await viewModel.reloadTags(for: repo)
                                         default:
                                             break
                                         }
@@ -2145,6 +2155,8 @@ struct RepositoryPanelView: View {
                 await viewModel.loadCIRunsIfNeeded(for: repo)
             } else if destination == .openCommits {
                 await viewModel.loadOpenCommitsIfNeeded(for: repo)
+            } else if destination == .tags {
+                await viewModel.loadTagsIfNeeded(for: repo)
             }
         }
     }

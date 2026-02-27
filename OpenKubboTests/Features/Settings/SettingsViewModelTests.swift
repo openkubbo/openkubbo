@@ -317,6 +317,13 @@ private struct StubGitHubAPIService: GitHubAPIServicing {
         []
     }
 
+    func fetchRepositoryTags(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryTag] {
+        []
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         []
     }

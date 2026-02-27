@@ -252,6 +252,18 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
     }
 
+    func loadTags(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        let token = try accessToken()
+        let tags = try await gitHubAPIService.fetchRepositoryTags(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        return tags.map { tag in
+            mapToTagInfoItem(tag, repository: repository)
+        }
+    }
+
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
         let token = try accessToken()
         let fetchedBranches = try await gitHubAPIService.fetchBranches(
@@ -419,6 +431,35 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             summary: summary,
             bulletPoints: bulletPoints,
             trailingValue: repository.branch
+        )
+    }
+
+    private func mapToTagInfoItem(
+        _ tag: GitHubRepositoryTag,
+        repository: RepoItem
+    ) -> RepoDestinationInfoItem {
+        let shortSHA = String(tag.commitSHA.prefix(7))
+        var bulletPoints = [
+            "Commit: \(shortSHA)",
+            "Branch: \(repository.branch)"
+        ]
+
+        if let tarballURL = tag.tarballURL?.absoluteString, !tarballURL.isEmpty {
+            bulletPoints.append("Tarball: \(tarballURL)")
+        }
+        if let zipballURL = tag.zipballURL?.absoluteString, !zipballURL.isEmpty {
+            bulletPoints.append("Zipball: \(zipballURL)")
+        }
+
+        return RepoDestinationInfoItem(
+            id: tag.id,
+            title: tag.name,
+            subtitle: "Commit \(shortSHA)",
+            status: "Active",
+            metadata: "Updated recently",
+            summary: "Tag \(tag.name) points to commit \(shortSHA) on \(repository.name).",
+            bulletPoints: bulletPoints,
+            trailingValue: nil
         )
     }
 
@@ -592,7 +633,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             releases: metric("\(repository.fullName)-releases", min: 0, max: 28),
             ciRuns: 0,
             discussions: metric("\(repository.fullName)-discussions", min: 0, max: 22),
-            tags: metric("\(repository.fullName)-tags", min: 0, max: 34),
+            tags: 0,
             branches: metric("\(repository.fullName)-branches", min: 1, max: 12),
             contributors: metric("\(repository.fullName)-contributors", min: 1, max: 14),
             openCommits: 0

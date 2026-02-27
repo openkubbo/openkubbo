@@ -397,6 +397,72 @@ final class GitHubAPIService: GitHubAPIServicing {
         return commits
     }
 
+    func fetchRepositoryTags(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryTag] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var tags: [GitHubRepositoryTag] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/tags")!
+            components.queryItems = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [RepositoryTagResponse] = try await perform(request)
+
+            tags.append(
+                contentsOf: response.compactMap { item in
+                    let trimmedName = item.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let trimmedSHA = item.commit?.sha?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    guard !trimmedName.isEmpty, !trimmedSHA.isEmpty else {
+                        return nil
+                    }
+
+                    let tarballURL: URL?
+                    if let value = item.tarballURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !value.isEmpty {
+                        tarballURL = URL(string: value)
+                    } else {
+                        tarballURL = nil
+                    }
+
+                    let zipballURL: URL?
+                    if let value = item.zipballURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !value.isEmpty {
+                        zipballURL = URL(string: value)
+                    } else {
+                        zipballURL = nil
+                    }
+
+                    return GitHubRepositoryTag(
+                        id: "\(repositoryFullName)-tag-\(trimmedName)",
+                        name: trimmedName,
+                        commitSHA: trimmedSHA,
+                        tarballURL: tarballURL,
+                        zipballURL: zipballURL
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return tags
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
         var workflowRuns: [GitHubWorkflowRun] = []
@@ -1114,6 +1180,24 @@ private struct RepositoryCommitResponse: Decodable {
         case author
         case commit
         case htmlURL = "html_url"
+    }
+}
+
+private struct RepositoryTagResponse: Decodable {
+    struct Commit: Decodable {
+        let sha: String?
+    }
+
+    let name: String?
+    let commit: Commit?
+    let tarballURL: String?
+    let zipballURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name
+        case commit
+        case tarballURL = "tarball_url"
+        case zipballURL = "zipball_url"
     }
 }
 

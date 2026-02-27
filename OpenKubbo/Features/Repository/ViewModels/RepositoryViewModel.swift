@@ -109,6 +109,9 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var loadedOpenCommitsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
     @Published private(set) var openCommitsLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var openCommitsLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedTagsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
+    @Published private(set) var tagsLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var tagsLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
     @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
 
@@ -207,6 +210,9 @@ final class RepositoryViewModel: ObservableObject {
             loadedOpenCommitsByRepositoryID = [:]
             openCommitsLoadingRepositoryIDs = []
             openCommitsLoadErrorMessageByRepositoryID = [:]
+            loadedTagsByRepositoryID = [:]
+            tagsLoadingRepositoryIDs = []
+            tagsLoadErrorMessageByRepositoryID = [:]
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
             localCurrentBranchByRepositoryID = [:]
@@ -350,6 +356,10 @@ final class RepositoryViewModel: ObservableObject {
         } else if destination == .openCommits, let repo = selectedRepo {
             Task { [weak self] in
                 await self?.loadOpenCommitsIfNeeded(for: repo)
+            }
+        } else if destination == .tags, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadTagsIfNeeded(for: repo)
             }
         } else if destination == .branches, let repo = selectedRepo {
             Task { [weak self] in
@@ -822,6 +832,14 @@ final class RepositoryViewModel: ObservableObject {
         await loadOpenCommits(for: repo, forceReload: true)
     }
 
+    func loadTagsIfNeeded(for repo: RepoItem) async {
+        await loadTags(for: repo, forceReload: false)
+    }
+
+    func reloadTags(for repo: RepoItem) async {
+        await loadTags(for: repo, forceReload: true)
+    }
+
     func isLoadingCIRuns(for repo: RepoItem) -> Bool {
         ciRunsLoadingRepositoryIDs.contains(repo.id)
     }
@@ -838,6 +856,14 @@ final class RepositoryViewModel: ObservableObject {
         openCommitsLoadErrorMessageByRepositoryID[repo.id]
     }
 
+    func isLoadingTags(for repo: RepoItem) -> Bool {
+        tagsLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func tagsLoadErrorMessage(for repo: RepoItem) -> String? {
+        tagsLoadErrorMessageByRepositoryID[repo.id]
+    }
+
     func destinationInfoItems(
         for repo: RepoItem,
         destination: RepoDetailDestination
@@ -847,6 +873,8 @@ final class RepositoryViewModel: ObservableObject {
             return loadedCIRunsByRepositoryID[repo.id, default: []]
         case .openCommits:
             return loadedOpenCommitsByRepositoryID[repo.id, default: []]
+        case .tags:
+            return loadedTagsByRepositoryID[repo.id, default: []]
         default:
             return destination.mockInfoItems(repoName: repo.name, branch: repo.branch)
         }
@@ -1229,6 +1257,41 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadTags(for repo: RepoItem, forceReload: Bool) async {
+        if tagsLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, let cachedTags = loadedTagsByRepositoryID[repo.id] {
+            updateTagsMetricCount(for: repo.id, count: cachedTags.count)
+            return
+        }
+
+        tagsLoadingRepositoryIDs.insert(repo.id)
+        tagsLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            tagsLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let tags = try await dataProvider.loadTags(for: repo)
+            loadedTagsByRepositoryID[repo.id] = tags
+            tagsLoadErrorMessageByRepositoryID[repo.id] = nil
+            updateTagsMetricCount(for: repo.id, count: tags.count)
+
+            if let selectedDestinationInfoItemID,
+               !tags.contains(where: { $0.id == selectedDestinationInfoItemID }),
+               selectedDetailDestination == .tags {
+                self.selectedDestinationInfoItemID = nil
+            }
+        } catch {
+            tagsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedTagsByRepositoryID[repo.id] == nil {
+                loadedTagsByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -1362,6 +1425,15 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func updateTagsMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(tags: count)
+        }
+    }
+
     private func pruneIssuesCache(for repositories: [RepoItem]) {
         let validRepositoryIDs = Set(repositories.map(\.id))
         loadedIssuesByRepositoryID = loadedIssuesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
@@ -1395,6 +1467,11 @@ final class RepositoryViewModel: ObservableObject {
         loadedOpenCommitsByRepositoryID = loadedOpenCommitsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
         openCommitsLoadingRepositoryIDs = openCommitsLoadingRepositoryIDs.intersection(validRepositoryIDs)
         openCommitsLoadErrorMessageByRepositoryID = openCommitsLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        loadedTagsByRepositoryID = loadedTagsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        tagsLoadingRepositoryIDs = tagsLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        tagsLoadErrorMessageByRepositoryID = tagsLoadErrorMessageByRepositoryID.filter {
             validRepositoryIDs.contains($0.key)
         }
         issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in
