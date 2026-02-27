@@ -8,6 +8,8 @@ struct SettingsView: View {
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
 
+    private let isAppUpdateEnabled = false
+
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
 
@@ -118,6 +120,27 @@ struct SettingsView: View {
         : Color(red: 0.69, green: 0.75, blue: 0.84)
     }
 
+    private var appVersionLabel: String {
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+        let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let resolvedShortVersion = shortVersion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolvedBuildVersion = buildVersion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if !resolvedShortVersion.isEmpty, !resolvedBuildVersion.isEmpty, resolvedShortVersion != resolvedBuildVersion {
+            return "\(resolvedShortVersion) (\(resolvedBuildVersion))"
+        }
+
+        if !resolvedShortVersion.isEmpty {
+            return resolvedShortVersion
+        }
+
+        if !resolvedBuildVersion.isEmpty {
+            return resolvedBuildVersion
+        }
+
+        return "Unknown"
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -190,6 +213,30 @@ struct SettingsView: View {
             .background(SettingsWindowDragRegion())
 
             HStack(spacing: 8) {
+                Button(action: openAppUpdatePage) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.trianglehead.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                        Text("Update App")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .frame(height: 28)
+                    .background(
+                        Capsule()
+                            .fill(cardFillColor)
+                            .overlay(
+                                Capsule()
+                                    .stroke(cardStrokeColor, lineWidth: 1)
+                            )
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(!isAppUpdateEnabled)
+                .opacity(isAppUpdateEnabled ? 1 : 0.58)
+                .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
+
                 Button(action: closeSettingsWindow) {
                     SettingsHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
                 }
@@ -352,6 +399,45 @@ struct SettingsView: View {
                     Text("General settings are under construction.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+
+            sectionTitle("UPDATE")
+            settingsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Current version: \(appVersionLabel)")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+
+                    Text("Click below to open the latest release and update the app.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Button(action: openAppUpdatePage) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "arrow.trianglehead.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text("Update App")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        }
+                        .foregroundStyle(githubSecondaryButtonTextColor)
+                        .padding(.horizontal, 12)
+                        .frame(height: 34)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(githubSecondaryButtonFillColor)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                        .stroke(githubSecondaryButtonStrokeColor, lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!isAppUpdateEnabled)
+                    .opacity(isAppUpdateEnabled ? 1 : 0.58)
+                    .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -731,6 +817,14 @@ struct SettingsView: View {
         if let verificationURL = viewModel.githubVerificationURL ?? URL(string: gitHubDeviceURLString) {
             NSWorkspace.shared.open(verificationURL)
         }
+    }
+
+    private func openAppUpdatePage() {
+        guard let releaseURL = URL(string: "https://github.com/openkubbo/openkubbo/releases/latest") else {
+            return
+        }
+
+        NSWorkspace.shared.open(releaseURL)
     }
 
     private func chooseLocalRepositoriesFolder() {

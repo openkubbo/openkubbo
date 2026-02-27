@@ -8,6 +8,7 @@ struct RepositoryPanelView: View {
     private let collapsedPanelWidth: CGFloat = 340
     private let expandedPanelHeight: CGFloat = 704
     private let expandedRightColumnWidth: CGFloat = 420
+    private let isAppUpdateEnabled = false
 
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
@@ -2100,6 +2101,42 @@ struct RepositoryPanelView: View {
                     .fill(dividerColor)
                     .frame(height: 1)
 
+                if destination == .contributors {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.trianglehead.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(secondaryTextColor)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("App update available")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
+
+                            Text("Open latest release and update OpenKubbo.")
+                                .font(.system(size: 11, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        Button("Update App") {
+                            openAppUpdatePage()
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
+                        .foregroundStyle(accentColor)
+                        .disabled(!isAppUpdateEnabled)
+                        .opacity(isAppUpdateEnabled ? 1 : 0.58)
+                        .repoCursorOnHover()
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
+
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 0) {
                         if supportsRemoteLoading && isLoadingItems && items.isEmpty {
@@ -2200,6 +2237,14 @@ struct RepositoryPanelView: View {
                 await viewModel.loadContributorsIfNeeded(for: repo)
             }
         }
+    }
+
+    private func openAppUpdatePage() {
+        guard let releaseURL = URL(string: "https://github.com/openkubbo/openkubbo/releases/latest") else {
+            return
+        }
+
+        NSWorkspace.shared.open(releaseURL)
     }
 
     private func destinationInfoDetailsOverlayPanel(
