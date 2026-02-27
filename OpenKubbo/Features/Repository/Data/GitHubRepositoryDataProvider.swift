@@ -820,16 +820,10 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             ciRuns: 0,
             discussions: 0,
             tags: 0,
-            branches: metric("\(repository.fullName)-branches", min: 1, max: 12),
+            branches: 0,
             contributors: 0,
             openCommits: 0
         )
-    }
-
-    private func metric(_ key: String, min: Int, max: Int) -> Int {
-        guard max >= min else { return min }
-        let range = UInt64(max - min + 1)
-        return min + Int(seededValue(key) % range)
     }
 
     private func seededValue(_ key: String) -> UInt64 {

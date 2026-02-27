@@ -1331,7 +1331,8 @@ final class RepositoryViewModel: ObservableObject {
             return
         }
 
-        if !forceReload, loadedBranchesByRepositoryID[repo.id] != nil {
+        if !forceReload, let cachedBranches = loadedBranchesByRepositoryID[repo.id] {
+            updateBranchesMetricCount(for: repo.id, count: cachedBranches.count)
             return
         }
 
@@ -1344,6 +1345,7 @@ final class RepositoryViewModel: ObservableObject {
         do {
             let branches = try await dataProvider.loadBranches(for: repo)
             loadedBranchesByRepositoryID[repo.id] = branches
+            updateBranchesMetricCount(for: repo.id, count: branches.count)
             preserveOptimisticBranches(in: repo)
             synchronizeIssueBranchLinks(for: repo)
             applyPullRequestBranchFlags(for: repo)
@@ -1369,7 +1371,8 @@ final class RepositoryViewModel: ObservableObject {
             return
         }
 
-        if !forceReload, loadedPullRequestsByRepositoryID[repo.id] != nil {
+        if !forceReload, let cachedPullRequests = loadedPullRequestsByRepositoryID[repo.id] {
+            updatePullRequestsMetricCount(for: repo.id, count: cachedPullRequests.count)
             return
         }
 
@@ -1383,6 +1386,7 @@ final class RepositoryViewModel: ObservableObject {
             let pullRequests = try await dataProvider.loadPullRequests(for: repo)
             loadedPullRequestsByRepositoryID[repo.id] = pullRequests
             pullRequestsLoadErrorMessageByRepositoryID[repo.id] = nil
+            updatePullRequestsMetricCount(for: repo.id, count: pullRequests.count)
             applyPullRequestBranchFlags(for: repo)
 
             if let selectedPullRequestID,
@@ -1827,6 +1831,24 @@ final class RepositoryViewModel: ObservableObject {
                 return repo
             }
             return repo.updating(ciRuns: count)
+        }
+    }
+
+    private func updatePullRequestsMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(prs: count)
+        }
+    }
+
+    private func updateBranchesMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(branches: count)
         }
     }
 
