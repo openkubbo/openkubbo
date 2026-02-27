@@ -615,6 +615,79 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
     }
 
+    func fetchRepositoryContributors(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryContributor] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var contributors: [GitHubRepositoryContributor] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/contributors")!
+            components.queryItems = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [RepositoryContributorResponse] = try await perform(request)
+
+            contributors.append(
+                contentsOf: response.compactMap { item in
+                    let trimmedLogin = item.login?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    guard !trimmedLogin.isEmpty else {
+                        return nil
+                    }
+
+                    let resolvedID = item.id.map(String.init) ?? trimmedLogin
+                    let contributorType = item.type?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "User"
+                    let avatarURL: URL?
+                    if let value = item.avatarURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !value.isEmpty {
+                        avatarURL = URL(string: value)
+                    } else {
+                        avatarURL = nil
+                    }
+
+                    let htmlURL: URL?
+                    if let value = item.htmlURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !value.isEmpty {
+                        htmlURL = URL(string: value)
+                    } else {
+                        htmlURL = nil
+                    }
+
+                    return GitHubRepositoryContributor(
+                        id: "\(repositoryFullName)-contributor-\(resolvedID)",
+                        login: trimmedLogin,
+                        type: contributorType,
+                        contributions: max(0, item.contributions ?? 0),
+                        avatarURL: avatarURL,
+                        htmlURL: htmlURL
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return contributors.sorted { lhs, rhs in
+            if lhs.contributions != rhs.contributions {
+                return lhs.contributions > rhs.contributions
+            }
+            return lhs.login.localizedCaseInsensitiveCompare(rhs.login) == .orderedAscending
+        }
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
         var workflowRuns: [GitHubWorkflowRun] = []
@@ -1422,6 +1495,24 @@ private struct RepositoryDiscussionResponse: Decodable {
         case htmlURL = "html_url"
         case user
         case category
+    }
+}
+
+private struct RepositoryContributorResponse: Decodable {
+    let id: Int64?
+    let login: String?
+    let type: String?
+    let contributions: Int?
+    let avatarURL: String?
+    let htmlURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case login
+        case type
+        case contributions
+        case avatarURL = "avatar_url"
+        case htmlURL = "html_url"
     }
 }
 

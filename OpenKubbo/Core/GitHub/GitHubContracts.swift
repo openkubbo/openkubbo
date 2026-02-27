@@ -171,6 +171,15 @@ struct GitHubRepositoryDiscussion: Equatable {
     let htmlURL: URL?
 }
 
+struct GitHubRepositoryContributor: Equatable {
+    let id: String
+    let login: String
+    let type: String
+    let contributions: Int
+    let avatarURL: URL?
+    let htmlURL: URL?
+}
+
 struct GitHubCommitSummary: Equatable {
     let sha: String
     let message: String
@@ -285,6 +294,10 @@ protocol GitHubAPIServicing {
         accessToken: String,
         repositoryFullName: String
     ) async throws -> [GitHubRepositoryDiscussion]
+    func fetchRepositoryContributors(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryContributor]
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun]
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(

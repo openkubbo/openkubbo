@@ -610,6 +610,30 @@ extension RepoItem {
             openCommits: openCommits
         )
     }
+
+    func updating(contributors: Int) -> RepoItem {
+        RepoItem(
+            id: id,
+            name: name,
+            sshCloneURL: sshCloneURL,
+            httpsCloneURL: httpsCloneURL,
+            visibility: visibility,
+            issues: issues,
+            prs: prs,
+            stars: stars,
+            branch: branch,
+            updatedAgo: updatedAgo,
+            isPinned: isPinned,
+            isWork: isWork,
+            releases: releases,
+            ciRuns: ciRuns,
+            discussions: discussions,
+            tags: tags,
+            branches: branches,
+            contributors: max(0, contributors),
+            openCommits: openCommits
+        )
+    }
 }
 
 struct RepoMetric: Identifiable {

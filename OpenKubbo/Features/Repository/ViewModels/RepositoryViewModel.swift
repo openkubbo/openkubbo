@@ -118,6 +118,9 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var loadedDiscussionsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
     @Published private(set) var discussionsLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var discussionsLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedContributorsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
+    @Published private(set) var contributorsLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var contributorsLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
     @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
 
@@ -225,6 +228,9 @@ final class RepositoryViewModel: ObservableObject {
             loadedDiscussionsByRepositoryID = [:]
             discussionsLoadingRepositoryIDs = []
             discussionsLoadErrorMessageByRepositoryID = [:]
+            loadedContributorsByRepositoryID = [:]
+            contributorsLoadingRepositoryIDs = []
+            contributorsLoadErrorMessageByRepositoryID = [:]
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
             localCurrentBranchByRepositoryID = [:]
@@ -380,6 +386,10 @@ final class RepositoryViewModel: ObservableObject {
         } else if destination == .discussions, let repo = selectedRepo {
             Task { [weak self] in
                 await self?.loadDiscussionsIfNeeded(for: repo)
+            }
+        } else if destination == .contributors, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadContributorsIfNeeded(for: repo)
             }
         } else if destination == .branches, let repo = selectedRepo {
             Task { [weak self] in
@@ -876,6 +886,14 @@ final class RepositoryViewModel: ObservableObject {
         await loadDiscussions(for: repo, forceReload: true)
     }
 
+    func loadContributorsIfNeeded(for repo: RepoItem) async {
+        await loadContributors(for: repo, forceReload: false)
+    }
+
+    func reloadContributors(for repo: RepoItem) async {
+        await loadContributors(for: repo, forceReload: true)
+    }
+
     func isLoadingCIRuns(for repo: RepoItem) -> Bool {
         ciRunsLoadingRepositoryIDs.contains(repo.id)
     }
@@ -916,6 +934,14 @@ final class RepositoryViewModel: ObservableObject {
         discussionsLoadErrorMessageByRepositoryID[repo.id]
     }
 
+    func isLoadingContributors(for repo: RepoItem) -> Bool {
+        contributorsLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func contributorsLoadErrorMessage(for repo: RepoItem) -> String? {
+        contributorsLoadErrorMessageByRepositoryID[repo.id]
+    }
+
     func destinationInfoItems(
         for repo: RepoItem,
         destination: RepoDetailDestination
@@ -931,6 +957,8 @@ final class RepositoryViewModel: ObservableObject {
             return loadedReleasesByRepositoryID[repo.id, default: []]
         case .discussions:
             return loadedDiscussionsByRepositoryID[repo.id, default: []]
+        case .contributors:
+            return loadedContributorsByRepositoryID[repo.id, default: []]
         default:
             return destination.mockInfoItems(repoName: repo.name, branch: repo.branch)
         }
@@ -1418,6 +1446,41 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadContributors(for repo: RepoItem, forceReload: Bool) async {
+        if contributorsLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, let cachedContributors = loadedContributorsByRepositoryID[repo.id] {
+            updateContributorsMetricCount(for: repo.id, count: cachedContributors.count)
+            return
+        }
+
+        contributorsLoadingRepositoryIDs.insert(repo.id)
+        contributorsLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            contributorsLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let contributors = try await dataProvider.loadContributors(for: repo)
+            loadedContributorsByRepositoryID[repo.id] = contributors
+            contributorsLoadErrorMessageByRepositoryID[repo.id] = nil
+            updateContributorsMetricCount(for: repo.id, count: contributors.count)
+
+            if let selectedDestinationInfoItemID,
+               !contributors.contains(where: { $0.id == selectedDestinationInfoItemID }),
+               selectedDetailDestination == .contributors {
+                self.selectedDestinationInfoItemID = nil
+            }
+        } catch {
+            contributorsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedContributorsByRepositoryID[repo.id] == nil {
+                loadedContributorsByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -1578,6 +1641,15 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func updateContributorsMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(contributors: count)
+        }
+    }
+
     private func pruneIssuesCache(for repositories: [RepoItem]) {
         let validRepositoryIDs = Set(repositories.map(\.id))
         loadedIssuesByRepositoryID = loadedIssuesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
@@ -1626,6 +1698,11 @@ final class RepositoryViewModel: ObservableObject {
         loadedDiscussionsByRepositoryID = loadedDiscussionsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
         discussionsLoadingRepositoryIDs = discussionsLoadingRepositoryIDs.intersection(validRepositoryIDs)
         discussionsLoadErrorMessageByRepositoryID = discussionsLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        loadedContributorsByRepositoryID = loadedContributorsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        contributorsLoadingRepositoryIDs = contributorsLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        contributorsLoadErrorMessageByRepositoryID = contributorsLoadErrorMessageByRepositoryID.filter {
             validRepositoryIDs.contains($0.key)
         }
         issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in

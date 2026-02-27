@@ -288,6 +288,18 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
     }
 
+    func loadContributors(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        let token = try accessToken()
+        let contributors = try await gitHubAPIService.fetchRepositoryContributors(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        return contributors.map { contributor in
+            mapToContributorInfoItem(contributor, repository: repository)
+        }
+    }
+
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
         let token = try accessToken()
         let fetchedBranches = try await gitHubAPIService.fetchBranches(
@@ -603,6 +615,40 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         )
     }
 
+    private func mapToContributorInfoItem(
+        _ contributor: GitHubRepositoryContributor,
+        repository: RepoItem
+    ) -> RepoDestinationInfoItem {
+        let normalizedType = contributor.type.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedType = normalizedType.isEmpty ? "User" : normalizedType
+        let status: String
+        if resolvedType.lowercased() == "bot" {
+            status = "Bot"
+        } else {
+            status = "Active"
+        }
+
+        var bulletPoints = [
+            "Type: \(resolvedType)",
+            "Contributions: \(contributor.contributions)"
+        ]
+
+        if let profileURL = contributor.htmlURL?.absoluteString, !profileURL.isEmpty {
+            bulletPoints.append("Profile: \(profileURL)")
+        }
+
+        return RepoDestinationInfoItem(
+            id: contributor.id,
+            title: contributor.login,
+            subtitle: resolvedType,
+            status: status,
+            metadata: "\(contributor.contributions) contributions",
+            summary: "\(contributor.login) has \(contributor.contributions) contributions in \(repository.name).",
+            bulletPoints: bulletPoints,
+            trailingValue: "\(contributor.contributions)"
+        )
+    }
+
     private func ciRunStatusText(status: String, conclusion: String?) -> String {
         let normalizedStatus = status.lowercased()
 
@@ -775,7 +821,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             discussions: 0,
             tags: 0,
             branches: metric("\(repository.fullName)-branches", min: 1, max: 12),
-            contributors: metric("\(repository.fullName)-contributors", min: 1, max: 14),
+            contributors: 0,
             openCommits: 0
         )
     }

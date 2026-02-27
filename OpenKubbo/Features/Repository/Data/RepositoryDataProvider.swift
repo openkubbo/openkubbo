@@ -40,6 +40,7 @@ protocol RepositoryDataProviding {
     func loadTags(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
     func loadReleases(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
     func loadDiscussions(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
+    func loadContributors(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem]
 }
 
@@ -584,6 +585,13 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
 
     func loadDiscussions(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
         RepoDetailDestination.discussions.mockInfoItems(
+            repoName: repository.name,
+            branch: repository.branch
+        )
+    }
+
+    func loadContributors(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        RepoDetailDestination.contributors.mockInfoItems(
             repoName: repository.name,
             branch: repository.branch
         )

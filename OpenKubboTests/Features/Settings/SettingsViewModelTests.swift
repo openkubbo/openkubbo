@@ -338,6 +338,13 @@ private struct StubGitHubAPIService: GitHubAPIServicing {
         []
     }
 
+    func fetchRepositoryContributors(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryContributor] {
+        []
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         []
     }

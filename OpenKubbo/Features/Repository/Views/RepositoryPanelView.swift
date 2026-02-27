@@ -2030,6 +2030,7 @@ struct RepositoryPanelView: View {
             || destination == .tags
             || destination == .releases
             || destination == .discussions
+            || destination == .contributors
         let items = viewModel.destinationInfoItems(for: repo, destination: destination)
         let selectedItem = viewModel.selectedDestinationInfoItem(for: repo, destination: destination)
         let isLoadingItems: Bool
@@ -2075,6 +2076,14 @@ struct RepositoryPanelView: View {
             onRefresh = {
                 Task {
                     await viewModel.reloadDiscussions(for: repo)
+                }
+            }
+        case .contributors:
+            isLoadingItems = viewModel.isLoadingContributors(for: repo)
+            loadErrorMessage = viewModel.contributorsLoadErrorMessage(for: repo)
+            onRefresh = {
+                Task {
+                    await viewModel.reloadContributors(for: repo)
                 }
             }
         default:
@@ -2124,6 +2133,8 @@ struct RepositoryPanelView: View {
                                             await viewModel.reloadReleases(for: repo)
                                         case .discussions:
                                             await viewModel.reloadDiscussions(for: repo)
+                                        case .contributors:
+                                            await viewModel.reloadContributors(for: repo)
                                         default:
                                             break
                                         }
@@ -2185,6 +2196,8 @@ struct RepositoryPanelView: View {
                 await viewModel.loadReleasesIfNeeded(for: repo)
             } else if destination == .discussions {
                 await viewModel.loadDiscussionsIfNeeded(for: repo)
+            } else if destination == .contributors {
+                await viewModel.loadContributorsIfNeeded(for: repo)
             }
         }
     }
