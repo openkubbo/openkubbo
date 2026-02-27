@@ -91,6 +91,7 @@ final class RepositoryViewModel: ObservableObject {
     private let gitHubTokenStore: GitHubTokenStoring
     private var hasUserCustomizedPins = false
     private var optimisticBranchNamesByRepositoryID: [String: Set<String>] = [:]
+    private var prefetchingRepositoryIDs: Set<String> = []
     @Published private(set) var loadedIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
     @Published private(set) var issuesLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var issuesLoadErrorMessageByRepositoryID: [String: String] = [:]
@@ -283,6 +284,9 @@ final class RepositoryViewModel: ObservableObject {
     func selectRepository(_ repo: RepoItem) {
         selectedRepoID = repo.id
         refreshLocalCurrentBranch(for: repo)
+        Task { [weak self] in
+            await self?.prefetchDetailPanelMetricsIfNeeded(for: repo)
+        }
     }
 
     func repository(withID repositoryID: String) -> RepoItem? {
@@ -1297,7 +1301,8 @@ final class RepositoryViewModel: ObservableObject {
             return
         }
 
-        if !forceReload, loadedIssuesByRepositoryID[repo.id] != nil {
+        if !forceReload, let cachedIssues = loadedIssuesByRepositoryID[repo.id] {
+            updateIssuesMetricCount(for: repo.id, count: cachedIssues.count)
             return
         }
 
@@ -1310,6 +1315,7 @@ final class RepositoryViewModel: ObservableObject {
         do {
             let issues = try await dataProvider.loadIssues(for: repo)
             loadedIssuesByRepositoryID[repo.id] = issues
+            updateIssuesMetricCount(for: repo.id, count: issues.count)
             synchronizeIssueBranchLinks(for: repo)
             issuesLoadErrorMessageByRepositoryID[repo.id] = nil
 
@@ -1710,6 +1716,39 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func prefetchDetailPanelMetricsIfNeeded(for repo: RepoItem) async {
+        if prefetchingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        prefetchingRepositoryIDs.insert(repo.id)
+        defer {
+            prefetchingRepositoryIDs.remove(repo.id)
+        }
+
+        async let issuesTask: Void = loadIssuesIfNeeded(for: repo)
+        async let pullRequestsTask: Void = loadPullRequestsIfNeeded(for: repo)
+        async let branchesTask: Void = loadBranchesIfNeeded(for: repo)
+        async let ciRunsTask: Void = loadCIRunsIfNeeded(for: repo)
+        async let openCommitsTask: Void = loadOpenCommitsIfNeeded(for: repo)
+        async let tagsTask: Void = loadTagsIfNeeded(for: repo)
+        async let releasesTask: Void = loadReleasesIfNeeded(for: repo)
+        async let discussionsTask: Void = loadDiscussionsIfNeeded(for: repo)
+        async let contributorsTask: Void = loadContributorsIfNeeded(for: repo)
+
+        _ = await (
+            issuesTask,
+            pullRequestsTask,
+            branchesTask,
+            ciRunsTask,
+            openCommitsTask,
+            tagsTask,
+            releasesTask,
+            discussionsTask,
+            contributorsTask
+        )
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -1831,6 +1870,15 @@ final class RepositoryViewModel: ObservableObject {
                 return repo
             }
             return repo.updating(ciRuns: count)
+        }
+    }
+
+    private func updateIssuesMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(issues: count)
         }
     }
 
