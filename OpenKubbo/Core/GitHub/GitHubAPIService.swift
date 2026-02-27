@@ -463,6 +463,158 @@ final class GitHubAPIService: GitHubAPIServicing {
         return tags
     }
 
+    func fetchRepositoryReleases(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryRelease] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var releases: [GitHubRepositoryRelease] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/releases")!
+            components.queryItems = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [RepositoryReleaseResponse] = try await perform(request)
+
+            releases.append(
+                contentsOf: response.compactMap { item in
+                    let trimmedTagName = item.tagName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    guard !trimmedTagName.isEmpty else {
+                        return nil
+                    }
+
+                    let trimmedName = item.name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    let resolvedName = trimmedName.isEmpty ? trimmedTagName : trimmedName
+                    let resolvedID = item.id.map(String.init) ?? trimmedTagName
+                    let body = item.body ?? ""
+                    let htmlURL: URL?
+                    if let value = item.htmlURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !value.isEmpty {
+                        htmlURL = URL(string: value)
+                    } else {
+                        htmlURL = nil
+                    }
+
+                    return GitHubRepositoryRelease(
+                        id: "\(repositoryFullName)-release-\(resolvedID)",
+                        name: resolvedName,
+                        tagName: trimmedTagName,
+                        body: body,
+                        authorLogin: item.author?.login ?? "unknown",
+                        publishedAt: parseISO8601(item.publishedAt),
+                        createdAt: parseISO8601(item.createdAt),
+                        isDraft: item.draft ?? false,
+                        isPrerelease: item.prerelease ?? false,
+                        targetCommitish: item.targetCommitish,
+                        htmlURL: htmlURL
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return releases.sorted { lhs, rhs in
+            let lhsDate = lhs.publishedAt ?? lhs.createdAt ?? .distantPast
+            let rhsDate = rhs.publishedAt ?? rhs.createdAt ?? .distantPast
+            return lhsDate > rhsDate
+        }
+    }
+
+    func fetchRepositoryDiscussions(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryDiscussion] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        var discussions: [GitHubRepositoryDiscussion] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/discussions")!
+            components.queryItems = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [RepositoryDiscussionResponse]
+            do {
+                response = try await perform(request)
+            } catch GitHubAPIError.notFound {
+                return []
+            }
+
+            discussions.append(
+                contentsOf: response.compactMap { item in
+                    guard let number = item.number else {
+                        return nil
+                    }
+
+                    let trimmedTitle = item.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    guard !trimmedTitle.isEmpty else {
+                        return nil
+                    }
+
+                    let resolvedID = item.id.map(String.init) ?? "\(number)"
+                    let body = item.body ?? ""
+                    let state = item.state?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "open"
+                    let htmlURL: URL?
+                    if let value = item.htmlURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !value.isEmpty {
+                        htmlURL = URL(string: value)
+                    } else {
+                        htmlURL = nil
+                    }
+
+                    return GitHubRepositoryDiscussion(
+                        id: "\(repositoryFullName)-discussion-\(resolvedID)",
+                        number: number,
+                        title: trimmedTitle,
+                        body: body,
+                        categoryName: item.category?.name,
+                        authorLogin: item.user?.login ?? "unknown",
+                        state: state,
+                        comments: max(0, item.comments ?? 0),
+                        isAnswered: item.answerHTMLURL != nil || item.answeredAt != nil,
+                        answeredAt: parseISO8601(item.answeredAt),
+                        createdAt: parseISO8601(item.createdAt),
+                        updatedAt: parseISO8601(item.updatedAt),
+                        htmlURL: htmlURL
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return discussions.sorted { lhs, rhs in
+            let lhsDate = lhs.updatedAt ?? lhs.createdAt ?? .distantPast
+            let rhsDate = rhs.updatedAt ?? rhs.createdAt ?? .distantPast
+            return lhsDate > rhsDate
+        }
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
         var workflowRuns: [GitHubWorkflowRun] = []
@@ -1198,6 +1350,78 @@ private struct RepositoryTagResponse: Decodable {
         case commit
         case tarballURL = "tarball_url"
         case zipballURL = "zipball_url"
+    }
+}
+
+private struct RepositoryReleaseResponse: Decodable {
+    struct Author: Decodable {
+        let login: String?
+    }
+
+    let id: Int64?
+    let name: String?
+    let tagName: String?
+    let body: String?
+    let draft: Bool?
+    let prerelease: Bool?
+    let targetCommitish: String?
+    let publishedAt: String?
+    let createdAt: String?
+    let htmlURL: String?
+    let author: Author?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case tagName = "tag_name"
+        case body
+        case draft
+        case prerelease
+        case targetCommitish = "target_commitish"
+        case publishedAt = "published_at"
+        case createdAt = "created_at"
+        case htmlURL = "html_url"
+        case author
+    }
+}
+
+private struct RepositoryDiscussionResponse: Decodable {
+    struct User: Decodable {
+        let login: String?
+    }
+
+    struct Category: Decodable {
+        let name: String?
+    }
+
+    let id: Int64?
+    let number: Int?
+    let title: String?
+    let body: String?
+    let state: String?
+    let comments: Int?
+    let answeredAt: String?
+    let answerHTMLURL: String?
+    let createdAt: String?
+    let updatedAt: String?
+    let htmlURL: String?
+    let user: User?
+    let category: Category?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case number
+        case title
+        case body
+        case state
+        case comments
+        case answeredAt = "answered_at"
+        case answerHTMLURL = "answer_html_url"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case htmlURL = "html_url"
+        case user
+        case category
     }
 }
 

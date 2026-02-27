@@ -264,6 +264,30 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
     }
 
+    func loadReleases(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        let token = try accessToken()
+        let releases = try await gitHubAPIService.fetchRepositoryReleases(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        return releases.map { release in
+            mapToReleaseInfoItem(release, repository: repository)
+        }
+    }
+
+    func loadDiscussions(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        let token = try accessToken()
+        let discussions = try await gitHubAPIService.fetchRepositoryDiscussions(
+            accessToken: token,
+            repositoryFullName: repository.name
+        )
+
+        return discussions.map { discussion in
+            mapToDiscussionInfoItem(discussion, repository: repository)
+        }
+    }
+
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
         let token = try accessToken()
         let fetchedBranches = try await gitHubAPIService.fetchBranches(
@@ -463,6 +487,122 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         )
     }
 
+    private func mapToReleaseInfoItem(
+        _ release: GitHubRepositoryRelease,
+        repository: RepoItem
+    ) -> RepoDestinationInfoItem {
+        let status: String
+        if release.isDraft {
+            status = "Draft"
+        } else if release.isPrerelease {
+            status = "Prerelease"
+        } else {
+            status = "Published"
+        }
+
+        let metadataDate = release.publishedAt ?? release.createdAt
+        let metadataPrefix = release.isDraft ? "Updated" : "Published"
+        let metadata = metadataDate.map { "\(metadataPrefix) \(relativeTime(from: $0))" } ?? "Updated recently"
+        let fallbackSummary = "Release \(release.tagName) for \(repository.name)."
+        let summaryLine = release.body
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = {
+            guard let summaryLine, !summaryLine.isEmpty else {
+                return fallbackSummary
+            }
+            return summaryLine
+        }()
+
+        var bulletPoints = [
+            "Tag: \(release.tagName)",
+            "Author: \(release.authorLogin)"
+        ]
+
+        if let targetCommitish = release.targetCommitish?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !targetCommitish.isEmpty {
+            bulletPoints.append("Target: \(targetCommitish)")
+        }
+
+        if let detailsURL = release.htmlURL?.absoluteString, !detailsURL.isEmpty {
+            bulletPoints.append("Details: \(detailsURL)")
+        }
+
+        return RepoDestinationInfoItem(
+            id: release.id,
+            title: release.name,
+            subtitle: "Tag \(release.tagName)",
+            status: status,
+            metadata: metadata,
+            summary: summary,
+            bulletPoints: bulletPoints,
+            trailingValue: release.tagName
+        )
+    }
+
+    private func mapToDiscussionInfoItem(
+        _ discussion: GitHubRepositoryDiscussion,
+        repository: RepoItem
+    ) -> RepoDestinationInfoItem {
+        let normalizedState = discussion.state.lowercased()
+        let status: String
+        if discussion.isAnswered {
+            status = "Answered"
+        } else if normalizedState == "closed" {
+            status = "Closed"
+        } else {
+            status = "Open"
+        }
+
+        let metadataDate = discussion.updatedAt ?? discussion.createdAt
+        let metadataPrefix = discussion.isAnswered ? "Answered" : "Last update"
+        let metadata = metadataDate.map { "\(metadataPrefix) \(relativeTime(from: $0))" } ?? "Updated recently"
+        let fallbackSummary = "Discussion #\(discussion.number) in \(repository.name)."
+        let summaryLine = discussion.body
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .components(separatedBy: .newlines)
+            .first?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let summary = {
+            guard let summaryLine, !summaryLine.isEmpty else {
+                return fallbackSummary
+            }
+            return summaryLine
+        }()
+
+        let trimmedCategoryName = discussion.categoryName?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedCategoryName = {
+            guard let trimmedCategoryName, !trimmedCategoryName.isEmpty else {
+                return "General"
+            }
+            return trimmedCategoryName
+        }()
+
+        var bulletPoints = [
+            "Category: \(resolvedCategoryName)",
+            "Author: \(discussion.authorLogin)",
+            "Replies: \(discussion.comments)"
+        ]
+
+        if let detailsURL = discussion.htmlURL?.absoluteString, !detailsURL.isEmpty {
+            bulletPoints.append("Details: \(detailsURL)")
+        }
+
+        return RepoDestinationInfoItem(
+            id: discussion.id,
+            title: discussion.title,
+            subtitle: "Category: \(resolvedCategoryName)",
+            status: status,
+            metadata: metadata,
+            summary: summary,
+            bulletPoints: bulletPoints,
+            trailingValue: "\(discussion.comments)"
+        )
+    }
+
     private func ciRunStatusText(status: String, conclusion: String?) -> String {
         let normalizedStatus = status.lowercased()
 
@@ -630,9 +770,9 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             updatedAgo: relativeTime(from: repository.updatedAt),
             isPinned: index < 5,
             isWork: repository.isPrivate,
-            releases: metric("\(repository.fullName)-releases", min: 0, max: 28),
+            releases: 0,
             ciRuns: 0,
-            discussions: metric("\(repository.fullName)-discussions", min: 0, max: 22),
+            discussions: 0,
             tags: 0,
             branches: metric("\(repository.fullName)-branches", min: 1, max: 12),
             contributors: metric("\(repository.fullName)-contributors", min: 1, max: 14),

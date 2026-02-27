@@ -141,6 +141,36 @@ struct GitHubRepositoryTag: Equatable {
     let zipballURL: URL?
 }
 
+struct GitHubRepositoryRelease: Equatable {
+    let id: String
+    let name: String
+    let tagName: String
+    let body: String
+    let authorLogin: String
+    let publishedAt: Date?
+    let createdAt: Date?
+    let isDraft: Bool
+    let isPrerelease: Bool
+    let targetCommitish: String?
+    let htmlURL: URL?
+}
+
+struct GitHubRepositoryDiscussion: Equatable {
+    let id: String
+    let number: Int
+    let title: String
+    let body: String
+    let categoryName: String?
+    let authorLogin: String
+    let state: String
+    let comments: Int
+    let isAnswered: Bool
+    let answeredAt: Date?
+    let createdAt: Date?
+    let updatedAt: Date?
+    let htmlURL: URL?
+}
+
 struct GitHubCommitSummary: Equatable {
     let sha: String
     let message: String
@@ -247,6 +277,14 @@ protocol GitHubAPIServicing {
         accessToken: String,
         repositoryFullName: String
     ) async throws -> [GitHubRepositoryTag]
+    func fetchRepositoryReleases(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryRelease]
+    func fetchRepositoryDiscussions(
+        accessToken: String,
+        repositoryFullName: String
+    ) async throws -> [GitHubRepositoryDiscussion]
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun]
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(

@@ -491,6 +491,30 @@ struct RepoItem: Identifiable, Equatable {
 }
 
 extension RepoItem {
+    func updating(releases: Int) -> RepoItem {
+        RepoItem(
+            id: id,
+            name: name,
+            sshCloneURL: sshCloneURL,
+            httpsCloneURL: httpsCloneURL,
+            visibility: visibility,
+            issues: issues,
+            prs: prs,
+            stars: stars,
+            branch: branch,
+            updatedAgo: updatedAgo,
+            isPinned: isPinned,
+            isWork: isWork,
+            releases: max(0, releases),
+            ciRuns: ciRuns,
+            discussions: discussions,
+            tags: tags,
+            branches: branches,
+            contributors: contributors,
+            openCommits: openCommits
+        )
+    }
+
     func updating(ciRuns: Int) -> RepoItem {
         RepoItem(
             id: id,
@@ -557,6 +581,30 @@ extension RepoItem {
             ciRuns: ciRuns,
             discussions: discussions,
             tags: max(0, tags),
+            branches: branches,
+            contributors: contributors,
+            openCommits: openCommits
+        )
+    }
+
+    func updating(discussions: Int) -> RepoItem {
+        RepoItem(
+            id: id,
+            name: name,
+            sshCloneURL: sshCloneURL,
+            httpsCloneURL: httpsCloneURL,
+            visibility: visibility,
+            issues: issues,
+            prs: prs,
+            stars: stars,
+            branch: branch,
+            updatedAgo: updatedAgo,
+            isPinned: isPinned,
+            isWork: isWork,
+            releases: releases,
+            ciRuns: ciRuns,
+            discussions: max(0, discussions),
+            tags: tags,
             branches: branches,
             contributors: contributors,
             openCommits: openCommits

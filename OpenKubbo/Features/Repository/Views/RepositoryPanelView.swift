@@ -2025,7 +2025,11 @@ struct RepositoryPanelView: View {
         for repo: RepoItem,
         destination: RepoDetailDestination
     ) -> some View {
-        let supportsRemoteLoading = destination == .ciRuns || destination == .openCommits || destination == .tags
+        let supportsRemoteLoading = destination == .ciRuns
+            || destination == .openCommits
+            || destination == .tags
+            || destination == .releases
+            || destination == .discussions
         let items = viewModel.destinationInfoItems(for: repo, destination: destination)
         let selectedItem = viewModel.selectedDestinationInfoItem(for: repo, destination: destination)
         let isLoadingItems: Bool
@@ -2055,6 +2059,22 @@ struct RepositoryPanelView: View {
             onRefresh = {
                 Task {
                     await viewModel.reloadTags(for: repo)
+                }
+            }
+        case .releases:
+            isLoadingItems = viewModel.isLoadingReleases(for: repo)
+            loadErrorMessage = viewModel.releasesLoadErrorMessage(for: repo)
+            onRefresh = {
+                Task {
+                    await viewModel.reloadReleases(for: repo)
+                }
+            }
+        case .discussions:
+            isLoadingItems = viewModel.isLoadingDiscussions(for: repo)
+            loadErrorMessage = viewModel.discussionsLoadErrorMessage(for: repo)
+            onRefresh = {
+                Task {
+                    await viewModel.reloadDiscussions(for: repo)
                 }
             }
         default:
@@ -2100,6 +2120,10 @@ struct RepositoryPanelView: View {
                                             await viewModel.reloadOpenCommits(for: repo)
                                         case .tags:
                                             await viewModel.reloadTags(for: repo)
+                                        case .releases:
+                                            await viewModel.reloadReleases(for: repo)
+                                        case .discussions:
+                                            await viewModel.reloadDiscussions(for: repo)
                                         default:
                                             break
                                         }
@@ -2157,6 +2181,10 @@ struct RepositoryPanelView: View {
                 await viewModel.loadOpenCommitsIfNeeded(for: repo)
             } else if destination == .tags {
                 await viewModel.loadTagsIfNeeded(for: repo)
+            } else if destination == .releases {
+                await viewModel.loadReleasesIfNeeded(for: repo)
+            } else if destination == .discussions {
+                await viewModel.loadDiscussionsIfNeeded(for: repo)
             }
         }
     }

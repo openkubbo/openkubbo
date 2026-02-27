@@ -112,6 +112,12 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var loadedTagsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
     @Published private(set) var tagsLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var tagsLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedReleasesByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
+    @Published private(set) var releasesLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var releasesLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedDiscussionsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
+    @Published private(set) var discussionsLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var discussionsLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
     @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
 
@@ -213,6 +219,12 @@ final class RepositoryViewModel: ObservableObject {
             loadedTagsByRepositoryID = [:]
             tagsLoadingRepositoryIDs = []
             tagsLoadErrorMessageByRepositoryID = [:]
+            loadedReleasesByRepositoryID = [:]
+            releasesLoadingRepositoryIDs = []
+            releasesLoadErrorMessageByRepositoryID = [:]
+            loadedDiscussionsByRepositoryID = [:]
+            discussionsLoadingRepositoryIDs = []
+            discussionsLoadErrorMessageByRepositoryID = [:]
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
             localCurrentBranchByRepositoryID = [:]
@@ -360,6 +372,14 @@ final class RepositoryViewModel: ObservableObject {
         } else if destination == .tags, let repo = selectedRepo {
             Task { [weak self] in
                 await self?.loadTagsIfNeeded(for: repo)
+            }
+        } else if destination == .releases, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadReleasesIfNeeded(for: repo)
+            }
+        } else if destination == .discussions, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadDiscussionsIfNeeded(for: repo)
             }
         } else if destination == .branches, let repo = selectedRepo {
             Task { [weak self] in
@@ -840,6 +860,22 @@ final class RepositoryViewModel: ObservableObject {
         await loadTags(for: repo, forceReload: true)
     }
 
+    func loadReleasesIfNeeded(for repo: RepoItem) async {
+        await loadReleases(for: repo, forceReload: false)
+    }
+
+    func reloadReleases(for repo: RepoItem) async {
+        await loadReleases(for: repo, forceReload: true)
+    }
+
+    func loadDiscussionsIfNeeded(for repo: RepoItem) async {
+        await loadDiscussions(for: repo, forceReload: false)
+    }
+
+    func reloadDiscussions(for repo: RepoItem) async {
+        await loadDiscussions(for: repo, forceReload: true)
+    }
+
     func isLoadingCIRuns(for repo: RepoItem) -> Bool {
         ciRunsLoadingRepositoryIDs.contains(repo.id)
     }
@@ -864,6 +900,22 @@ final class RepositoryViewModel: ObservableObject {
         tagsLoadErrorMessageByRepositoryID[repo.id]
     }
 
+    func isLoadingReleases(for repo: RepoItem) -> Bool {
+        releasesLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func releasesLoadErrorMessage(for repo: RepoItem) -> String? {
+        releasesLoadErrorMessageByRepositoryID[repo.id]
+    }
+
+    func isLoadingDiscussions(for repo: RepoItem) -> Bool {
+        discussionsLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func discussionsLoadErrorMessage(for repo: RepoItem) -> String? {
+        discussionsLoadErrorMessageByRepositoryID[repo.id]
+    }
+
     func destinationInfoItems(
         for repo: RepoItem,
         destination: RepoDetailDestination
@@ -875,6 +927,10 @@ final class RepositoryViewModel: ObservableObject {
             return loadedOpenCommitsByRepositoryID[repo.id, default: []]
         case .tags:
             return loadedTagsByRepositoryID[repo.id, default: []]
+        case .releases:
+            return loadedReleasesByRepositoryID[repo.id, default: []]
+        case .discussions:
+            return loadedDiscussionsByRepositoryID[repo.id, default: []]
         default:
             return destination.mockInfoItems(repoName: repo.name, branch: repo.branch)
         }
@@ -1292,6 +1348,76 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadReleases(for repo: RepoItem, forceReload: Bool) async {
+        if releasesLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, let cachedReleases = loadedReleasesByRepositoryID[repo.id] {
+            updateReleasesMetricCount(for: repo.id, count: cachedReleases.count)
+            return
+        }
+
+        releasesLoadingRepositoryIDs.insert(repo.id)
+        releasesLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            releasesLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let releases = try await dataProvider.loadReleases(for: repo)
+            loadedReleasesByRepositoryID[repo.id] = releases
+            releasesLoadErrorMessageByRepositoryID[repo.id] = nil
+            updateReleasesMetricCount(for: repo.id, count: releases.count)
+
+            if let selectedDestinationInfoItemID,
+               !releases.contains(where: { $0.id == selectedDestinationInfoItemID }),
+               selectedDetailDestination == .releases {
+                self.selectedDestinationInfoItemID = nil
+            }
+        } catch {
+            releasesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedReleasesByRepositoryID[repo.id] == nil {
+                loadedReleasesByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
+    private func loadDiscussions(for repo: RepoItem, forceReload: Bool) async {
+        if discussionsLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, let cachedDiscussions = loadedDiscussionsByRepositoryID[repo.id] {
+            updateDiscussionsMetricCount(for: repo.id, count: cachedDiscussions.count)
+            return
+        }
+
+        discussionsLoadingRepositoryIDs.insert(repo.id)
+        discussionsLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            discussionsLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let discussions = try await dataProvider.loadDiscussions(for: repo)
+            loadedDiscussionsByRepositoryID[repo.id] = discussions
+            discussionsLoadErrorMessageByRepositoryID[repo.id] = nil
+            updateDiscussionsMetricCount(for: repo.id, count: discussions.count)
+
+            if let selectedDestinationInfoItemID,
+               !discussions.contains(where: { $0.id == selectedDestinationInfoItemID }),
+               selectedDetailDestination == .discussions {
+                self.selectedDestinationInfoItemID = nil
+            }
+        } catch {
+            discussionsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedDiscussionsByRepositoryID[repo.id] == nil {
+                loadedDiscussionsByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -1434,6 +1560,24 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func updateReleasesMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(releases: count)
+        }
+    }
+
+    private func updateDiscussionsMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(discussions: count)
+        }
+    }
+
     private func pruneIssuesCache(for repositories: [RepoItem]) {
         let validRepositoryIDs = Set(repositories.map(\.id))
         loadedIssuesByRepositoryID = loadedIssuesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
@@ -1472,6 +1616,16 @@ final class RepositoryViewModel: ObservableObject {
         loadedTagsByRepositoryID = loadedTagsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
         tagsLoadingRepositoryIDs = tagsLoadingRepositoryIDs.intersection(validRepositoryIDs)
         tagsLoadErrorMessageByRepositoryID = tagsLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        loadedReleasesByRepositoryID = loadedReleasesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        releasesLoadingRepositoryIDs = releasesLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        releasesLoadErrorMessageByRepositoryID = releasesLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        loadedDiscussionsByRepositoryID = loadedDiscussionsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        discussionsLoadingRepositoryIDs = discussionsLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        discussionsLoadErrorMessageByRepositoryID = discussionsLoadErrorMessageByRepositoryID.filter {
             validRepositoryIDs.contains($0.key)
         }
         issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in
