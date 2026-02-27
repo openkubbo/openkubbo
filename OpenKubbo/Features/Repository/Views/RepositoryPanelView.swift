@@ -2025,18 +2025,35 @@ struct RepositoryPanelView: View {
         for repo: RepoItem,
         destination: RepoDetailDestination
     ) -> some View {
-        let isCIRuns = destination == .ciRuns
+        let supportsRemoteLoading = destination == .ciRuns || destination == .openCommits
         let items = viewModel.destinationInfoItems(for: repo, destination: destination)
         let selectedItem = viewModel.selectedDestinationInfoItem(for: repo, destination: destination)
-        let isLoadingItems = isCIRuns && viewModel.isLoadingCIRuns(for: repo)
-        let loadErrorMessage = isCIRuns ? viewModel.ciRunsLoadErrorMessage(for: repo) : nil
-        let onRefresh: (() -> Void)? = isCIRuns
-            ? {
+        let isLoadingItems: Bool
+        let loadErrorMessage: String?
+        let onRefresh: (() -> Void)?
+
+        switch destination {
+        case .ciRuns:
+            isLoadingItems = viewModel.isLoadingCIRuns(for: repo)
+            loadErrorMessage = viewModel.ciRunsLoadErrorMessage(for: repo)
+            onRefresh = {
                 Task {
                     await viewModel.reloadCIRuns(for: repo)
                 }
             }
-            : nil
+        case .openCommits:
+            isLoadingItems = viewModel.isLoadingOpenCommits(for: repo)
+            loadErrorMessage = viewModel.openCommitsLoadErrorMessage(for: repo)
+            onRefresh = {
+                Task {
+                    await viewModel.reloadOpenCommits(for: repo)
+                }
+            }
+        default:
+            isLoadingItems = false
+            loadErrorMessage = nil
+            onRefresh = nil
+        }
 
         return ZStack(alignment: .topLeading) {
             VStack(spacing: 0) {
@@ -2048,7 +2065,7 @@ struct RepositoryPanelView: View {
 
                 ScrollView(showsIndicators: false) {
                     LazyVStack(spacing: 0) {
-                        if isLoadingItems && items.isEmpty {
+                        if supportsRemoteLoading && isLoadingItems && items.isEmpty {
                             HStack(spacing: 8) {
                                 ProgressView()
                                     .controlSize(.small)
@@ -2059,7 +2076,7 @@ struct RepositoryPanelView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 18)
-                        } else if let loadErrorMessage, items.isEmpty {
+                        } else if supportsRemoteLoading, let loadErrorMessage, items.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(loadErrorMessage)
                                     .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -2068,7 +2085,14 @@ struct RepositoryPanelView: View {
 
                                 Button("Retry") {
                                     Task {
-                                        await viewModel.reloadCIRuns(for: repo)
+                                        switch destination {
+                                        case .ciRuns:
+                                            await viewModel.reloadCIRuns(for: repo)
+                                        case .openCommits:
+                                            await viewModel.reloadOpenCommits(for: repo)
+                                        default:
+                                            break
+                                        }
                                     }
                                 }
                                 .buttonStyle(.plain)
@@ -2117,8 +2141,10 @@ struct RepositoryPanelView: View {
                 )
         )
         .task(id: "destination-\(destination.rawValue)-\(repo.id)") {
-            if isCIRuns {
+            if destination == .ciRuns {
                 await viewModel.loadCIRunsIfNeeded(for: repo)
+            } else if destination == .openCommits {
+                await viewModel.loadOpenCommitsIfNeeded(for: repo)
             }
         }
     }

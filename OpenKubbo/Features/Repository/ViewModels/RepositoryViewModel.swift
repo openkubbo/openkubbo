@@ -106,6 +106,9 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var loadedCIRunsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
     @Published private(set) var ciRunsLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var ciRunsLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedOpenCommitsByRepositoryID: [String: [RepoDestinationInfoItem]] = [:]
+    @Published private(set) var openCommitsLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var openCommitsLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
     @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
 
@@ -201,6 +204,9 @@ final class RepositoryViewModel: ObservableObject {
             loadedCIRunsByRepositoryID = [:]
             ciRunsLoadingRepositoryIDs = []
             ciRunsLoadErrorMessageByRepositoryID = [:]
+            loadedOpenCommitsByRepositoryID = [:]
+            openCommitsLoadingRepositoryIDs = []
+            openCommitsLoadErrorMessageByRepositoryID = [:]
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
             localCurrentBranchByRepositoryID = [:]
@@ -340,6 +346,10 @@ final class RepositoryViewModel: ObservableObject {
         } else if destination == .ciRuns, let repo = selectedRepo {
             Task { [weak self] in
                 await self?.loadCIRunsIfNeeded(for: repo)
+            }
+        } else if destination == .openCommits, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadOpenCommitsIfNeeded(for: repo)
             }
         } else if destination == .branches, let repo = selectedRepo {
             Task { [weak self] in
@@ -804,12 +814,28 @@ final class RepositoryViewModel: ObservableObject {
         await loadCIRuns(for: repo, forceReload: true)
     }
 
+    func loadOpenCommitsIfNeeded(for repo: RepoItem) async {
+        await loadOpenCommits(for: repo, forceReload: false)
+    }
+
+    func reloadOpenCommits(for repo: RepoItem) async {
+        await loadOpenCommits(for: repo, forceReload: true)
+    }
+
     func isLoadingCIRuns(for repo: RepoItem) -> Bool {
         ciRunsLoadingRepositoryIDs.contains(repo.id)
     }
 
     func ciRunsLoadErrorMessage(for repo: RepoItem) -> String? {
         ciRunsLoadErrorMessageByRepositoryID[repo.id]
+    }
+
+    func isLoadingOpenCommits(for repo: RepoItem) -> Bool {
+        openCommitsLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func openCommitsLoadErrorMessage(for repo: RepoItem) -> String? {
+        openCommitsLoadErrorMessageByRepositoryID[repo.id]
     }
 
     func destinationInfoItems(
@@ -819,6 +845,8 @@ final class RepositoryViewModel: ObservableObject {
         switch destination {
         case .ciRuns:
             return loadedCIRunsByRepositoryID[repo.id, default: []]
+        case .openCommits:
+            return loadedOpenCommitsByRepositoryID[repo.id, default: []]
         default:
             return destination.mockInfoItems(repoName: repo.name, branch: repo.branch)
         }
@@ -1166,6 +1194,41 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadOpenCommits(for repo: RepoItem, forceReload: Bool) async {
+        if openCommitsLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, let cachedOpenCommits = loadedOpenCommitsByRepositoryID[repo.id] {
+            updateOpenCommitsMetricCount(for: repo.id, count: cachedOpenCommits.count)
+            return
+        }
+
+        openCommitsLoadingRepositoryIDs.insert(repo.id)
+        openCommitsLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            openCommitsLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let openCommits = try await dataProvider.loadOpenCommits(for: repo)
+            loadedOpenCommitsByRepositoryID[repo.id] = openCommits
+            openCommitsLoadErrorMessageByRepositoryID[repo.id] = nil
+            updateOpenCommitsMetricCount(for: repo.id, count: openCommits.count)
+
+            if let selectedDestinationInfoItemID,
+               !openCommits.contains(where: { $0.id == selectedDestinationInfoItemID }),
+               selectedDetailDestination == .openCommits {
+                self.selectedDestinationInfoItemID = nil
+            }
+        } catch {
+            openCommitsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedOpenCommitsByRepositoryID[repo.id] == nil {
+                loadedOpenCommitsByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -1290,6 +1353,15 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func updateOpenCommitsMetricCount(for repositoryID: String, count: Int) {
+        repositories = repositories.map { repo in
+            guard repo.id == repositoryID else {
+                return repo
+            }
+            return repo.updating(openCommits: count)
+        }
+    }
+
     private func pruneIssuesCache(for repositories: [RepoItem]) {
         let validRepositoryIDs = Set(repositories.map(\.id))
         loadedIssuesByRepositoryID = loadedIssuesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
@@ -1318,6 +1390,11 @@ final class RepositoryViewModel: ObservableObject {
         loadedCIRunsByRepositoryID = loadedCIRunsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
         ciRunsLoadingRepositoryIDs = ciRunsLoadingRepositoryIDs.intersection(validRepositoryIDs)
         ciRunsLoadErrorMessageByRepositoryID = ciRunsLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        loadedOpenCommitsByRepositoryID = loadedOpenCommitsByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        openCommitsLoadingRepositoryIDs = openCommitsLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        openCommitsLoadErrorMessageByRepositoryID = openCommitsLoadErrorMessageByRepositoryID.filter {
             validRepositoryIDs.contains($0.key)
         }
         issueBranchNamesByIssueKey = issueBranchNamesByIssueKey.filter { key, _ in

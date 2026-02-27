@@ -324,6 +324,79 @@ final class GitHubAPIService: GitHubAPIServicing {
         return commits
     }
 
+    func fetchRepositoryCommits(
+        accessToken: String,
+        repositoryFullName: String,
+        branch: String
+    ) async throws -> [GitHubRepositoryCommit] {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        let trimmedBranch = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        var commits: [GitHubRepositoryCommit] = []
+        var page = 1
+
+        while true {
+            var components = URLComponents(string: "https://api.github.com/repos/\(owner)/\(repo)/commits")!
+            var queryItems: [URLQueryItem] = [
+                URLQueryItem(name: "per_page", value: "100"),
+                URLQueryItem(name: "page", value: "\(page)")
+            ]
+            if !trimmedBranch.isEmpty {
+                queryItems.insert(URLQueryItem(name: "sha", value: trimmedBranch), at: 0)
+            }
+            components.queryItems = queryItems
+
+            guard let url = components.url else {
+                throw GitHubAPIError.malformedResponse
+            }
+
+            let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+            let response: [RepositoryCommitResponse] = try await perform(request)
+
+            commits.append(
+                contentsOf: response.compactMap { item in
+                    guard let sha = item.sha else {
+                        return nil
+                    }
+
+                    let rawMessage = item.commit?.message?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                    guard !rawMessage.isEmpty else {
+                        return nil
+                    }
+
+                    let message = rawMessage
+                        .components(separatedBy: .newlines)
+                        .first?
+                        .trimmingCharacters(in: .whitespacesAndNewlines) ?? rawMessage
+
+                    let htmlURL: URL?
+                    if let value = item.htmlURL?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !value.isEmpty {
+                        htmlURL = URL(string: value)
+                    } else {
+                        htmlURL = nil
+                    }
+
+                    return GitHubRepositoryCommit(
+                        id: "\(repositoryFullName)-commit-\(sha)",
+                        sha: sha,
+                        message: message,
+                        authorLogin: item.author?.login ?? item.commit?.author?.name ?? "unknown",
+                        committedAt: parseISO8601(item.commit?.author?.date),
+                        htmlURL: htmlURL
+                    )
+                }
+            )
+
+            if response.count < 100 {
+                break
+            }
+
+            page += 1
+        }
+
+        return commits
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
         var workflowRuns: [GitHubWorkflowRun] = []
@@ -1014,6 +1087,34 @@ private struct PullRequestCommitResponse: Decodable {
     let sha: String?
     let author: User?
     let commit: Commit?
+}
+
+private struct RepositoryCommitResponse: Decodable {
+    struct User: Decodable {
+        let login: String?
+    }
+
+    struct Commit: Decodable {
+        struct Author: Decodable {
+            let name: String?
+            let date: String?
+        }
+
+        let message: String?
+        let author: Author?
+    }
+
+    let sha: String?
+    let author: User?
+    let commit: Commit?
+    let htmlURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case sha
+        case author
+        case commit
+        case htmlURL = "html_url"
+    }
 }
 
 private struct WorkflowRunsResponse: Decodable {

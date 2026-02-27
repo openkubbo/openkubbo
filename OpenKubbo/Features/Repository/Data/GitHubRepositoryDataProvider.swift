@@ -239,6 +239,19 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
     }
 
+    func loadOpenCommits(for repository: RepoItem) async throws -> [RepoDestinationInfoItem] {
+        let token = try accessToken()
+        let commits = try await gitHubAPIService.fetchRepositoryCommits(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            branch: repository.branch
+        )
+
+        return commits.map { commit in
+            mapToOpenCommitInfoItem(commit, repository: repository)
+        }
+    }
+
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
         let token = try accessToken()
         let fetchedBranches = try await gitHubAPIService.fetchBranches(
@@ -378,6 +391,34 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
                 startedAt: run.startedAt ?? run.createdAt,
                 updatedAt: run.updatedAt
             )
+        )
+    }
+
+    private func mapToOpenCommitInfoItem(
+        _ commit: GitHubRepositoryCommit,
+        repository: RepoItem
+    ) -> RepoDestinationInfoItem {
+        let shortSHA = String(commit.sha.prefix(7))
+        let metadata = commit.committedAt.map { "Committed \(relativeTime(from: $0))" } ?? "Committed recently"
+        let summary = "Recent commit on \(repository.branch) by \(commit.authorLogin)."
+        var bulletPoints = [
+            "Branch: \(repository.branch)",
+            "Commit: \(shortSHA)"
+        ]
+
+        if let detailsURL = commit.htmlURL?.absoluteString, !detailsURL.isEmpty {
+            bulletPoints.append("Details: \(detailsURL)")
+        }
+
+        return RepoDestinationInfoItem(
+            id: commit.id,
+            title: commit.message,
+            subtitle: "\(shortSHA) • \(commit.authorLogin)",
+            status: "Open",
+            metadata: metadata,
+            summary: summary,
+            bulletPoints: bulletPoints,
+            trailingValue: repository.branch
         )
     }
 
@@ -554,7 +595,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
             tags: metric("\(repository.fullName)-tags", min: 0, max: 34),
             branches: metric("\(repository.fullName)-branches", min: 1, max: 12),
             contributors: metric("\(repository.fullName)-contributors", min: 1, max: 14),
-            openCommits: metric("\(repository.fullName)-commits", min: 1, max: 90)
+            openCommits: 0
         )
     }
 
