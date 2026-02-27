@@ -24,7 +24,7 @@ enum RepositoryLocalActionError: LocalizedError {
         case .gitNotAvailable:
             return "Git is not available in common system locations."
         case .gitBlockedBySandbox:
-            return "Git clone is blocked by App Sandbox for the available Git binary. Install Git via Homebrew (for example /opt/homebrew/bin/git) and try again."
+            return "Git command is blocked by App Sandbox for the available Git binary. Install Git via Homebrew (for example /opt/homebrew/bin/git) and try again."
         case .checkoutBlockedByLocalChanges:
             return "Cannot switch branch because this repository has local uncommitted changes. Commit, stash, or discard your changes, then try again."
         case .commandFailed(let message):
@@ -38,6 +38,12 @@ protocol RepositoryLocalActionServicing {
     func openInTerminal(at localURL: URL) throws
     func checkoutBranch(named branchName: String, at localURL: URL) throws
     func currentBranchName(at localURL: URL) throws -> String?
+    func listWorktrees(at localURL: URL) throws -> [RepoWorktreeItem]
+    func createWorktree(
+        branchName: String,
+        at localURL: URL,
+        directoryName: String
+    ) throws -> URL
     func cloneRepository(
         sshCloneURL: String?,
         httpsCloneURL: String?,
@@ -51,6 +57,11 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
     private let fileManager: FileManager
     private enum CheckoutBranchResult {
         case success
+        case sandboxBlocked
+        case failed(String)
+    }
+    private enum WorktreeAddResult {
+        case success(URL)
         case sandboxBlocked
         case failed(String)
     }
@@ -259,6 +270,123 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
             }
 
             return nil
+        }
+    }
+
+    func listWorktrees(at localURL: URL) throws -> [RepoWorktreeItem] {
+        try ensureDirectory(at: localURL)
+
+        let gitExecutablePaths = availableGitExecutablePaths()
+        guard !gitExecutablePaths.isEmpty else {
+            throw RepositoryLocalActionError.gitNotAvailable
+        }
+
+        return try withSecurityScopedAccess(to: localURL) {
+            var hasSandboxBlockedGit = false
+            var lastFailureMessage: String?
+
+            for executablePath in gitExecutablePaths {
+                let result = try runProcessSyncWithOutput(
+                    executablePath: executablePath,
+                    arguments: ["worktree", "list", "--porcelain"],
+                    currentDirectoryURL: localURL
+                )
+
+                if isSandboxBlockedXcrunError(stderr: result.stderr, stdout: result.stdout) {
+                    hasSandboxBlockedGit = true
+                    continue
+                }
+
+                if result.exitCode == 0 {
+                    return parseWorktreeListOutput(result.stdout, currentDirectoryURL: localURL)
+                }
+
+                let failure = normalizedCommandOutput(stderr: result.stderr, stdout: result.stdout)
+                if !failure.isEmpty {
+                    lastFailureMessage = failure
+                }
+            }
+
+            if hasSandboxBlockedGit {
+                throw RepositoryLocalActionError.gitBlockedBySandbox
+            }
+
+            if let lastFailureMessage, !lastFailureMessage.isEmpty {
+                throw RepositoryLocalActionError.commandFailed(lastFailureMessage)
+            }
+
+            throw RepositoryLocalActionError.commandFailed("Unable to list worktrees.")
+        }
+    }
+
+    func createWorktree(
+        branchName: String,
+        at localURL: URL,
+        directoryName: String
+    ) throws -> URL {
+        try ensureDirectory(at: localURL)
+
+        let trimmedBranchName = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBranchName.isEmpty else {
+            throw RepositoryLocalActionError.commandFailed("Branch name is empty.")
+        }
+
+        let trimmedDirectoryName = directoryName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedDirectoryName.isEmpty else {
+            throw RepositoryLocalActionError.commandFailed("Worktree directory name is empty.")
+        }
+
+        let gitExecutablePaths = availableGitExecutablePaths()
+        guard !gitExecutablePaths.isEmpty else {
+            throw RepositoryLocalActionError.gitNotAvailable
+        }
+
+        let destinationURL = localURL
+            .deletingLastPathComponent()
+            .appendingPathComponent(trimmedDirectoryName, isDirectory: true)
+
+        var isDirectory: ObjCBool = false
+        if fileManager.fileExists(atPath: destinationURL.path, isDirectory: &isDirectory) {
+            guard isDirectory.boolValue else {
+                throw RepositoryLocalActionError.destinationNotDirectory(destinationURL.path)
+            }
+
+            if !isDirectoryEmpty(destinationURL) {
+                throw RepositoryLocalActionError.destinationAlreadyExists(destinationURL.path)
+            }
+        }
+
+        return try withSecurityScopedAccess(to: localURL) {
+            var hasSandboxBlockedGit = false
+            var lastFailureMessage: String?
+
+            for executablePath in gitExecutablePaths {
+                let result = try attemptCreateWorktree(
+                    named: trimmedBranchName,
+                    at: destinationURL,
+                    using: executablePath,
+                    in: localURL
+                )
+
+                switch result {
+                case .success(let createdURL):
+                    return createdURL
+                case .sandboxBlocked:
+                    hasSandboxBlockedGit = true
+                case .failed(let message):
+                    lastFailureMessage = message
+                }
+            }
+
+            if hasSandboxBlockedGit {
+                throw RepositoryLocalActionError.gitBlockedBySandbox
+            }
+
+            if let lastFailureMessage, !lastFailureMessage.isEmpty {
+                throw RepositoryLocalActionError.commandFailed(lastFailureMessage)
+            }
+
+            throw RepositoryLocalActionError.commandFailed("Unable to create worktree '\(trimmedBranchName)'.")
         }
     }
 
@@ -540,6 +668,153 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         return stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private func parseWorktreeListOutput(
+        _ output: String,
+        currentDirectoryURL: URL
+    ) -> [RepoWorktreeItem] {
+        let rawLines = output.components(separatedBy: .newlines)
+        var groups: [[String]] = []
+        var currentGroup: [String] = []
+
+        for line in rawLines {
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !currentGroup.isEmpty {
+                    groups.append(currentGroup)
+                    currentGroup.removeAll(keepingCapacity: true)
+                }
+                continue
+            }
+            currentGroup.append(line)
+        }
+
+        if !currentGroup.isEmpty {
+            groups.append(currentGroup)
+        }
+
+        let currentPath = normalizedLocalPath(currentDirectoryURL)
+        var items: [RepoWorktreeItem] = []
+        items.reserveCapacity(groups.count)
+
+        for group in groups {
+            var path: String?
+            var branchName: String?
+            var headSHA: String?
+
+            for line in group {
+                if line.hasPrefix("worktree ") {
+                    let value = String(line.dropFirst("worktree ".count))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !value.isEmpty {
+                        path = normalizedLocalPath(value)
+                    }
+                } else if line.hasPrefix("branch ") {
+                    let reference = String(line.dropFirst("branch ".count))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    branchName = parseWorktreeBranchName(reference)
+                } else if line.hasPrefix("HEAD ") {
+                    let value = String(line.dropFirst("HEAD ".count))
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !value.isEmpty {
+                        headSHA = value
+                    }
+                } else if line == "detached" {
+                    branchName = nil
+                }
+            }
+
+            guard let normalizedPath = path else {
+                continue
+            }
+
+            items.append(
+                RepoWorktreeItem(
+                    id: normalizedPath,
+                    path: normalizedPath,
+                    branchName: branchName,
+                    headSHA: headSHA,
+                    isCurrent: normalizedPath == currentPath
+                )
+            )
+        }
+
+        if items.isEmpty {
+            items = [
+                RepoWorktreeItem(
+                    id: currentPath,
+                    path: currentPath,
+                    branchName: nil,
+                    headSHA: nil,
+                    isCurrent: true
+                )
+            ]
+        }
+
+        return items.sorted { lhs, rhs in
+            if lhs.isCurrent != rhs.isCurrent {
+                return lhs.isCurrent
+            }
+            return lhs.directoryName.localizedCaseInsensitiveCompare(rhs.directoryName) == .orderedAscending
+        }
+    }
+
+    private func parseWorktreeBranchName(_ reference: String) -> String? {
+        guard !reference.isEmpty else {
+            return nil
+        }
+
+        let localPrefix = "refs/heads/"
+        if reference.hasPrefix(localPrefix) {
+            let branch = String(reference.dropFirst(localPrefix.count))
+            return branch.isEmpty ? nil : branch
+        }
+
+        return reference
+    }
+
+    private func attemptCreateWorktree(
+        named branchName: String,
+        at destinationURL: URL,
+        using executablePath: String,
+        in localURL: URL
+    ) throws -> WorktreeAddResult {
+        let attempts: [[String]] = [
+            ["worktree", "add", destinationURL.path, branchName],
+            ["worktree", "add", "--track", "-b", branchName, destinationURL.path, "origin/\(branchName)"],
+            ["worktree", "add", "-b", branchName, destinationURL.path]
+        ]
+
+        var lastFailureMessage: String?
+
+        for arguments in attempts {
+            let result = try runProcessSyncWithOutput(
+                executablePath: executablePath,
+                arguments: arguments,
+                currentDirectoryURL: localURL
+            )
+
+            if result.exitCode == 0 {
+                return .success(destinationURL)
+            }
+
+            if isSandboxBlockedXcrunError(stderr: result.stderr, stdout: result.stdout) {
+                return .sandboxBlocked
+            }
+
+            let failure = normalizedCommandOutput(stderr: result.stderr, stdout: result.stdout)
+            if failure.isEmpty {
+                continue
+            }
+
+            if isWorktreeAlreadyCheckedOutError(failure) {
+                return .failed("Branch '\(branchName)' is already checked out in another worktree.")
+            }
+
+            lastFailureMessage = failure
+        }
+
+        return .failed(lastFailureMessage ?? "Unable to create worktree '\(branchName)'.")
+    }
+
     private func attemptCheckoutBranch(
         named branchName: String,
         using executablePath: String,
@@ -612,6 +887,20 @@ struct RepositoryLocalActionService: RepositoryLocalActionServicing {
         let lowercasedMessage = message.lowercased()
         return lowercasedMessage.contains("would be overwritten by checkout")
             || lowercasedMessage.contains("please commit your changes or stash them before you switch branches")
+    }
+
+    private func isWorktreeAlreadyCheckedOutError(_ message: String) -> Bool {
+        let lowercasedMessage = message.lowercased()
+        return lowercasedMessage.contains("already checked out at")
+            || lowercasedMessage.contains("is already used by worktree")
+    }
+
+    private func normalizedLocalPath(_ url: URL) -> String {
+        url.standardizedFileURL.path
+    }
+
+    private func normalizedLocalPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
     private func runProcess(

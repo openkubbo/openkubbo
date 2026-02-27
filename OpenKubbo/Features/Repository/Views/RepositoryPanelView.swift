@@ -19,6 +19,7 @@ struct RepositoryPanelView: View {
 
     @State private var hostWindow: NSWindow?
     @State private var localActionAlertState: LocalActionAlertState?
+    @State private var newWorktreeBranchName = ""
 
     @Environment(\.openWindow) private var openWindow
     @EnvironmentObject private var themeStore: AppThemeStore
@@ -661,6 +662,8 @@ struct RepositoryPanelView: View {
     @ViewBuilder
     private func detailOverlayPanel(for repo: RepoItem, destination: RepoDetailDestination) -> some View {
         switch destination {
+        case .switchWorktree:
+            switchWorktreeOverlayPanel(for: repo)
         case .issues:
             issuesOverlayPanel(for: repo)
         case .pullRequests:
@@ -674,8 +677,211 @@ struct RepositoryPanelView: View {
                 .contributors,
                 .openCommits:
             destinationInfoOverlayPanel(for: repo, destination: destination)
-        default:
-            genericDetailOverlayPanel(for: repo, destination: destination)
+        }
+    }
+
+    private func switchWorktreeOverlayPanel(for repo: RepoItem) -> some View {
+        let worktrees = viewModel.worktrees(for: repo)
+        let isLoadingWorktrees = viewModel.isLoadingWorktrees(for: repo)
+        let worktreesLoadErrorMessage = viewModel.worktreesLoadErrorMessage(for: repo)
+        let cloneRequiredPath = viewModel.worktreeCloneRequiredPath(for: repo)
+        let worktreeActionErrorMessage = viewModel.worktreeActionErrorMessage(for: repo)
+        let worktreeActionStatusMessage = viewModel.worktreeActionStatusMessage(for: repo)
+        let isCreatingWorktree = viewModel.isCreatingWorktree(for: repo)
+        let canCreateWorktree = !trimmedNewWorktreeBranchName.isEmpty && !isCreatingWorktree
+
+        return VStack(spacing: 0) {
+            overlayTopBar(
+                title: "Switch Worktree",
+                onRefresh: {
+                    Task {
+                        await viewModel.reloadWorktrees(for: repo)
+                    }
+                }
+            )
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            if let worktreeActionStatusMessage {
+                issueFeedbackBanner(worktreeActionStatusMessage, isError: false)
+            } else if let worktreeActionErrorMessage {
+                issueFeedbackBanner(worktreeActionErrorMessage, isError: true)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                if let activePath = viewModel.activeWorktreePath(for: repo) {
+                    Text("Active: \(URL(fileURLWithPath: activePath).lastPathComponent)")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                }
+
+                if let cloneRequiredPath {
+                    Text("Clone required at \(cloneRequiredPath)")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
+
+                HStack(spacing: 8) {
+                    secondaryPillButton(icon: "folder", title: "Open in Finder") {
+                        handleLocalAction(for: repo, action: .finder)
+                    }
+                    secondaryPillButton(icon: "terminal", title: "Open in Terminal") {
+                        handleLocalAction(for: repo, action: .terminal)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Create worktree")
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    HStack(spacing: 8) {
+                        TextField("Branch name", text: $newWorktreeBranchName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+
+                        Button {
+                            Task {
+                                let created = await viewModel.createWorktree(
+                                    in: repo,
+                                    branchName: trimmedNewWorktreeBranchName
+                                )
+                                if created {
+                                    newWorktreeBranchName = ""
+                                }
+                            }
+                        } label: {
+                            HStack(spacing: 6) {
+                                if isCreatingWorktree {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(.white.opacity(0.95))
+                                } else {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 11, weight: .bold))
+                                    Text("Create")
+                                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                }
+                            }
+                            .foregroundStyle(.white.opacity(0.95))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule()
+                                    .fill(accentColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(accentColor.opacity(0.6), lineWidth: 1)
+                                    )
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .repoCursorOnHover()
+                        .disabled(!canCreateWorktree)
+                        .opacity(canCreateWorktree ? 1 : 0.55)
+                    }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            ScrollView(showsIndicators: false) {
+                LazyVStack(spacing: 0) {
+                    if isLoadingWorktrees && worktrees.isEmpty {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Loading worktrees...")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 18)
+                    } else if let worktreesLoadErrorMessage, worktrees.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(worktreesLoadErrorMessage)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.red.opacity(isDarkTheme ? 0.86 : 0.72))
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            HStack(spacing: 12) {
+                                Button("Retry") {
+                                    Task {
+                                        await viewModel.reloadWorktrees(for: repo)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(accentColor)
+                                .repoCursorOnHover()
+
+                                if cloneRequiredPath != nil {
+                                    Button("Clone Repository") {
+                                        cloneRepositoryForWorktrees(repo)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                                    .foregroundStyle(accentColor)
+                                    .repoCursorOnHover()
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 18)
+                    } else if worktrees.isEmpty {
+                        Text("No worktrees available.")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 18)
+                    } else {
+                        ForEach(Array(worktrees.enumerated()), id: \.element.id) { index, worktree in
+                            worktreeRow(
+                                worktree,
+                                in: repo,
+                                showDivider: index < worktrees.count - 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+        .task(id: "switch-worktree-\(repo.id)") {
+            if trimmedNewWorktreeBranchName.isEmpty {
+                newWorktreeBranchName = repo.branch
+            }
+            await viewModel.loadWorktreesIfNeeded(for: repo)
         }
     }
 
@@ -2718,6 +2924,90 @@ struct RepositoryPanelView: View {
         .repoCursorOnHover()
     }
 
+    private func worktreeRow(
+        _ worktree: RepoWorktreeItem,
+        in repo: RepoItem,
+        showDivider: Bool
+    ) -> some View {
+        let isActive = viewModel.isWorktreeActive(worktree, in: repo)
+        let branchName = worktree.branchName ?? "Detached HEAD"
+
+        return Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                viewModel.switchToWorktree(worktree, in: repo)
+            }
+        } label: {
+            VStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "arrow.left.arrow.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                        .frame(width: 18, alignment: .center)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(worktree.directoryName)
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .lineLimit(1)
+
+                        Text(branchName)
+                            .font(.system(size: 11, weight: .semibold, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                            .lineLimit(1)
+
+                        Text(worktree.path)
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(secondaryTextColor)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if isActive {
+                        Text("Active")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.95))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule()
+                                    .fill(accentColor)
+                            )
+                    } else if worktree.isCurrent {
+                        Text("Current")
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                Capsule()
+                                    .fill(actionCardFillColor)
+                                    .overlay(
+                                        Capsule()
+                                            .stroke(actionCardStrokeColor, lineWidth: 1)
+                                    )
+                            )
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 0, style: .continuous)
+                        .fill(isActive ? accentColor.opacity(isDarkTheme ? 0.16 : 0.11) : .clear)
+                )
+
+                if showDivider {
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .repoCursorOnHover()
+    }
+
     private func destinationInfoRow(
         _ item: RepoDestinationInfoItem,
         icon: String,
@@ -3226,6 +3516,26 @@ struct RepositoryPanelView: View {
         NSWorkspace.shared.open(repositoryURL)
     }
 
+    private func cloneRepositoryForWorktrees(_ repo: RepoItem) {
+        Task {
+            let result = await viewModel.cloneLocalRepository(for: repo)
+            switch result {
+            case .cloned:
+                await viewModel.reloadWorktrees(for: repo)
+            case .rootNotConfigured:
+                localActionAlertState = LocalActionAlertState(kind: .rootNotConfigured)
+            case .cloneRequired(let expectedPath):
+                localActionAlertState = LocalActionAlertState(
+                    kind: .failed("Repository could not be cloned to \(expectedPath).")
+                )
+            case .failed(let message):
+                localActionAlertState = LocalActionAlertState(kind: .failed(message))
+            case .opened:
+                break
+            }
+        }
+    }
+
     private func handleLocalAction(for repo: RepoItem, action: PendingLocalAction) {
         let result: RepositoryLocalActionResult
 
@@ -3292,6 +3602,10 @@ struct RepositoryPanelView: View {
             let result = await viewModel.cloneLocalRepository(for: repo)
             handleLocalActionResult(result, for: repo, action: request.action)
         }
+    }
+
+    private var trimmedNewWorktreeBranchName: String {
+        newWorktreeBranchName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func formatBadgeValue(_ value: Int) -> String {

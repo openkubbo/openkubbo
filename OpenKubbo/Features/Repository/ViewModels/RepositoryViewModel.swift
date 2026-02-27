@@ -123,6 +123,14 @@ final class RepositoryViewModel: ObservableObject {
     @Published private(set) var contributorsLoadErrorMessageByRepositoryID: [String: String] = [:]
     @Published private(set) var issueBranchNamesByIssueKey: [String: [String]] = [:]
     @Published private(set) var localCurrentBranchByRepositoryID: [String: String] = [:]
+    @Published private(set) var loadedWorktreesByRepositoryID: [String: [RepoWorktreeItem]] = [:]
+    @Published private(set) var worktreesLoadingRepositoryIDs: Set<String> = []
+    @Published private(set) var worktreesLoadErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var worktreeCloneRequiredPathByRepositoryID: [String: String] = [:]
+    @Published private(set) var worktreeActionErrorMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var worktreeActionStatusMessageByRepositoryID: [String: String] = [:]
+    @Published private(set) var worktreesCreatingRepositoryIDs: Set<String> = []
+    @Published private(set) var activeWorktreePathByRepositoryID: [String: String] = [:]
 
     init(
         dataProvider: RepositoryDataProviding,
@@ -234,6 +242,14 @@ final class RepositoryViewModel: ObservableObject {
             issueBranchNamesByIssueKey = [:]
             optimisticBranchNamesByRepositoryID = [:]
             localCurrentBranchByRepositoryID = [:]
+            loadedWorktreesByRepositoryID = [:]
+            worktreesLoadingRepositoryIDs = []
+            worktreesLoadErrorMessageByRepositoryID = [:]
+            worktreeCloneRequiredPathByRepositoryID = [:]
+            worktreeActionErrorMessageByRepositoryID = [:]
+            worktreeActionStatusMessageByRepositoryID = [:]
+            worktreesCreatingRepositoryIDs = []
+            activeWorktreePathByRepositoryID = [:]
             closeRepositorySelection()
             repositoryLoadErrorMessage = repositoryErrorDescription(error)
         }
@@ -357,7 +373,11 @@ final class RepositoryViewModel: ObservableObject {
         selectedDestinationInfoItemID = nil
         selectedDetailDestination = destination
 
-        if destination == .issues, let repo = selectedRepo {
+        if destination == .switchWorktree, let repo = selectedRepo {
+            Task { [weak self] in
+                await self?.loadWorktreesIfNeeded(for: repo)
+            }
+        } else if destination == .issues, let repo = selectedRepo {
             Task { [weak self] in
                 await self?.loadBranchesIfNeeded(for: repo)
                 await self?.loadIssuesIfNeeded(for: repo)
@@ -838,6 +858,119 @@ final class RepositoryViewModel: ObservableObject {
         localCurrentBranchByRepositoryID[repo.id]
     }
 
+    func worktrees(for repo: RepoItem) -> [RepoWorktreeItem] {
+        loadedWorktreesByRepositoryID[repo.id, default: []]
+    }
+
+    func loadWorktreesIfNeeded(for repo: RepoItem) async {
+        await loadWorktrees(for: repo, forceReload: false)
+    }
+
+    func reloadWorktrees(for repo: RepoItem) async {
+        await loadWorktrees(for: repo, forceReload: true)
+    }
+
+    func isLoadingWorktrees(for repo: RepoItem) -> Bool {
+        worktreesLoadingRepositoryIDs.contains(repo.id)
+    }
+
+    func worktreesLoadErrorMessage(for repo: RepoItem) -> String? {
+        worktreesLoadErrorMessageByRepositoryID[repo.id]
+    }
+
+    func worktreeCloneRequiredPath(for repo: RepoItem) -> String? {
+        worktreeCloneRequiredPathByRepositoryID[repo.id]
+    }
+
+    func worktreeActionErrorMessage(for repo: RepoItem) -> String? {
+        worktreeActionErrorMessageByRepositoryID[repo.id]
+    }
+
+    func worktreeActionStatusMessage(for repo: RepoItem) -> String? {
+        worktreeActionStatusMessageByRepositoryID[repo.id]
+    }
+
+    func isCreatingWorktree(for repo: RepoItem) -> Bool {
+        worktreesCreatingRepositoryIDs.contains(repo.id)
+    }
+
+    func activeWorktreePath(for repo: RepoItem) -> String? {
+        activeWorktreePathByRepositoryID[repo.id]
+    }
+
+    func isWorktreeActive(_ worktree: RepoWorktreeItem, in repo: RepoItem) -> Bool {
+        guard let activePath = activeWorktreePathByRepositoryID[repo.id] else {
+            return worktree.isCurrent
+        }
+
+        return normalizedLocalPath(worktree.path) == normalizedLocalPath(activePath)
+    }
+
+    func switchToWorktree(_ worktree: RepoWorktreeItem, in repo: RepoItem) {
+        let normalizedPath = normalizedLocalPath(worktree.path)
+        activeWorktreePathByRepositoryID[repo.id] = normalizedPath
+        worktreeActionErrorMessageByRepositoryID.removeValue(forKey: repo.id)
+        worktreeActionStatusMessageByRepositoryID[repo.id] = "Using \(worktree.directoryName)."
+        refreshLocalCurrentBranch(for: repo)
+    }
+
+    func createWorktree(in repo: RepoItem, branchName: String) async -> Bool {
+        let trimmedBranchName = branchName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBranchName.isEmpty else {
+            worktreeActionStatusMessageByRepositoryID.removeValue(forKey: repo.id)
+            worktreeActionErrorMessageByRepositoryID[repo.id] = "Branch name is required."
+            return false
+        }
+
+        guard !worktreesCreatingRepositoryIDs.contains(repo.id) else {
+            return false
+        }
+
+        worktreesCreatingRepositoryIDs.insert(repo.id)
+        worktreeActionErrorMessageByRepositoryID.removeValue(forKey: repo.id)
+        worktreeActionStatusMessageByRepositoryID.removeValue(forKey: repo.id)
+        defer {
+            worktreesCreatingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let rootURL = try localRootProvider.currentRootURL()
+            let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
+
+            switch localMatch {
+            case .rootNotConfigured:
+                worktreeActionErrorMessageByRepositoryID[repo.id] = "Configure the local repositories folder first."
+                return false
+            case .missing(let expectedURL):
+                worktreeCloneRequiredPathByRepositoryID[repo.id] = expectedURL.path
+                worktreeActionErrorMessageByRepositoryID[repo.id] = "Repository is not cloned locally yet."
+                return false
+            case .matched(let localURL):
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
+                let baseURL = preferredLocalURL(for: repo, fallback: localURL)
+                let directoryName = worktreeDirectoryName(for: repo, branchName: trimmedBranchName)
+                let createdURL = try withRootAccess(rootURL: rootURL) {
+                    try localActionService.createWorktree(
+                        branchName: trimmedBranchName,
+                        at: baseURL,
+                        directoryName: directoryName
+                    )
+                }
+
+                activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(createdURL)
+                worktreeActionStatusMessageByRepositoryID[repo.id] = "Worktree \(createdURL.lastPathComponent) created for \(trimmedBranchName)."
+                worktreeActionErrorMessageByRepositoryID.removeValue(forKey: repo.id)
+                await loadWorktrees(for: repo, forceReload: true)
+                refreshLocalCurrentBranch(for: repo)
+                return true
+            }
+        } catch {
+            worktreeActionStatusMessageByRepositoryID.removeValue(forKey: repo.id)
+            worktreeActionErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            return false
+        }
+    }
+
     func selectBranch(_ branch: RepoBranchItem) {
         selectedBranchID = branch.id
     }
@@ -1065,6 +1198,8 @@ final class RepositoryViewModel: ObservableObject {
             case .rootNotConfigured:
                 return .rootNotConfigured
             case .matched(let localURL):
+                activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(localURL)
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
                 return .cloned(localPath: localURL.path)
             case .missing:
                 let directoryName = localResolver.repositoryDirectoryName(for: repo)
@@ -1075,6 +1210,8 @@ final class RepositoryViewModel: ObservableObject {
                     into: rootURL,
                     directoryName: directoryName
                 )
+                activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(destinationURL)
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
                 refreshLocalCurrentBranch(for: repo)
                 return .cloned(localPath: destinationURL.path)
             }
@@ -1092,23 +1229,48 @@ final class RepositoryViewModel: ObservableObject {
             case .rootNotConfigured:
                 return .rootNotConfigured
             case .missing(let expectedURL):
+                worktreeCloneRequiredPathByRepositoryID[repo.id] = expectedURL.path
                 return .cloneRequired(expectedPath: expectedURL.path)
             case .matched(let localURL):
-                try withRootAccess(rootURL: rootURL) {
-                    switch action {
-                    case .finder:
-                        try localActionService.openInFinder(at: localURL)
-                    case .terminal:
-                        try localActionService.openInTerminal(at: localURL)
-                    case .checkout(let branchName):
-                        try localActionService.checkoutBranch(named: branchName, at: localURL)
-                    case .terminalOnBranch(let branchName):
-                        try localActionService.checkoutBranch(named: branchName, at: localURL)
-                        try localActionService.openInTerminal(at: localURL)
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
+                let candidateURLs = preferredLocalURLs(for: repo, fallback: localURL)
+                var lastError: Error?
+
+                for (index, candidateURL) in candidateURLs.enumerated() {
+                    do {
+                        try withRootAccess(rootURL: rootURL) {
+                            switch action {
+                            case .finder:
+                                try localActionService.openInFinder(at: candidateURL)
+                            case .terminal:
+                                try localActionService.openInTerminal(at: candidateURL)
+                            case .checkout(let branchName):
+                                try localActionService.checkoutBranch(named: branchName, at: candidateURL)
+                            case .terminalOnBranch(let branchName):
+                                try localActionService.checkoutBranch(named: branchName, at: candidateURL)
+                                try localActionService.openInTerminal(at: candidateURL)
+                            }
+                        }
+
+                        activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(candidateURL)
+                        worktreeActionErrorMessageByRepositoryID.removeValue(forKey: repo.id)
+                        refreshLocalCurrentBranch(for: repo)
+                        return .opened
+                    } catch {
+                        lastError = error
+                        if index < candidateURLs.count - 1 && isRecoverableWorktreePathError(error) {
+                            continue
+                        }
+
+                        return .failed(repositoryErrorDescription(error))
                     }
                 }
-                refreshLocalCurrentBranch(for: repo)
-                return .opened
+
+                if let lastError {
+                    return .failed(repositoryErrorDescription(lastError))
+                }
+
+                return .failed("Unable to execute local action.")
             }
         } catch {
             return .failed(repositoryErrorDescription(error))
@@ -1481,6 +1643,69 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadWorktrees(for repo: RepoItem, forceReload: Bool) async {
+        if worktreesLoadingRepositoryIDs.contains(repo.id) {
+            return
+        }
+
+        if !forceReload, loadedWorktreesByRepositoryID[repo.id] != nil {
+            return
+        }
+
+        worktreesLoadingRepositoryIDs.insert(repo.id)
+        worktreesLoadErrorMessageByRepositoryID[repo.id] = nil
+        defer {
+            worktreesLoadingRepositoryIDs.remove(repo.id)
+        }
+
+        do {
+            let rootURL = try localRootProvider.currentRootURL()
+            let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
+
+            switch localMatch {
+            case .rootNotConfigured:
+                loadedWorktreesByRepositoryID[repo.id] = []
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
+                worktreesLoadErrorMessageByRepositoryID[repo.id] = "Configure the local repositories folder first."
+                localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
+            case .missing(let expectedURL):
+                loadedWorktreesByRepositoryID[repo.id] = []
+                worktreeCloneRequiredPathByRepositoryID[repo.id] = expectedURL.path
+                worktreesLoadErrorMessageByRepositoryID[repo.id] = "Repository is not cloned locally yet."
+                localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
+            case .matched(let localURL):
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
+                let baseURL = preferredLocalURL(for: repo, fallback: localURL)
+                let worktrees = try withRootAccess(rootURL: rootURL) {
+                    try localActionService.listWorktrees(at: baseURL)
+                }
+                loadedWorktreesByRepositoryID[repo.id] = worktrees
+                worktreesLoadErrorMessageByRepositoryID[repo.id] = nil
+
+                let availablePaths = Set(worktrees.map { normalizedLocalPath($0.path) })
+                if let activePath = activeWorktreePathByRepositoryID[repo.id],
+                   !availablePaths.contains(normalizedLocalPath(activePath)) {
+                    activeWorktreePathByRepositoryID.removeValue(forKey: repo.id)
+                }
+
+                if activeWorktreePathByRepositoryID[repo.id] == nil {
+                    if let current = worktrees.first(where: \.isCurrent) {
+                        activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(current.path)
+                    } else if let first = worktrees.first {
+                        activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(first.path)
+                    }
+                }
+
+                refreshLocalCurrentBranch(for: repo)
+            }
+        } catch {
+            worktreesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
+            if loadedWorktreesByRepositoryID[repo.id] == nil {
+                loadedWorktreesByRepositoryID[repo.id] = []
+            }
+        }
+    }
+
     private func loadIssueComments(
         for issue: RepoIssueItem,
         in repo: RepoItem,
@@ -1714,6 +1939,22 @@ final class RepositoryViewModel: ObservableObject {
         localCurrentBranchByRepositoryID = localCurrentBranchByRepositoryID.filter { key, _ in
             validRepositoryIDs.contains(key)
         }
+        loadedWorktreesByRepositoryID = loadedWorktreesByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
+        worktreesLoadingRepositoryIDs = worktreesLoadingRepositoryIDs.intersection(validRepositoryIDs)
+        worktreesLoadErrorMessageByRepositoryID = worktreesLoadErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        worktreeCloneRequiredPathByRepositoryID = worktreeCloneRequiredPathByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        worktreeActionErrorMessageByRepositoryID = worktreeActionErrorMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        worktreeActionStatusMessageByRepositoryID = worktreeActionStatusMessageByRepositoryID.filter {
+            validRepositoryIDs.contains($0.key)
+        }
+        worktreesCreatingRepositoryIDs = worktreesCreatingRepositoryIDs.intersection(validRepositoryIDs)
+        activeWorktreePathByRepositoryID = activeWorktreePathByRepositoryID.filter { validRepositoryIDs.contains($0.key) }
     }
 
     private func synchronizeSelectedRepo() {
@@ -1854,26 +2095,56 @@ final class RepositoryViewModel: ObservableObject {
             let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
 
             switch localMatch {
-            case .rootNotConfigured, .missing:
+            case .rootNotConfigured:
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
+                activeWorktreePathByRepositoryID.removeValue(forKey: repo.id)
+                localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
+            case .missing(let expectedURL):
+                worktreeCloneRequiredPathByRepositoryID[repo.id] = expectedURL.path
+                activeWorktreePathByRepositoryID.removeValue(forKey: repo.id)
                 localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
             case .matched(let localURL):
-                let localBranchName = try withRootAccess(rootURL: rootURL) {
-                    try localActionService.currentBranchName(at: localURL)
+                worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
+                let candidateURLs = preferredLocalURLs(for: repo, fallback: localURL)
+                var resolvedBranchName: String?
+                var resolvedPath: String?
+
+                for (index, candidateURL) in candidateURLs.enumerated() {
+                    do {
+                        let localBranchName = try withRootAccess(rootURL: rootURL) {
+                            try localActionService.currentBranchName(at: candidateURL)
+                        }
+
+                        guard let localBranchName else {
+                            continue
+                        }
+
+                        let trimmedLocalBranch = localBranchName.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !trimmedLocalBranch.isEmpty else {
+                            continue
+                        }
+
+                        resolvedBranchName = trimmedLocalBranch
+                        resolvedPath = normalizedLocalPath(candidateURL)
+                        break
+                    } catch {
+                        if index < candidateURLs.count - 1 && isRecoverableWorktreePathError(error) {
+                            continue
+                        }
+                        break
+                    }
                 }
 
-                guard let localBranchName else {
+                guard let resolvedBranchName else {
                     localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
                     return
                 }
 
-                let trimmedLocalBranch = localBranchName.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !trimmedLocalBranch.isEmpty else {
-                    localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
-                    return
+                if let resolvedPath {
+                    activeWorktreePathByRepositoryID[repo.id] = resolvedPath
                 }
-
-                localCurrentBranchByRepositoryID[repo.id] = trimmedLocalBranch
-                markCurrentBranch(named: trimmedLocalBranch, in: repo)
+                localCurrentBranchByRepositoryID[repo.id] = resolvedBranchName
+                markCurrentBranch(named: resolvedBranchName, in: repo)
             }
         } catch {
             localCurrentBranchByRepositoryID.removeValue(forKey: repo.id)
@@ -1968,6 +2239,67 @@ final class RepositoryViewModel: ObservableObject {
             return key
         }
         return String(key[..<separatorIndex])
+    }
+
+    private func preferredLocalURLs(for repo: RepoItem, fallback localURL: URL) -> [URL] {
+        guard let activePath = activeWorktreePathByRepositoryID[repo.id] else {
+            return [localURL]
+        }
+
+        let activeURL = URL(fileURLWithPath: activePath, isDirectory: true)
+        let normalizedFallbackPath = normalizedLocalPath(localURL)
+        let normalizedActivePath = normalizedLocalPath(activeURL)
+
+        if normalizedActivePath == normalizedFallbackPath {
+            return [localURL]
+        }
+
+        return [activeURL, localURL]
+    }
+
+    private func preferredLocalURL(for repo: RepoItem, fallback localURL: URL) -> URL {
+        preferredLocalURLs(for: repo, fallback: localURL).first ?? localURL
+    }
+
+    private func worktreeDirectoryName(for repo: RepoItem, branchName: String) -> String {
+        let baseName = localResolver.repositoryDirectoryName(for: repo)
+        let normalizedBranch = branchName
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+
+        if normalizedBranch.isEmpty {
+            return "\(baseName)-worktree"
+        }
+
+        return "\(baseName)-\(normalizedBranch)"
+    }
+
+    private func normalizedLocalPath(_ url: URL) -> String {
+        url.standardizedFileURL.path
+    }
+
+    private func normalizedLocalPath(_ path: String) -> String {
+        URL(fileURLWithPath: path).standardizedFileURL.path
+    }
+
+    private func isRecoverableWorktreePathError(_ error: Error) -> Bool {
+        guard let localActionError = error as? RepositoryLocalActionError else {
+            return false
+        }
+
+        switch localActionError {
+        case .pathNotDirectory:
+            return true
+        case .commandFailed(let message):
+            let lowercasedMessage = message.lowercased()
+            return lowercasedMessage.contains("not a git repository")
+                || lowercasedMessage.contains("cannot change to")
+                || lowercasedMessage.contains("no such file or directory")
+        default:
+            return false
+        }
     }
 
     private func repositoryErrorDescription(_ error: Error) -> String {

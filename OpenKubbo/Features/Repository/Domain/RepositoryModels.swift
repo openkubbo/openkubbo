@@ -745,3 +745,15 @@ struct RepoBranchItem: Identifiable {
         return !hasOpenPullRequest
     }
 }
+
+struct RepoWorktreeItem: Identifiable, Equatable {
+    let id: String
+    let path: String
+    let branchName: String?
+    let headSHA: String?
+    let isCurrent: Bool
+
+    var directoryName: String {
+        URL(fileURLWithPath: path).lastPathComponent
+    }
+}
