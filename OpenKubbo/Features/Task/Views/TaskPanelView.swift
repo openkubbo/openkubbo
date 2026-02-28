@@ -12,7 +12,7 @@ struct TaskPanelView: View {
     @Environment(\.colorScheme) private var systemColorScheme
 
     @State private var hostWindow: NSWindow?
-    @State private var isWindowPinned = false
+    @State private var isWindowPinned = true
     @State private var draftTaskTitle = ""
     @State private var tasks: [TaskItem] = [
         TaskItem(title: "Bem-vindo ao Kubbo Task", isDone: false),
@@ -113,7 +113,7 @@ struct TaskPanelView: View {
                 ),
                 minimumSize: CGSize(width: 360, height: 620),
                 windowIdentifier: "openkubbo.task.window",
-                windowLevel: .normal
+                windowLevel: .floating
             ) { window in
                 if hostWindow !== window {
                     hostWindow = window
