@@ -98,6 +98,7 @@ final class RepositoryViewModel: ObservableObject {
     )
     private var hasUserCustomizedPins = false
     private var optimisticBranchNamesByRepositoryID: [String: Set<String>] = [:]
+    private var repositoryIndexByID: [String: Int] = [:]
     private var prefetchingRepositoryIDs: Set<String> = []
     private var detailMetricsPrefetchTask: Task<Void, Never>?
     @Published private(set) var loadedIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
@@ -207,17 +208,18 @@ final class RepositoryViewModel: ObservableObject {
         defer { isLoadingRepositories = false }
 
         do {
-            repositories = try await dataProvider.loadRepositories()
-            applyPinnedState(for: repositories)
+            let loadedRepositories = try await dataProvider.loadRepositories()
+            setRepositories(loadedRepositories)
+            applyPinnedState(for: loadedRepositories)
             repositoryLoadErrorMessage = nil
-            pruneIssuesCache(for: repositories)
+            pruneIssuesCache(for: loadedRepositories)
             synchronizeSelectedRepo()
 
-            if repositories.isEmpty {
+            if loadedRepositories.isEmpty {
                 closeRepositorySelection()
             }
         } catch {
-            repositories = []
+            setRepositories([])
             loadedIssuesByRepositoryID = [:]
             issuesLoadingRepositoryIDs = []
             issuesLoadErrorMessageByRepositoryID = [:]
@@ -1729,11 +1731,7 @@ final class RepositoryViewModel: ObservableObject {
                 return
             }
 
-            updateOpenCommitsMetricCount(for: repo.id, count: counts.openCommits)
-            updateTagsMetricCount(for: repo.id, count: counts.tags)
-            updateReleasesMetricCount(for: repo.id, count: counts.releases)
-            updateDiscussionsMetricCount(for: repo.id, count: counts.discussions)
-            updateContributorsMetricCount(for: repo.id, count: counts.contributors)
+            updateSecondaryMetricCounts(for: repo.id, counts: counts)
         } catch {
             if shouldIgnoreCancellation(error) {
                 return
@@ -1969,84 +1967,112 @@ final class RepositoryViewModel: ObservableObject {
         )
     }
 
+    private func setRepositories(_ repositories: [RepoItem]) {
+        self.repositories = repositories
+        rebuildRepositoryIndex()
+    }
+
+    private func rebuildRepositoryIndex() {
+        var indexByID: [String: Int] = [:]
+        indexByID.reserveCapacity(repositories.count)
+
+        for (index, repository) in repositories.enumerated() {
+            indexByID[repository.id] = index
+        }
+
+        repositoryIndexByID = indexByID
+    }
+
+    private func indexForRepository(withID repositoryID: String) -> Int? {
+        if let index = repositoryIndexByID[repositoryID],
+           repositories.indices.contains(index),
+           repositories[index].id == repositoryID {
+            return index
+        }
+
+        rebuildRepositoryIndex()
+        return repositoryIndexByID[repositoryID]
+    }
+
+    private func updateRepository(
+        withID repositoryID: String,
+        transform: (RepoItem) -> RepoItem
+    ) {
+        guard let index = indexForRepository(withID: repositoryID) else {
+            return
+        }
+
+        let currentRepository = repositories[index]
+        let updatedRepository = transform(currentRepository)
+        guard updatedRepository != currentRepository else {
+            return
+        }
+
+        repositories[index] = updatedRepository
+    }
+
+    private func updateSecondaryMetricCounts(for repositoryID: String, counts: RepoInitialMetricCounts) {
+        updateRepository(withID: repositoryID) { repository in
+            repository
+                .updating(openCommits: counts.openCommits)
+                .updating(tags: counts.tags)
+                .updating(releases: counts.releases)
+                .updating(discussions: counts.discussions)
+                .updating(contributors: counts.contributors)
+        }
+    }
+
     private func updateCIRunsMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(ciRuns: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(ciRuns: count)
         }
     }
 
     private func updateIssuesMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(issues: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(issues: count)
         }
     }
 
     private func updatePullRequestsMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(prs: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(prs: count)
         }
     }
 
     private func updateBranchesMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(branches: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(branches: count)
         }
     }
 
     private func updateOpenCommitsMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(openCommits: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(openCommits: count)
         }
     }
 
     private func updateTagsMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(tags: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(tags: count)
         }
     }
 
     private func updateReleasesMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(releases: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(releases: count)
         }
     }
 
     private func updateDiscussionsMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(discussions: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(discussions: count)
         }
     }
 
     private func updateContributorsMetricCount(for repositoryID: String, count: Int) {
-        repositories = repositories.map { repo in
-            guard repo.id == repositoryID else {
-                return repo
-            }
-            return repo.updating(contributors: count)
+        updateRepository(withID: repositoryID) { repository in
+            repository.updating(contributors: count)
         }
     }
 
