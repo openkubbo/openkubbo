@@ -237,7 +237,9 @@ struct TaskPanelView: View {
                 .taskCursorOnHover()
                 .help("Editar tarefa")
 
-                Button(action: {}) {
+                Button {
+                    deleteTask(task.id)
+                } label: {
                     TaskRowActionIcon(symbol: "trash", isDarkTheme: isDarkTheme)
                 }
                 .buttonStyle(.plain)
@@ -333,6 +335,15 @@ struct TaskPanelView: View {
         guard wasDone == false, tasks[index].isDone else { return }
         let completedTask = tasks.remove(at: index)
         tasks.append(completedTask)
+    }
+
+    private func deleteTask(_ taskID: UUID) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            tasks.removeAll { $0.id == taskID }
+            if draggedTaskID == taskID {
+                draggedTaskID = nil
+            }
+        }
     }
 
     private func closeWindow() {
