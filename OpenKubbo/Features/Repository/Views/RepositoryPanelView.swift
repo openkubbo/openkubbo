@@ -320,6 +320,7 @@ struct RepositoryPanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             ContributionHeatmap(
                 isDarkTheme: isDarkTheme,
+                accentColor: accentColor,
                 contributionCountsByDateKey: viewModel.contributionCountsByDateKey,
                 totalContributions: viewModel.totalContributionsLast12Months
             )
@@ -3600,6 +3601,7 @@ struct RepositoryPanelView: View {
 
 private struct ContributionHeatmap: View {
     var isDarkTheme: Bool
+    var accentColor: Color
     var contributionCountsByDateKey: [String: Int]
     var totalContributions: Int
 
@@ -3621,21 +3623,11 @@ private struct ContributionHeatmap: View {
     private var days: Int { Self.days }
     private var firstDate: Date { Self.dateRange.start }
 
-    private let lightPalette: [Color] = [
-        Color(red: 0.92, green: 0.93, blue: 0.94),
-        Color(red: 0.61, green: 0.91, blue: 0.66),
-        Color(red: 0.25, green: 0.77, blue: 0.39),
-        Color(red: 0.19, green: 0.63, blue: 0.31),
-        Color(red: 0.13, green: 0.43, blue: 0.22)
-    ]
-
-    private let darkPalette: [Color] = [
-        Color(red: 0.09, green: 0.11, blue: 0.13),
-        Color(red: 0.05, green: 0.27, blue: 0.16),
-        Color(red: 0.00, green: 0.43, blue: 0.20),
-        Color(red: 0.15, green: 0.65, blue: 0.25),
-        Color(red: 0.22, green: 0.83, blue: 0.33)
-    ]
+    private var emptyCellColor: Color {
+        isDarkTheme
+        ? Color(red: 0.10, green: 0.10, blue: 0.11)
+        : Color(red: 0.92, green: 0.93, blue: 0.94)
+    }
 
     private func dateFor(week: Int, day: Int) -> Date {
         let offset = (week * 7) + day
@@ -3671,9 +3663,24 @@ private struct ContributionHeatmap: View {
     }
 
     private func cellColor(level: Int) -> Color {
-        let palette = isDarkTheme ? darkPalette : lightPalette
-        let safeIndex = max(0, min(palette.count - 1, level))
-        return palette[safeIndex]
+        let safeLevel = max(0, min(4, level))
+        guard safeLevel > 0 else {
+            return emptyCellColor
+        }
+
+        let opacity: Double
+        switch safeLevel {
+        case 1:
+            opacity = isDarkTheme ? 0.38 : 0.25
+        case 2:
+            opacity = isDarkTheme ? 0.55 : 0.42
+        case 3:
+            opacity = isDarkTheme ? 0.73 : 0.60
+        default:
+            opacity = isDarkTheme ? 0.92 : 0.82
+        }
+
+        return accentColor.opacity(opacity)
     }
 
     private func squareCellSize(for size: CGSize, gap: CGFloat) -> CGFloat {
