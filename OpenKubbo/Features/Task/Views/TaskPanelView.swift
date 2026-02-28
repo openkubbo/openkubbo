@@ -159,19 +159,19 @@ struct TaskPanelView: View {
         HStack(spacing: 8) {
             TextField("Nova tarefa simples...", text: $draftTaskTitle)
                 .textFieldStyle(.plain)
-                .font(.system(size: 17, weight: .medium, design: .rounded))
+                .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(primaryTextColor)
 
             Button(action: addTask) {
                 Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(primaryTextColor)
-                    .frame(width: 42, height: 42)
+                    .frame(width: 36, height: 36)
                     .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(cardFillColor)
                             .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .stroke(cardStrokeColor, lineWidth: 1)
                             )
                     )
@@ -180,13 +180,13 @@ struct TaskPanelView: View {
             .disabled(draftTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .opacity(draftTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(cardFillColor)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
