@@ -278,7 +278,7 @@ struct RepositoryPanelView: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(spacing: 0) {
-                Text("Contributions")
+                Text("Repository")
                     .font(.system(size: 19, weight: .semibold, design: .rounded))
                     .foregroundStyle(primaryTextColor)
                     .frame(height: 36, alignment: .center)
