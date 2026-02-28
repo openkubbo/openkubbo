@@ -5,6 +5,11 @@ final class GitHubAPIService: GitHubAPIServicing {
     private let decoder: JSONDecoder
     private let userAgent: String
     private let apiVersion: String
+    private let requestTimeout: TimeInterval
+    private let maxRetryAttempts: Int
+    private let baseRetryDelay: TimeInterval
+    private let maxRetryDelay: TimeInterval
+    private let maxRateLimitWait: TimeInterval
     private let iso8601Formatter = ISO8601DateFormatter()
     private let inFlightRequestStore = InFlightRequestStore()
 
@@ -12,12 +17,22 @@ final class GitHubAPIService: GitHubAPIServicing {
         session: URLSession = .shared,
         decoder: JSONDecoder = JSONDecoder(),
         userAgent: String = "OpenKubbo",
-        apiVersion: String = "2022-11-28"
+        apiVersion: String = "2022-11-28",
+        requestTimeout: TimeInterval = 30,
+        maxRetryAttempts: Int = 3,
+        baseRetryDelay: TimeInterval = 0.6,
+        maxRetryDelay: TimeInterval = 6,
+        maxRateLimitWait: TimeInterval = 20
     ) {
         self.session = session
         self.decoder = decoder
         self.userAgent = userAgent
         self.apiVersion = apiVersion
+        self.requestTimeout = max(1, requestTimeout)
+        self.maxRetryAttempts = max(1, maxRetryAttempts)
+        self.baseRetryDelay = max(0.1, baseRetryDelay)
+        self.maxRetryDelay = max(self.baseRetryDelay, maxRetryDelay)
+        self.maxRateLimitWait = max(1, maxRateLimitWait)
     }
 
     func fetchViewerLogin(accessToken: String) async throws -> String {
@@ -1112,7 +1127,7 @@ final class GitHubAPIService: GitHubAPIServicing {
         case 404:
             return nil
         default:
-            throw apiError(from: data, statusCode: httpResponse.statusCode)
+            throw apiError(from: data, httpResponse: httpResponse)
         }
     }
 
@@ -1152,7 +1167,7 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw apiError(from: data, statusCode: httpResponse.statusCode)
+            throw apiError(from: data, httpResponse: httpResponse)
         }
 
         if let countFromPagination = paginatedCountFromLinkHeader(httpResponse.value(forHTTPHeaderField: "Link")) {
@@ -1261,6 +1276,7 @@ final class GitHubAPIService: GitHubAPIServicing {
     private func makeJSONRequest(url: URL, method: String, accessToken: String) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
+        request.timeoutInterval = requestTimeout
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue(apiVersion, forHTTPHeaderField: "X-GitHub-Api-Version")
@@ -1288,7 +1304,7 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw apiError(from: data, statusCode: httpResponse.statusCode)
+            throw apiError(from: data, httpResponse: httpResponse)
         }
 
         do {
@@ -1300,12 +1316,188 @@ final class GitHubAPIService: GitHubAPIServicing {
 
     private func performData(for request: URLRequest) async throws -> (Data, URLResponse) {
         guard let key = dedupeKey(for: request) else {
-            return try await session.data(for: request)
+            return try await dataWithRetry(for: request)
         }
 
         return try await inFlightRequestStore.value(forKey: key) {
-            try await self.session.data(for: request)
+            try await self.dataWithRetry(for: request)
         }
+    }
+
+    private func dataWithRetry(for request: URLRequest) async throws -> (Data, URLResponse) {
+        var attempt = 0
+        while true {
+            if Task.isCancelled {
+                throw CancellationError()
+            }
+
+            do {
+                let (data, response) = try await session.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    return (data, response)
+                }
+
+                if attempt < maxRetryAttempts - 1,
+                   let retryDelay = retryDelay(
+                    for: httpResponse,
+                    request: request,
+                    attempt: attempt
+                   ) {
+                    try await sleepForRetry(seconds: retryDelay)
+                    attempt += 1
+                    continue
+                }
+
+                return (data, response)
+            } catch {
+                if shouldIgnoreCancellation(error) {
+                    throw error
+                }
+
+                if attempt < maxRetryAttempts - 1,
+                   let retryDelay = retryDelay(
+                    for: error,
+                    request: request,
+                    attempt: attempt
+                   ) {
+                    try await sleepForRetry(seconds: retryDelay)
+                    attempt += 1
+                    continue
+                }
+
+                throw error
+            }
+        }
+    }
+
+    private func sleepForRetry(seconds: TimeInterval) async throws {
+        let clamped = min(maxRetryDelay, max(0, seconds))
+        guard clamped > 0 else { return }
+        try await Task.sleep(nanoseconds: UInt64(clamped * 1_000_000_000))
+    }
+
+    private func retryDelay(
+        for httpResponse: HTTPURLResponse,
+        request: URLRequest,
+        attempt: Int
+    ) -> TimeInterval? {
+        guard isRetriableRequest(request) else {
+            return nil
+        }
+
+        if isRateLimited(httpResponse) {
+            if let retryAfter = retryAfterDelay(from: httpResponse),
+               retryAfter > 0,
+               retryAfter <= maxRateLimitWait {
+                return retryAfter
+            }
+
+            if let resetDelay = rateLimitResetDelay(from: httpResponse),
+               resetDelay > 0,
+               resetDelay <= maxRateLimitWait {
+                return resetDelay
+            }
+
+            return nil
+        }
+
+        switch httpResponse.statusCode {
+        case 408, 500, 502, 503, 504:
+            return exponentialBackoffDelay(forAttempt: attempt)
+        default:
+            return nil
+        }
+    }
+
+    private func retryDelay(
+        for error: Error,
+        request: URLRequest,
+        attempt: Int
+    ) -> TimeInterval? {
+        guard isRetriableRequest(request) else {
+            return nil
+        }
+
+        guard let urlError = error as? URLError else {
+            return nil
+        }
+
+        switch urlError.code {
+        case .timedOut,
+             .networkConnectionLost,
+             .notConnectedToInternet,
+             .cannotConnectToHost,
+             .cannotFindHost,
+             .dnsLookupFailed:
+            return exponentialBackoffDelay(forAttempt: attempt)
+        default:
+            return nil
+        }
+    }
+
+    private func isRetriableRequest(_ request: URLRequest) -> Bool {
+        let method = request.httpMethod?.uppercased() ?? "GET"
+        return method == "GET"
+    }
+
+    private func exponentialBackoffDelay(forAttempt attempt: Int) -> TimeInterval {
+        let exponential = baseRetryDelay * pow(2.0, Double(attempt))
+        let capped = min(maxRetryDelay, exponential)
+        let jitterUpperBound = max(0.05, capped * 0.25)
+        return capped + Double.random(in: 0...jitterUpperBound)
+    }
+
+    private func isRateLimited(_ response: HTTPURLResponse) -> Bool {
+        if response.statusCode == 429 {
+            return true
+        }
+
+        guard response.statusCode == 403 else {
+            return false
+        }
+
+        if response.value(forHTTPHeaderField: "Retry-After") != nil {
+            return true
+        }
+
+        let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining")?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return remaining == "0"
+    }
+
+    private func retryAfterDelay(from response: HTTPURLResponse) -> TimeInterval? {
+        guard let raw = response.value(forHTTPHeaderField: "Retry-After")?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              let seconds = TimeInterval(raw),
+              seconds > 0 else {
+            return nil
+        }
+
+        return seconds
+    }
+
+    private func rateLimitResetDelay(from response: HTTPURLResponse) -> TimeInterval? {
+        guard let raw = response.value(forHTTPHeaderField: "X-RateLimit-Reset")?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              let resetTimestamp = TimeInterval(raw) else {
+            return nil
+        }
+
+        return max(0, Date(timeIntervalSince1970: resetTimestamp).timeIntervalSinceNow)
+    }
+
+    private func shouldIgnoreCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+
+        if let urlError = error as? URLError,
+           urlError.code == .cancelled {
+            return true
+        }
+
+        return false
     }
 
     private func dedupeKey(for request: URLRequest) -> String? {
@@ -1318,13 +1510,20 @@ final class GitHubAPIService: GitHubAPIServicing {
         return "\(method)|\(url)|\(authorization)"
     }
 
-    private func apiError(from data: Data, statusCode: Int) -> GitHubAPIError {
+    private func apiError(from data: Data, httpResponse: HTTPURLResponse) -> GitHubAPIError {
+        let statusCode = httpResponse.statusCode
         let apiMessage = (try? decoder.decode(APIErrorResponse.self, from: data))?.message
+        let rateLimitMessage = rateLimitErrorMessage(from: httpResponse)
 
         switch statusCode {
         case 401:
             return .unauthorized
+        case 429:
+            return .forbidden(rateLimitMessage ?? "GitHub API rate limit reached. Please retry shortly.")
         case 403:
+            if let rateLimitMessage {
+                return .forbidden(rateLimitMessage)
+            }
             return .forbidden(apiMessage ?? "Access to this GitHub resource was denied.")
         case 404:
             return .notFound
@@ -1334,6 +1533,26 @@ final class GitHubAPIService: GitHubAPIServicing {
             }
             return .unknownStatus(statusCode)
         }
+    }
+
+    private func rateLimitErrorMessage(from response: HTTPURLResponse) -> String? {
+        guard isRateLimited(response) else {
+            return nil
+        }
+
+        if let resetDelay = rateLimitResetDelay(from: response),
+           resetDelay > 0 {
+            let seconds = Int(ceil(resetDelay))
+            return "GitHub rate limit reached. Try again in about \(seconds)s."
+        }
+
+        if let retryAfter = retryAfterDelay(from: response),
+           retryAfter > 0 {
+            let seconds = Int(ceil(retryAfter))
+            return "GitHub rate limit reached. Try again in about \(seconds)s."
+        }
+
+        return "GitHub rate limit reached. Please retry shortly."
     }
 }
 
