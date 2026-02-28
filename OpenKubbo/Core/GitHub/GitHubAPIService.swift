@@ -6,6 +6,7 @@ final class GitHubAPIService: GitHubAPIServicing {
     private let userAgent: String
     private let apiVersion: String
     private let iso8601Formatter = ISO8601DateFormatter()
+    private let inFlightRequestStore = InFlightRequestStore()
 
     init(
         session: URLSession = .shared,
@@ -1098,7 +1099,7 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
 
         let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performData(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GitHubAPIError.malformedResponse
@@ -1140,7 +1141,7 @@ final class GitHubAPIService: GitHubAPIServicing {
         treatNotFoundAsZero: Bool = false
     ) async throws -> Int {
         let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performData(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GitHubAPIError.malformedResponse
@@ -1280,7 +1281,7 @@ final class GitHubAPIService: GitHubAPIServicing {
     }
 
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performData(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw GitHubAPIError.malformedResponse
@@ -1295,6 +1296,26 @@ final class GitHubAPIService: GitHubAPIServicing {
         } catch {
             throw GitHubAPIError.malformedResponse
         }
+    }
+
+    private func performData(for request: URLRequest) async throws -> (Data, URLResponse) {
+        guard let key = dedupeKey(for: request) else {
+            return try await session.data(for: request)
+        }
+
+        return try await inFlightRequestStore.value(forKey: key) {
+            try await self.session.data(for: request)
+        }
+    }
+
+    private func dedupeKey(for request: URLRequest) -> String? {
+        guard let method = request.httpMethod?.uppercased(), method == "GET",
+              let url = request.url?.absoluteString else {
+            return nil
+        }
+
+        let authorization = request.value(forHTTPHeaderField: "Authorization") ?? ""
+        return "\(method)|\(url)|\(authorization)"
     }
 
     private func apiError(from data: Data, statusCode: Int) -> GitHubAPIError {
@@ -1312,6 +1333,31 @@ final class GitHubAPIService: GitHubAPIServicing {
                 return .api(apiMessage)
             }
             return .unknownStatus(statusCode)
+        }
+    }
+}
+
+private actor InFlightRequestStore {
+    private var tasksByKey: [String: Task<(Data, URLResponse), Error>] = [:]
+
+    func value(
+        forKey key: String,
+        loader: @escaping @Sendable () async throws -> (Data, URLResponse)
+    ) async throws -> (Data, URLResponse) {
+        if let task = tasksByKey[key] {
+            return try await task.value
+        }
+
+        let task = Task { try await loader() }
+        tasksByKey[key] = task
+
+        do {
+            let result = try await task.value
+            tasksByKey.removeValue(forKey: key)
+            return result
+        } catch {
+            tasksByKey.removeValue(forKey: key)
+            throw error
         }
     }
 }

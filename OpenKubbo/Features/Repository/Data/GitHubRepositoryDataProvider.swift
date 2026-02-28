@@ -14,13 +14,16 @@ enum RepositoryDataError: LocalizedError {
 struct GitHubRepositoryDataProvider: RepositoryDataProviding {
     private let gitHubAPIService: GitHubAPIServicing
     private let gitHubTokenStore: GitHubTokenStoring
+    private let viewerLoginStore: ViewerLoginStore
 
     init(
         gitHubAPIService: GitHubAPIServicing,
-        gitHubTokenStore: GitHubTokenStoring
+        gitHubTokenStore: GitHubTokenStoring,
+        viewerLoginStore: ViewerLoginStore = ViewerLoginStore()
     ) {
         self.gitHubAPIService = gitHubAPIService
         self.gitHubTokenStore = gitHubTokenStore
+        self.viewerLoginStore = viewerLoginStore
     }
 
     func loadRepositories() async throws -> [RepoItem] {
@@ -47,7 +50,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
 
     func loadIssues(for repository: RepoItem) async throws -> [RepoIssueItem] {
         let token = try accessToken()
-        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token).lowercased()
+        let viewerLogin = try await cachedViewerLogin(accessToken: token).lowercased()
         let issues = try await gitHubAPIService.fetchIssues(
             accessToken: token,
             repositoryFullName: repository.name
@@ -78,7 +81,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         body: String?
     ) async throws -> RepoIssueItem {
         let token = try accessToken()
-        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token)
+        let viewerLogin = try await cachedViewerLogin(accessToken: token)
         let createdIssue = try await gitHubAPIService.createIssue(
             accessToken: token,
             repositoryFullName: repository.name,
@@ -148,7 +151,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
 
     func loadPullRequests(for repository: RepoItem) async throws -> [RepoPullRequestItem] {
         let token = try accessToken()
-        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token).lowercased()
+        let viewerLogin = try await cachedViewerLogin(accessToken: token).lowercased()
         let pullRequests = try await gitHubAPIService.fetchPullRequests(
             accessToken: token,
             repositoryFullName: repository.name
@@ -185,7 +188,7 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         baseBranch: String
     ) async throws -> RepoPullRequestItem {
         let token = try accessToken()
-        let viewerLogin = try await gitHubAPIService.fetchViewerLogin(accessToken: token).lowercased()
+        let viewerLogin = try await cachedViewerLogin(accessToken: token).lowercased()
         let createdPullRequest = try await gitHubAPIService.createPullRequest(
             accessToken: token,
             repositoryFullName: repository.name,
@@ -343,6 +346,19 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
 
         return token
+    }
+
+    private func cachedViewerLogin(accessToken: String) async throws -> String {
+        do {
+            return try await viewerLoginStore.login(forToken: accessToken) {
+                try await gitHubAPIService.fetchViewerLogin(accessToken: accessToken)
+            }
+        } catch {
+            if case GitHubAPIError.unauthorized = error {
+                await viewerLoginStore.invalidate(forToken: accessToken)
+            }
+            throw error
+        }
     }
 
     private func mapToIssueItem(
@@ -882,5 +898,44 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
 
         let years = months / 12
         return "\(years) yr. ago"
+    }
+}
+
+actor ViewerLoginStore {
+    private var cachedLoginsByToken: [String: String] = [:]
+    private var inFlightLoginsByToken: [String: Task<String, Error>] = [:]
+
+    func login(forToken token: String, fetcher: @escaping () async throws -> String) async throws -> String {
+        if let cachedLogin = cachedLoginsByToken[token] {
+            return cachedLogin
+        }
+
+        if let inFlightTask = inFlightLoginsByToken[token] {
+            return try await inFlightTask.value
+        }
+
+        let task = Task {
+            try await fetcher()
+        }
+        inFlightLoginsByToken[token] = task
+
+        do {
+            let login = try await task.value
+            let trimmedLogin = login.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedLogin.isEmpty {
+                cachedLoginsByToken[token] = trimmedLogin
+            }
+            inFlightLoginsByToken.removeValue(forKey: token)
+            return trimmedLogin.isEmpty ? login : trimmedLogin
+        } catch {
+            inFlightLoginsByToken.removeValue(forKey: token)
+            throw error
+        }
+    }
+
+    func invalidate(forToken token: String) {
+        cachedLoginsByToken.removeValue(forKey: token)
+        inFlightLoginsByToken[token]?.cancel()
+        inFlightLoginsByToken.removeValue(forKey: token)
     }
 }
