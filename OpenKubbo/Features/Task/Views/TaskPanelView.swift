@@ -87,7 +87,6 @@ struct TaskPanelView: View {
             VStack(spacing: 14) {
                 header
                 newTaskInput
-                suggestButton
                 tasksList
                 footer
             }
@@ -193,34 +192,6 @@ struct TaskPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-    }
-
-    private var suggestButton: some View {
-        HStack {
-            Button(action: {}) {
-                HStack(spacing: 8) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("Sugerir")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                }
-                .foregroundStyle(secondaryTextColor)
-                .padding(.horizontal, 14)
-                .frame(height: 38)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(cardFillColor)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(cardStrokeColor, lineWidth: 1)
-                        )
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(true)
-
-            Spacer(minLength: 0)
-        }
     }
 
     private var tasksList: some View {
