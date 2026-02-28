@@ -872,12 +872,6 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .task(id: "switch-worktree-\(repo.id)") {
-            if trimmedNewWorktreeBranchName.isEmpty {
-                newWorktreeBranchName = repo.branch
-            }
-            await viewModel.loadWorktreesIfNeeded(for: repo)
-        }
     }
 
     private func issuesOverlayPanel(for repo: RepoItem) -> some View {
@@ -1002,9 +996,6 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .task(id: "issues-\(repo.id)") {
-            await viewModel.loadIssuesIfNeeded(for: repo)
-        }
     }
 
     private func issueComposerOverlayPanel(for repo: RepoItem) -> some View {
@@ -1631,10 +1622,6 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .task(id: "pull-requests-\(repo.id)") {
-            await viewModel.loadPullRequestsIfNeeded(for: repo)
-            await viewModel.loadBranchesIfNeeded(for: repo)
-        }
     }
 
     private func pullRequestComposerOverlayPanel(for repo: RepoItem) -> some View {
@@ -1999,9 +1986,6 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .task(id: "pull-request-commits-\(pullRequest.id)") {
-            await viewModel.loadPullRequestCommitsIfNeeded(for: pullRequest, in: repo)
-        }
     }
 
     private func branchesOverlayPanel(for repo: RepoItem) -> some View {
@@ -2094,9 +2078,6 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .task(id: "branches-\(repo.id)") {
-            await viewModel.loadBranchesIfNeeded(for: repo)
-        }
     }
 
     private func branchDetailsOverlayPanel(for branch: RepoBranchItem, in repo: RepoItem) -> some View {
@@ -2423,21 +2404,6 @@ struct RepositoryPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
-        .task(id: "destination-\(destination.rawValue)-\(repo.id)") {
-            if destination == .ciRuns {
-                await viewModel.loadCIRunsIfNeeded(for: repo)
-            } else if destination == .openCommits {
-                await viewModel.loadOpenCommitsIfNeeded(for: repo)
-            } else if destination == .tags {
-                await viewModel.loadTagsIfNeeded(for: repo)
-            } else if destination == .releases {
-                await viewModel.loadReleasesIfNeeded(for: repo)
-            } else if destination == .discussions {
-                await viewModel.loadDiscussionsIfNeeded(for: repo)
-            } else if destination == .contributors {
-                await viewModel.loadContributorsIfNeeded(for: repo)
-            }
-        }
     }
 
     private func openAppUpdatePage() {
@@ -3436,6 +3402,12 @@ struct RepositoryPanelView: View {
     }
 
     private func openDetailPanel(_ destination: RepoDetailDestination) {
+        if destination == .switchWorktree,
+           trimmedNewWorktreeBranchName.isEmpty,
+           let selectedRepo {
+            newWorktreeBranchName = selectedRepo.branch
+        }
+
         withAnimation(.easeInOut(duration: 0.18)) {
             viewModel.openDetailPanel(destination)
         }
