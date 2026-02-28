@@ -262,6 +262,22 @@ struct TaskPanelView: View {
                 .strikethrough(isDone, color: secondaryTextColor.opacity(0.9))
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 6) {
+                Button(action: {}) {
+                    TaskRowActionIcon(symbol: "pencil", isDarkTheme: isDarkTheme)
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
+                .help("Editar tarefa")
+
+                Button(action: {}) {
+                    TaskRowActionIcon(symbol: "trash", isDarkTheme: isDarkTheme)
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
+                .help("Deletar tarefa")
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 16)
@@ -320,6 +336,38 @@ struct TaskPanelView: View {
     private func applyWindowLevel(_ window: NSWindow?) {
         guard let window else { return }
         window.level = isWindowPinned ? .floating : .normal
+    }
+}
+
+private struct TaskRowActionIcon: View {
+    let symbol: String
+    var isDarkTheme: Bool = false
+
+    private var symbolColor: Color {
+        isDarkTheme ? .white.opacity(0.60) : .black.opacity(0.54)
+    }
+
+    private var fillColor: Color {
+        isDarkTheme ? .white.opacity(0.05) : .black.opacity(0.03)
+    }
+
+    private var strokeColor: Color {
+        isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(symbolColor)
+            .frame(width: 24, height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(fillColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(strokeColor, lineWidth: 1)
+                    )
+            )
     }
 }
 
