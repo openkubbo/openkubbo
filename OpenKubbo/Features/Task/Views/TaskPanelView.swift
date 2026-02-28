@@ -257,7 +257,7 @@ struct TaskPanelView: View {
             .buttonStyle(.plain)
 
             Text(task.wrappedValue.title)
-                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .font(.system(size: 13, weight: .bold, design: .rounded))
                 .foregroundStyle(isDone ? secondaryTextColor : primaryTextColor)
                 .strikethrough(isDone, color: secondaryTextColor.opacity(0.9))
                 .multilineTextAlignment(.leading)
