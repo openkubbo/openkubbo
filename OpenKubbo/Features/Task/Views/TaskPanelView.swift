@@ -12,6 +12,7 @@ struct TaskPanelView: View {
     @Environment(\.colorScheme) private var systemColorScheme
 
     @State private var hostWindow: NSWindow?
+    @State private var isWindowPinned = false
     @State private var draftTaskTitle = ""
     @State private var tasks: [TaskItem] = [
         TaskItem(title: "Bem-vindo ao Kubbo Task", isDone: false),
@@ -117,6 +118,7 @@ struct TaskPanelView: View {
                 if hostWindow !== window {
                     hostWindow = window
                 }
+                applyWindowLevel(window)
             }
         )
     }
@@ -134,6 +136,18 @@ struct TaskPanelView: View {
             }
 
             Spacer(minLength: 0)
+
+            Button(action: toggleWindowPin) {
+                TaskHeaderIcon(
+                    symbol: isWindowPinned ? "pin.fill" : "pin",
+                    isDarkTheme: isDarkTheme,
+                    isActive: isWindowPinned,
+                    accentColor: accentColor
+                )
+            }
+            .buttonStyle(.plain)
+            .taskCursorOnHover()
+            .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
 
             Button(action: closeWindow) {
                 TaskHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
@@ -298,22 +312,43 @@ struct TaskPanelView: View {
     private func closeWindow() {
         hostWindow?.close()
     }
+
+    private func toggleWindowPin() {
+        isWindowPinned.toggle()
+        applyWindowLevel(hostWindow)
+    }
+
+    private func applyWindowLevel(_ window: NSWindow?) {
+        guard let window else { return }
+        window.level = isWindowPinned ? .floating : .normal
+    }
 }
 
 private struct TaskHeaderIcon: View {
     let symbol: String
     var isDarkTheme: Bool = false
+    var isActive: Bool = false
+    var accentColor: Color = Color(red: 0.39, green: 0.44, blue: 0.99)
 
     private var symbolColor: Color {
-        isDarkTheme ? .white.opacity(0.62) : .black.opacity(0.56)
+        if isActive {
+            return .white.opacity(0.94)
+        }
+        return isDarkTheme ? .white.opacity(0.62) : .black.opacity(0.56)
     }
 
     private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
+        if isActive {
+            return accentColor
+        }
+        return isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
     }
 
     private var strokeColor: Color {
-        isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
+        if isActive {
+            return accentColor.opacity(isDarkTheme ? 0.72 : 0.64)
+        }
+        return isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
     }
 
     var body: some View {
