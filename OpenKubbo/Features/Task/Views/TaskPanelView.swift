@@ -263,7 +263,7 @@ struct TaskPanelView: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 6) {
+            VStack(spacing: 6) {
                 Button(action: {}) {
                     TaskRowActionIcon(symbol: "pencil", isDarkTheme: isDarkTheme)
                 }
