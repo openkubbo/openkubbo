@@ -48,10 +48,31 @@ struct OpenKubboApp: App {
         case .repository:
             NSApp.activate(ignoringOtherApps: true)
             openWindow(id: "repository")
+        case .terminal:
+            openSystemTerminal()
         case .toggleThemeMode:
             container.settingsViewModel.cycleThemeMode()
-        case .newTask, .terminal, .agent:
+        case .newTask, .agent:
             break
         }
+    }
+
+    private func openSystemTerminal() {
+        let candidatePaths = [
+            "/System/Applications/Utilities/Terminal.app",
+            "/Applications/Utilities/Terminal.app"
+        ]
+
+        let fileManager = FileManager.default
+        let terminalURL = candidatePaths
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+            .first { fileManager.fileExists(atPath: $0.path) }
+
+        guard let terminalURL else {
+            return
+        }
+
+        NSApp.activate(ignoringOtherApps: true)
+        NSWorkspace.shared.open(terminalURL)
     }
 }
