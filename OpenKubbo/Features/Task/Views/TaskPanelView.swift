@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TaskPanelView: View {
     private struct TaskItem: Identifiable {
@@ -14,6 +15,7 @@ struct TaskPanelView: View {
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
     @State private var draftTaskTitle = ""
+    @State private var draggedTaskID: UUID?
     @State private var tasks: [TaskItem] = [
         TaskItem(title: "Bem-vindo ao Kubbo Task", isDone: false),
         TaskItem(title: "Teste mudar o tema clicando no icone de lua/sol", isDone: false),
@@ -211,10 +213,7 @@ struct TaskPanelView: View {
         let isDone = task.isDone
 
         return HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "square.grid.2x2")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(secondaryTextColor.opacity(0.42))
-                .padding(.top, 4)
+            reorderHandle(for: task, isDone: isDone)
 
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) {
@@ -253,6 +252,7 @@ struct TaskPanelView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(isDone ? mutedCardFillColor : cardFillColor)
@@ -261,6 +261,39 @@ struct TaskPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+        .modifier(
+            TaskRowDragModifier(
+                taskID: task.id,
+                isEnabled: !isDone,
+                draggedTaskID: $draggedTaskID
+            )
+        )
+        .onDrop(
+            of: [UTType.text],
+            delegate: TaskRowDropDelegate(
+                targetTaskID: task.id,
+                targetTaskIsDone: isDone,
+                tasks: $tasks,
+                draggedTaskID: $draggedTaskID
+            )
+        )
+    }
+
+    @ViewBuilder
+    private func reorderHandle(for task: TaskItem, isDone: Bool) -> some View {
+        if isDone {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(secondaryTextColor.opacity(0.25))
+                .padding(.top, 4)
+        } else {
+            Image(systemName: "square.grid.2x2")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(secondaryTextColor.opacity(0.42))
+                .padding(.top, 4)
+                .taskCursorOnHover()
+                .help("Reordenar tarefa")
+        }
     }
 
     private var footer: some View {
@@ -318,6 +351,70 @@ struct TaskPanelView: View {
     private func applyWindowLevel(_ window: NSWindow?) {
         guard let window else { return }
         window.level = isWindowPinned ? .floating : .normal
+    }
+
+    private struct TaskRowDropDelegate: DropDelegate {
+        let targetTaskID: UUID
+        let targetTaskIsDone: Bool
+        @Binding var tasks: [TaskItem]
+        @Binding var draggedTaskID: UUID?
+
+        func validateDrop(info: DropInfo) -> Bool {
+            guard !targetTaskIsDone,
+                  let draggedTaskID,
+                  let draggedIndex = tasks.firstIndex(where: { $0.id == draggedTaskID })
+            else {
+                return false
+            }
+
+            return !tasks[draggedIndex].isDone
+        }
+
+        func dropEntered(info: DropInfo) {
+            guard !targetTaskIsDone,
+                  let draggedTaskID,
+                  draggedTaskID != targetTaskID,
+                  let fromIndex = tasks.firstIndex(where: { $0.id == draggedTaskID }),
+                  let toIndex = tasks.firstIndex(where: { $0.id == targetTaskID }),
+                  !tasks[fromIndex].isDone,
+                  !tasks[toIndex].isDone
+            else {
+                return
+            }
+
+            withAnimation(.easeInOut(duration: 0.12)) {
+                let movedTask = tasks.remove(at: fromIndex)
+                let destinationIndex = toIndex > fromIndex ? toIndex - 1 : toIndex
+                tasks.insert(movedTask, at: destinationIndex)
+            }
+        }
+
+        func dropUpdated(info: DropInfo) -> DropProposal? {
+            DropProposal(operation: .move)
+        }
+
+        func performDrop(info: DropInfo) -> Bool {
+            draggedTaskID = nil
+            return true
+        }
+    }
+
+    private struct TaskRowDragModifier: ViewModifier {
+        let taskID: UUID
+        let isEnabled: Bool
+        @Binding var draggedTaskID: UUID?
+
+        @ViewBuilder
+        func body(content: Content) -> some View {
+            if isEnabled {
+                content.onDrag {
+                    draggedTaskID = taskID
+                    return NSItemProvider(object: taskID.uuidString as NSString)
+                }
+            } else {
+                content
+            }
+        }
     }
 }
 
