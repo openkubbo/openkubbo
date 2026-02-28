@@ -7,16 +7,22 @@ struct SettingsHeaderIcon: View {
     var accentColor = Color(red: 0.39, green: 0.44, blue: 0.99)
 
     private var symbolColor: Color {
-        isDarkTheme ? .white.opacity(isActive ? 0.84 : 0.66) : .black.opacity(isActive ? 0.82 : 0.62)
+        if isActive {
+            return .white.opacity(0.94)
+        }
+        return isDarkTheme ? .white.opacity(0.66) : .black.opacity(0.62)
     }
 
     private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
+        if isActive {
+            return accentColor
+        }
+        return isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
     }
 
     private var strokeColor: Color {
         if isActive {
-            return accentColor.opacity(0.45)
+            return accentColor.opacity(isDarkTheme ? 0.72 : 0.64)
         }
         return isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
     }
