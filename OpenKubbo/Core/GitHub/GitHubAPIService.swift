@@ -688,6 +688,54 @@ final class GitHubAPIService: GitHubAPIServicing {
         }
     }
 
+    func fetchRepositoryMetricCounts(
+        accessToken: String,
+        repositoryFullName: String,
+        branch: String
+    ) async throws -> GitHubRepositoryMetricCounts {
+        let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
+        let trimmedBranch = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        let basePath = "https://api.github.com/repos/\(owner)/\(repo)"
+
+        var commitsQueryItems: [URLQueryItem] = []
+        if !trimmedBranch.isEmpty {
+            commitsQueryItems.append(URLQueryItem(name: "sha", value: trimmedBranch))
+        }
+
+        let openCommits = try await fetchPaginatedCollectionCount(
+            accessToken: accessToken,
+            url: try makeCountURL(
+                baseURLString: "\(basePath)/commits",
+                extraQueryItems: commitsQueryItems
+            )
+        )
+        let tags = try await fetchPaginatedCollectionCount(
+            accessToken: accessToken,
+            url: try makeCountURL(baseURLString: "\(basePath)/tags")
+        )
+        let releases = try await fetchPaginatedCollectionCount(
+            accessToken: accessToken,
+            url: try makeCountURL(baseURLString: "\(basePath)/releases")
+        )
+        let discussions = try await fetchPaginatedCollectionCount(
+            accessToken: accessToken,
+            url: try makeCountURL(baseURLString: "\(basePath)/discussions"),
+            treatNotFoundAsZero: true
+        )
+        let contributors = try await fetchPaginatedCollectionCount(
+            accessToken: accessToken,
+            url: try makeCountURL(baseURLString: "\(basePath)/contributors")
+        )
+
+        return GitHubRepositoryMetricCounts(
+            openCommits: max(0, openCommits),
+            tags: max(0, tags),
+            releases: max(0, releases),
+            discussions: max(0, discussions),
+            contributors: max(0, contributors)
+        )
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         let (owner, repo) = try splitRepositoryFullName(repositoryFullName)
         var workflowRuns: [GitHubWorkflowRun] = []
@@ -1065,6 +1113,94 @@ final class GitHubAPIService: GitHubAPIServicing {
         default:
             throw apiError(from: data, statusCode: httpResponse.statusCode)
         }
+    }
+
+    private func makeCountURL(
+        baseURLString: String,
+        extraQueryItems: [URLQueryItem] = []
+    ) throws -> URL {
+        guard var components = URLComponents(string: baseURLString) else {
+            throw GitHubAPIError.malformedResponse
+        }
+
+        var queryItems = [URLQueryItem(name: "per_page", value: "1")]
+        queryItems.append(contentsOf: extraQueryItems)
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw GitHubAPIError.malformedResponse
+        }
+
+        return url
+    }
+
+    private func fetchPaginatedCollectionCount(
+        accessToken: String,
+        url: URL,
+        treatNotFoundAsZero: Bool = false
+    ) async throws -> Int {
+        let request = makeJSONRequest(url: url, method: "GET", accessToken: accessToken)
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw GitHubAPIError.malformedResponse
+        }
+
+        if httpResponse.statusCode == 404 && treatNotFoundAsZero {
+            return 0
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            throw apiError(from: data, statusCode: httpResponse.statusCode)
+        }
+
+        if let countFromPagination = paginatedCountFromLinkHeader(httpResponse.value(forHTTPHeaderField: "Link")) {
+            return max(0, countFromPagination)
+        }
+
+        let object = try JSONSerialization.jsonObject(with: data)
+        guard let array = object as? [Any] else {
+            throw GitHubAPIError.malformedResponse
+        }
+
+        return max(0, array.count)
+    }
+
+    private func paginatedCountFromLinkHeader(_ linkHeader: String?) -> Int? {
+        guard let linkHeader, !linkHeader.isEmpty else {
+            return nil
+        }
+
+        let links = linkHeader.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+        if let lastLink = links.first(where: { $0.contains("rel=\"last\"") }),
+           let lastPage = pageNumber(from: lastLink) {
+            return lastPage
+        }
+
+        if let nextLink = links.first(where: { $0.contains("rel=\"next\"") }),
+           let nextPage = pageNumber(from: nextLink) {
+            return nextPage
+        }
+
+        return nil
+    }
+
+    private func pageNumber(from link: String) -> Int? {
+        guard let urlStart = link.firstIndex(of: "<"),
+              let urlEnd = link.firstIndex(of: ">"),
+              urlStart < urlEnd else {
+            return nil
+        }
+
+        let rawURL = String(link[link.index(after: urlStart)..<urlEnd])
+        guard let components = URLComponents(string: rawURL),
+              let pageValue = components.queryItems?.first(where: { $0.name == "page" })?.value,
+              let page = Int(pageValue) else {
+            return nil
+        }
+
+        return max(0, page)
     }
 
     private func splitRepositoryFullName(_ value: String) throws -> (String, String) {

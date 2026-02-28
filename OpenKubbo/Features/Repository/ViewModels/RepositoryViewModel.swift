@@ -1682,6 +1682,39 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func loadInitialMetricCountsIfNeeded(for repo: RepoItem) async {
+        guard selectedRepoID == repo.id else {
+            return
+        }
+
+        let hasDetailCacheForAllSecondaryMetrics = loadedOpenCommitsByRepositoryID[repo.id] != nil
+            && loadedTagsByRepositoryID[repo.id] != nil
+            && loadedReleasesByRepositoryID[repo.id] != nil
+            && loadedDiscussionsByRepositoryID[repo.id] != nil
+            && loadedContributorsByRepositoryID[repo.id] != nil
+
+        if hasDetailCacheForAllSecondaryMetrics {
+            return
+        }
+
+        do {
+            let counts = try await dataProvider.loadInitialMetricCounts(for: repo)
+            guard !Task.isCancelled, selectedRepoID == repo.id else {
+                return
+            }
+
+            updateOpenCommitsMetricCount(for: repo.id, count: counts.openCommits)
+            updateTagsMetricCount(for: repo.id, count: counts.tags)
+            updateReleasesMetricCount(for: repo.id, count: counts.releases)
+            updateDiscussionsMetricCount(for: repo.id, count: counts.discussions)
+            updateContributorsMetricCount(for: repo.id, count: counts.contributors)
+        } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
+        }
+    }
+
     private func loadWorktrees(for repo: RepoItem, forceReload: Bool) async {
         if worktreesLoadingRepositoryIDs.contains(repo.id) {
             return
@@ -1789,15 +1822,7 @@ final class RepositoryViewModel: ObservableObject {
         // Stage 2: load secondary counters sequentially to avoid request spikes.
         await loadCIRunsIfNeeded(for: repo)
         guard !Task.isCancelled, selectedRepoID == repo.id else { return }
-        await loadTagsIfNeeded(for: repo)
-        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
-        await loadReleasesIfNeeded(for: repo)
-        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
-        await loadDiscussionsIfNeeded(for: repo)
-        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
-        await loadContributorsIfNeeded(for: repo)
-        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
-        await loadOpenCommitsIfNeeded(for: repo)
+        await loadInitialMetricCountsIfNeeded(for: repo)
     }
 
     private func loadIssueComments(

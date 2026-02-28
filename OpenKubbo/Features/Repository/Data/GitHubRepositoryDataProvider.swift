@@ -300,6 +300,23 @@ struct GitHubRepositoryDataProvider: RepositoryDataProviding {
         }
     }
 
+    func loadInitialMetricCounts(for repository: RepoItem) async throws -> RepoInitialMetricCounts {
+        let token = try accessToken()
+        let counts = try await gitHubAPIService.fetchRepositoryMetricCounts(
+            accessToken: token,
+            repositoryFullName: repository.name,
+            branch: repository.branch
+        )
+
+        return RepoInitialMetricCounts(
+            openCommits: max(0, counts.openCommits),
+            tags: max(0, counts.tags),
+            releases: max(0, counts.releases),
+            discussions: max(0, counts.discussions),
+            contributors: max(0, counts.contributors)
+        )
+    }
+
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem] {
         let token = try accessToken()
         let fetchedBranches = try await gitHubAPIService.fetchBranches(

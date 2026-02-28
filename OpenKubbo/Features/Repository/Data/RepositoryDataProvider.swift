@@ -1,5 +1,13 @@
 import Foundation
 
+struct RepoInitialMetricCounts: Equatable {
+    let openCommits: Int
+    let tags: Int
+    let releases: Int
+    let discussions: Int
+    let contributors: Int
+}
+
 protocol RepositoryDataProviding {
     func loadRepositories() async throws -> [RepoItem]
     func loadContributionCalendar() async throws -> [RepoContributionDay]
@@ -41,6 +49,7 @@ protocol RepositoryDataProviding {
     func loadReleases(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
     func loadDiscussions(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
     func loadContributors(for repository: RepoItem) async throws -> [RepoDestinationInfoItem]
+    func loadInitialMetricCounts(for repository: RepoItem) async throws -> RepoInitialMetricCounts
     func loadBranches(for repository: RepoItem) async throws -> [RepoBranchItem]
 }
 
@@ -594,6 +603,16 @@ struct MockRepositoryDataProvider: RepositoryDataProviding {
         RepoDetailDestination.contributors.mockInfoItems(
             repoName: repository.name,
             branch: repository.branch
+        )
+    }
+
+    func loadInitialMetricCounts(for repository: RepoItem) async throws -> RepoInitialMetricCounts {
+        RepoInitialMetricCounts(
+            openCommits: max(0, repository.openCommits),
+            tags: max(0, repository.tags),
+            releases: max(0, repository.releases),
+            discussions: max(0, repository.discussions),
+            contributors: max(0, repository.contributors)
         )
     }
 

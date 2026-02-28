@@ -180,6 +180,14 @@ struct GitHubRepositoryContributor: Equatable {
     let htmlURL: URL?
 }
 
+struct GitHubRepositoryMetricCounts: Equatable {
+    let openCommits: Int
+    let tags: Int
+    let releases: Int
+    let discussions: Int
+    let contributors: Int
+}
+
 struct GitHubCommitSummary: Equatable {
     let sha: String
     let message: String
@@ -298,6 +306,11 @@ protocol GitHubAPIServicing {
         accessToken: String,
         repositoryFullName: String
     ) async throws -> [GitHubRepositoryContributor]
+    func fetchRepositoryMetricCounts(
+        accessToken: String,
+        repositoryFullName: String,
+        branch: String
+    ) async throws -> GitHubRepositoryMetricCounts
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun]
     func fetchIssues(accessToken: String, repositoryFullName: String) async throws -> [GitHubIssue]
     func fetchIssueComments(

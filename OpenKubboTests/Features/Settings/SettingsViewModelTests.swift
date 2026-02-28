@@ -345,6 +345,20 @@ private struct StubGitHubAPIService: GitHubAPIServicing {
         []
     }
 
+    func fetchRepositoryMetricCounts(
+        accessToken: String,
+        repositoryFullName: String,
+        branch: String
+    ) async throws -> GitHubRepositoryMetricCounts {
+        GitHubRepositoryMetricCounts(
+            openCommits: 0,
+            tags: 0,
+            releases: 0,
+            discussions: 0,
+            contributors: 0
+        )
+    }
+
     func fetchWorkflowRuns(accessToken: String, repositoryFullName: String) async throws -> [GitHubWorkflowRun] {
         []
     }
