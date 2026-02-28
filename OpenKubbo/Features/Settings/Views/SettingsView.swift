@@ -199,7 +199,7 @@ struct SettingsView: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(spacing: 0) {
-                Text("Config")
+                Text("Settings")
                     .font(.system(size: 19, weight: .semibold, design: .rounded))
                     .foregroundStyle(primaryTextColor)
                     .frame(height: 36, alignment: .center)
@@ -386,7 +386,7 @@ struct SettingsView: View {
                 .frame(height: 1)
 
             HStack {
-                Text("Configuração ativa")
+                Text("Settings active")
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .foregroundStyle(secondaryTextColor)
 
