@@ -382,10 +382,11 @@ struct TaskPanelView: View {
                 return
             }
 
+            guard fromIndex != toIndex else { return }
+
             withAnimation(.easeInOut(duration: 0.12)) {
                 let movedTask = tasks.remove(at: fromIndex)
-                let destinationIndex = toIndex > fromIndex ? toIndex - 1 : toIndex
-                tasks.insert(movedTask, at: destinationIndex)
+                tasks.insert(movedTask, at: toIndex)
             }
         }
 
