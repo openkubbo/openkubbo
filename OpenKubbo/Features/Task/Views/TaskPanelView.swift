@@ -16,11 +16,7 @@ struct TaskPanelView: View {
     @State private var isWindowPinned = true
     @State private var draftTaskTitle = ""
     @State private var draggedTaskID: UUID?
-    @State private var tasks: [TaskItem] = [
-        TaskItem(title: "Bem-vindo ao Kubbo Task", isDone: false),
-        TaskItem(title: "Teste mudar o tema clicando no icone de lua/sol", isDone: false),
-        TaskItem(title: "Use a barra superior para navegar", isDone: true)
-    ]
+    @State private var tasks: [TaskItem] = []
 
     private let panelWidth: CGFloat = 340
     private let panelHeight: CGFloat = 704
