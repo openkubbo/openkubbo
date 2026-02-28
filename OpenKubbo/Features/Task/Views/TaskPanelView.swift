@@ -134,6 +134,12 @@ struct TaskPanelView: View {
             }
 
             Spacer(minLength: 0)
+
+            Button(action: closeWindow) {
+                TaskHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
+            }
+            .buttonStyle(.plain)
+            .taskCursorOnHover()
         }
         .frame(height: 52)
         .background(SettingsWindowDragRegion())
@@ -288,5 +294,58 @@ struct TaskPanelView: View {
             draftTaskTitle = ""
         }
     }
+
+    private func closeWindow() {
+        hostWindow?.close()
+    }
 }
 
+private struct TaskHeaderIcon: View {
+    let symbol: String
+    var isDarkTheme: Bool = false
+
+    private var symbolColor: Color {
+        isDarkTheme ? .white.opacity(0.62) : .black.opacity(0.56)
+    }
+
+    private var fillColor: Color {
+        isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
+    }
+
+    private var strokeColor: Color {
+        isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(symbolColor)
+            .frame(width: 36, height: 36)
+            .background(
+                Circle()
+                    .fill(fillColor)
+                    .overlay(
+                        Circle()
+                            .stroke(strokeColor, lineWidth: 1)
+                    )
+            )
+    }
+}
+
+private struct TaskCursorOnHover: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { isHovering in
+            if isHovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+}
+
+private extension View {
+    func taskCursorOnHover() -> some View {
+        modifier(TaskCursorOnHover())
+    }
+}
