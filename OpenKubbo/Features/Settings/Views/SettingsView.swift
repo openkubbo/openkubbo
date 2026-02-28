@@ -5,7 +5,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     @State private var hostWindow: NSWindow?
-    @State private var isWindowPinned = false
+    @State private var isWindowPinned = true
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
 
@@ -172,7 +172,7 @@ struct SettingsView: View {
                     width: panelWidth + (windowEdgePaddingX * 2),
                     height: panelHeight + (windowEdgePaddingY * 2)
                 ),
-                windowLevel: .normal
+                windowLevel: .floating
             ) { window in
                 if hostWindow !== window {
                     hostWindow = window
