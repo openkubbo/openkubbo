@@ -15,6 +15,8 @@ struct TaskPanelView: View {
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
     @State private var draftTaskTitle = ""
+    @State private var editingTaskID: UUID?
+    @State private var editingTaskTitle = ""
     @State private var draggedTaskID: UUID?
     @State private var tasks: [TaskItem] = []
 
@@ -207,6 +209,7 @@ struct TaskPanelView: View {
 
     private func taskRow(_ task: TaskItem) -> some View {
         let isDone = task.isDone
+        let isEditing = editingTaskID == task.id
 
         return HStack(alignment: .top, spacing: 12) {
             reorderHandle(for: task, isDone: isDone)
@@ -221,30 +224,54 @@ struct TaskPanelView: View {
                     .foregroundStyle(isDone ? accentColor : secondaryTextColor.opacity(0.65))
             }
             .buttonStyle(.plain)
+            .disabled(isEditing)
 
-            Text(task.title)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(isDone ? secondaryTextColor : primaryTextColor)
-                .strikethrough(isDone, color: secondaryTextColor.opacity(0.9))
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if isEditing {
+                    TextField("Editar tarefa", text: $editingTaskTitle)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            saveTaskEdition(task.id)
+                        }
+                } else {
+                    Text(task.title)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(isDone ? secondaryTextColor : primaryTextColor)
+                        .strikethrough(isDone, color: secondaryTextColor.opacity(0.9))
+                        .multilineTextAlignment(.leading)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(spacing: 6) {
-                Button(action: {}) {
-                    TaskRowActionIcon(symbol: "pencil", isDarkTheme: isDarkTheme)
+                Button {
+                    if isEditing {
+                        saveTaskEdition(task.id)
+                    } else {
+                        beginTaskEdition(task)
+                    }
+                } label: {
+                    TaskRowActionIcon(symbol: isEditing ? "checkmark" : "pencil", isDarkTheme: isDarkTheme)
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
-                .help("Editar tarefa")
+                .help(isEditing ? "Salvar edição" : "Editar tarefa")
 
                 Button {
-                    deleteTask(task.id)
+                    if isEditing {
+                        cancelTaskEdition()
+                    } else {
+                        deleteTask(task.id)
+                    }
                 } label: {
-                    TaskRowActionIcon(symbol: "trash", isDarkTheme: isDarkTheme)
+                    TaskRowActionIcon(symbol: isEditing ? "xmark" : "trash", isDarkTheme: isDarkTheme)
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
-                .help("Deletar tarefa")
+                .help(isEditing ? "Cancelar edição" : "Deletar tarefa")
             }
         }
         .padding(.horizontal, 14)
@@ -326,6 +353,29 @@ struct TaskPanelView: View {
         }
     }
 
+    private func beginTaskEdition(_ task: TaskItem) {
+        editingTaskID = task.id
+        editingTaskTitle = task.title
+    }
+
+    private func saveTaskEdition(_ taskID: UUID) {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else {
+            cancelTaskEdition()
+            return
+        }
+
+        let trimmed = editingTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            tasks[index].title = trimmed
+        }
+        cancelTaskEdition()
+    }
+
+    private func cancelTaskEdition() {
+        editingTaskID = nil
+        editingTaskTitle = ""
+    }
+
     private func toggleTaskCompletion(for taskID: UUID) {
         guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
 
@@ -342,6 +392,9 @@ struct TaskPanelView: View {
             tasks.removeAll { $0.id == taskID }
             if draggedTaskID == taskID {
                 draggedTaskID = nil
+            }
+            if editingTaskID == taskID {
+                cancelTaskEdition()
             }
         }
     }
