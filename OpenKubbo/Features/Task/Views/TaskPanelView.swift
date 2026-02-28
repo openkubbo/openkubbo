@@ -20,8 +20,8 @@ struct TaskPanelView: View {
         TaskItem(title: "Use a barra superior para navegar", isDone: true)
     ]
 
-    private let panelWidth: CGFloat = 420
-    private let panelHeight: CGFloat = 780
+    private let panelWidth: CGFloat = 340
+    private let panelHeight: CGFloat = 704
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
     private let windowEdgePaddingX: CGFloat = 10
@@ -124,33 +124,38 @@ struct TaskPanelView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text("Kubbo Task")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(primaryTextColor)
+        HStack(alignment: .center) {
+            HStack(spacing: 0) {
+                Text("Kubbo Task")
+                    .font(.system(size: 19, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .frame(height: 36, alignment: .center)
 
-            Spacer(minLength: 0)
-
-            Button(action: toggleWindowPin) {
-                TaskHeaderIcon(
-                    symbol: isWindowPinned ? "pin.fill" : "pin",
-                    isDarkTheme: isDarkTheme,
-                    isActive: isWindowPinned,
-                    accentColor: accentColor
-                )
+                Spacer()
             }
-            .buttonStyle(.plain)
-            .taskCursorOnHover()
-            .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
+            .frame(height: 36)
+            .background(SettingsWindowDragRegion())
 
-            Button(action: closeWindow) {
-                TaskHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
+            HStack(spacing: 8) {
+                Button(action: toggleWindowPin) {
+                    TaskHeaderIcon(
+                        symbol: isWindowPinned ? "pin.fill" : "pin",
+                        isDarkTheme: isDarkTheme,
+                        isActive: isWindowPinned,
+                        accentColor: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
+                .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
+
+                Button(action: closeWindow) {
+                    TaskHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
             }
-            .buttonStyle(.plain)
-            .taskCursorOnHover()
         }
-        .frame(height: 52)
-        .background(SettingsWindowDragRegion())
     }
 
     private var newTaskInput: some View {
