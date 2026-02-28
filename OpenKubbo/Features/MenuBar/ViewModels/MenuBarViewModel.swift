@@ -20,7 +20,7 @@ struct MenuBarItem: Identifiable, Equatable {
 final class MenuBarViewModel {
     let items: [MenuBarItem] = [
         MenuBarItem(id: "theme", title: "Theme mode", systemImage: "sun.max", fallbackIcon: "L", action: .toggleThemeMode),
-        MenuBarItem(id: "new-task", title: "New Task", systemImage: "text.pad.header.badge.plus", fallbackIcon: "+", action: .newTask),
+        MenuBarItem(id: "new-task", title: "Kubbo Task", systemImage: "text.pad.header.badge.plus", fallbackIcon: "+", action: .newTask),
         MenuBarItem(id: "repository", title: "Repository", systemImage: "selection.pin.in.out", fallbackIcon: "git", action: .repository),
         MenuBarItem(id: "terminal", title: "Terminal", systemImage: "terminal", fallbackIcon: ">_", action: .terminal),
         MenuBarItem(id: "agent", title: "Kubbo Agent", systemImage: "cpu", fallbackIcon: "bot", action: .agent),
