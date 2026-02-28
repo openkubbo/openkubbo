@@ -197,7 +197,7 @@ struct TaskPanelView: View {
     private var tasksList: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                ForEach($tasks) { task in
+                ForEach(tasks) { task in
                     taskRow(task)
                 }
             }
@@ -207,8 +207,8 @@ struct TaskPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func taskRow(_ task: Binding<TaskItem>) -> some View {
-        let isDone = task.wrappedValue.isDone
+    private func taskRow(_ task: TaskItem) -> some View {
+        let isDone = task.isDone
 
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: "square.grid.2x2")
@@ -218,7 +218,7 @@ struct TaskPanelView: View {
 
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) {
-                    task.wrappedValue.isDone.toggle()
+                    toggleTaskCompletion(for: task.id)
                 }
             } label: {
                 Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
@@ -227,7 +227,7 @@ struct TaskPanelView: View {
             }
             .buttonStyle(.plain)
 
-            Text(task.wrappedValue.title)
+            Text(task.title)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
                 .foregroundStyle(isDone ? secondaryTextColor : primaryTextColor)
                 .strikethrough(isDone, color: secondaryTextColor.opacity(0.9))
@@ -293,6 +293,17 @@ struct TaskPanelView: View {
             tasks.insert(TaskItem(title: trimmed, isDone: false), at: 0)
             draftTaskTitle = ""
         }
+    }
+
+    private func toggleTaskCompletion(for taskID: UUID) {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
+
+        let wasDone = tasks[index].isDone
+        tasks[index].isDone.toggle()
+
+        guard wasDone == false, tasks[index].isDone else { return }
+        let completedTask = tasks.remove(at: index)
+        tasks.append(completedTask)
     }
 
     private func closeWindow() {
