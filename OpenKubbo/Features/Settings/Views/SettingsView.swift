@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
 
     @State private var hostWindow: NSWindow?
+    @State private var isWindowPinned = false
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
 
@@ -170,11 +171,13 @@ struct SettingsView: View {
                 targetSize: CGSize(
                     width: panelWidth + (windowEdgePaddingX * 2),
                     height: panelHeight + (windowEdgePaddingY * 2)
-                )
+                ),
+                windowLevel: .normal
             ) { window in
                 if hostWindow !== window {
                     hostWindow = window
                 }
+                applyWindowLevel(window)
             }
         )
     }
@@ -230,6 +233,17 @@ struct SettingsView: View {
                 .disabled(!isAppUpdateEnabled)
                 .opacity(isAppUpdateEnabled ? 1 : 0.58)
                 .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
+
+                Button(action: toggleWindowPin) {
+                    SettingsHeaderIcon(
+                        symbol: isWindowPinned ? "pin.fill" : "pin",
+                        isActive: isWindowPinned,
+                        isDarkTheme: isDarkTheme,
+                        accentColor: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
 
                 Button(action: closeSettingsWindow) {
                     SettingsHeaderIcon(
@@ -1004,5 +1018,15 @@ struct SettingsView: View {
 
     private func closeSettingsWindow() {
         hostWindow?.close()
+    }
+
+    private func toggleWindowPin() {
+        isWindowPinned.toggle()
+        applyWindowLevel(hostWindow)
+    }
+
+    private func applyWindowLevel(_ window: NSWindow?) {
+        guard let window else { return }
+        window.level = isWindowPinned ? .floating : .normal
     }
 }
