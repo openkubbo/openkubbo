@@ -3532,32 +3532,43 @@ struct RepositoryPanelView: View {
     }
 
     private func handleLocalAction(for repo: RepoItem, action: PendingLocalAction) {
-        let result: RepositoryLocalActionResult
+        let branchForAction: RepoBranchItem?
 
         switch action {
-        case .finder:
-            result = viewModel.openInFinder(for: repo)
-        case .terminal:
-            result = viewModel.openInTerminal(for: repo)
-        case .checkout(let branchName):
+        case .finder, .terminal:
+            branchForAction = nil
+        case .checkout(let branchName), .terminalOnBranch(let branchName):
             guard let branch = viewModel.branches(for: repo).first(where: { $0.name == branchName }) else {
                 localActionAlertState = LocalActionAlertState(
                     kind: .failed("Branch '\(branchName)' is not available anymore.")
                 )
                 return
             }
-            result = viewModel.checkoutBranch(branch, in: repo)
-        case .terminalOnBranch(let branchName):
-            guard let branch = viewModel.branches(for: repo).first(where: { $0.name == branchName }) else {
-                localActionAlertState = LocalActionAlertState(
-                    kind: .failed("Branch '\(branchName)' is not available anymore.")
-                )
-                return
-            }
-            result = viewModel.openInTerminal(for: repo, on: branch)
+            branchForAction = branch
         }
 
-        handleLocalActionResult(result, for: repo, action: action)
+        Task {
+            let result: RepositoryLocalActionResult
+
+            switch action {
+            case .finder:
+                result = await viewModel.openInFinder(for: repo)
+            case .terminal:
+                result = await viewModel.openInTerminal(for: repo)
+            case .checkout:
+                guard let branchForAction else {
+                    return
+                }
+                result = await viewModel.checkoutBranch(branchForAction, in: repo)
+            case .terminalOnBranch:
+                guard let branchForAction else {
+                    return
+                }
+                result = await viewModel.openInTerminal(for: repo, on: branchForAction)
+            }
+
+            handleLocalActionResult(result, for: repo, action: action)
+        }
     }
 
     private func handleLocalActionResult(

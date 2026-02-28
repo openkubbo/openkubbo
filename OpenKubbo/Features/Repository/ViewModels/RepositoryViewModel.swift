@@ -92,6 +92,10 @@ final class RepositoryViewModel: ObservableObject {
     private let localResolver: LocalRepositoryResolving
     private let localActionService: RepositoryLocalActionServicing
     private let gitHubTokenStore: GitHubTokenStoring
+    private let localGitQueue = DispatchQueue(
+        label: "tarik.openkubbo.repository.local-git",
+        qos: .userInitiated
+    )
     private var hasUserCustomizedPins = false
     private var optimisticBranchNamesByRepositoryID: [String: Set<String>] = [:]
     private var prefetchingRepositoryIDs: Set<String> = []
@@ -287,7 +291,9 @@ final class RepositoryViewModel: ObservableObject {
 
     func selectRepository(_ repo: RepoItem) {
         selectedRepoID = repo.id
-        refreshLocalCurrentBranch(for: repo)
+        Task { [weak self] in
+            await self?.refreshLocalCurrentBranch(for: repo)
+        }
         scheduleDetailMetricsPrefetch(for: repo)
     }
 
@@ -839,12 +845,12 @@ final class RepositoryViewModel: ObservableObject {
 
     func loadBranchesIfNeeded(for repo: RepoItem) async {
         await loadBranches(for: repo, forceReload: false)
-        refreshLocalCurrentBranch(for: repo)
+        await refreshLocalCurrentBranch(for: repo)
     }
 
     func reloadBranches(for repo: RepoItem) async {
         await loadBranches(for: repo, forceReload: true)
-        refreshLocalCurrentBranch(for: repo)
+        await refreshLocalCurrentBranch(for: repo)
     }
 
     func isLoadingBranches(for repo: RepoItem) -> Bool {
@@ -917,7 +923,9 @@ final class RepositoryViewModel: ObservableObject {
         activeWorktreePathByRepositoryID[repo.id] = normalizedPath
         worktreeActionErrorMessageByRepositoryID.removeValue(forKey: repo.id)
         worktreeActionStatusMessageByRepositoryID[repo.id] = "Using \(worktree.directoryName)."
-        refreshLocalCurrentBranch(for: repo)
+        Task { [weak self] in
+            await self?.refreshLocalCurrentBranch(for: repo)
+        }
     }
 
     func createWorktree(in repo: RepoItem, branchName: String) async -> Bool {
@@ -955,19 +963,22 @@ final class RepositoryViewModel: ObservableObject {
                 worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
                 let baseURL = preferredLocalURL(for: repo, fallback: localURL)
                 let directoryName = worktreeDirectoryName(for: repo, branchName: trimmedBranchName)
-                let createdURL = try withRootAccess(rootURL: rootURL) {
-                    try localActionService.createWorktree(
-                        branchName: trimmedBranchName,
-                        at: baseURL,
-                        directoryName: directoryName
-                    )
+                let localActionService = self.localActionService
+                let createdURL = try await runLocalGitOperation {
+                    try Self.withRootAccess(rootURL: rootURL) {
+                        try localActionService.createWorktree(
+                            branchName: trimmedBranchName,
+                            at: baseURL,
+                            directoryName: directoryName
+                        )
+                    }
                 }
 
                 activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(createdURL)
                 worktreeActionStatusMessageByRepositoryID[repo.id] = "Worktree \(createdURL.lastPathComponent) created for \(trimmedBranchName)."
                 worktreeActionErrorMessageByRepositoryID.removeValue(forKey: repo.id)
                 await loadWorktrees(for: repo, forceReload: true)
-                refreshLocalCurrentBranch(for: repo)
+                await refreshLocalCurrentBranch(for: repo)
                 return true
             }
         } catch {
@@ -1177,20 +1188,20 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
-    func openInFinder(for repo: RepoItem) -> RepositoryLocalActionResult {
-        performLocalAction(.finder, for: repo)
+    func openInFinder(for repo: RepoItem) async -> RepositoryLocalActionResult {
+        await performLocalAction(.finder, for: repo)
     }
 
-    func openInTerminal(for repo: RepoItem) -> RepositoryLocalActionResult {
-        performLocalAction(.terminal, for: repo)
+    func openInTerminal(for repo: RepoItem) async -> RepositoryLocalActionResult {
+        await performLocalAction(.terminal, for: repo)
     }
 
-    func checkoutBranch(_ branch: RepoBranchItem, in repo: RepoItem) -> RepositoryLocalActionResult {
-        performLocalAction(.checkout(branchName: branch.name), for: repo)
+    func checkoutBranch(_ branch: RepoBranchItem, in repo: RepoItem) async -> RepositoryLocalActionResult {
+        await performLocalAction(.checkout(branchName: branch.name), for: repo)
     }
 
-    func openInTerminal(for repo: RepoItem, on branch: RepoBranchItem) -> RepositoryLocalActionResult {
-        performLocalAction(.terminalOnBranch(branchName: branch.name), for: repo)
+    func openInTerminal(for repo: RepoItem, on branch: RepoBranchItem) async -> RepositoryLocalActionResult {
+        await performLocalAction(.terminalOnBranch(branchName: branch.name), for: repo)
     }
 
     func cloneLocalRepository(for repo: RepoItem) async -> RepositoryLocalActionResult {
@@ -1218,7 +1229,7 @@ final class RepositoryViewModel: ObservableObject {
                 )
                 activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(destinationURL)
                 worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
-                refreshLocalCurrentBranch(for: repo)
+                await refreshLocalCurrentBranch(for: repo)
                 return .cloned(localPath: destinationURL.path)
             }
         } catch {
@@ -1226,7 +1237,7 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
-    private func performLocalAction(_ action: RepositoryLocalActionKind, for repo: RepoItem) -> RepositoryLocalActionResult {
+    private func performLocalAction(_ action: RepositoryLocalActionKind, for repo: RepoItem) async -> RepositoryLocalActionResult {
         do {
             let rootURL = try localRootProvider.currentRootURL()
             let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
@@ -1244,27 +1255,30 @@ final class RepositoryViewModel: ObservableObject {
 
                 for (index, candidateURL) in candidateURLs.enumerated() {
                     do {
-                        try withRootAccess(rootURL: rootURL) {
-                            switch action {
-                            case .finder:
-                                try localActionService.openInFinder(at: candidateURL)
-                            case .terminal:
-                                try localActionService.openInTerminal(at: candidateURL)
-                            case .checkout(let branchName):
-                                try localActionService.checkoutBranch(named: branchName, at: candidateURL)
-                            case .terminalOnBranch(let branchName):
-                                try localActionService.checkoutBranch(named: branchName, at: candidateURL)
-                                try localActionService.openInTerminal(at: candidateURL)
+                        let localActionService = self.localActionService
+                        try await runLocalGitOperation {
+                            try Self.withRootAccess(rootURL: rootURL) {
+                                switch action {
+                                case .finder:
+                                    try localActionService.openInFinder(at: candidateURL)
+                                case .terminal:
+                                    try localActionService.openInTerminal(at: candidateURL)
+                                case .checkout(let branchName):
+                                    try localActionService.checkoutBranch(named: branchName, at: candidateURL)
+                                case .terminalOnBranch(let branchName):
+                                    try localActionService.checkoutBranch(named: branchName, at: candidateURL)
+                                    try localActionService.openInTerminal(at: candidateURL)
+                                }
                             }
                         }
 
                         activeWorktreePathByRepositoryID[repo.id] = normalizedLocalPath(candidateURL)
                         worktreeActionErrorMessageByRepositoryID.removeValue(forKey: repo.id)
-                        refreshLocalCurrentBranch(for: repo)
+                        await refreshLocalCurrentBranch(for: repo)
                         return .opened
                     } catch {
                         lastError = error
-                        if index < candidateURLs.count - 1 && isRecoverableWorktreePathError(error) {
+                        if index < candidateURLs.count - 1 && Self.isRecoverableWorktreePathError(error) {
                             continue
                         }
 
@@ -1283,7 +1297,19 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
-    private func withRootAccess<T>(rootURL: URL?, operation: () throws -> T) throws -> T {
+    private func runLocalGitOperation<T>(_ operation: @escaping () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            localGitQueue.async {
+                do {
+                    continuation.resume(returning: try operation())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private static func withRootAccess<T>(rootURL: URL?, operation: () throws -> T) throws -> T {
         guard let rootURL else {
             return try operation()
         }
@@ -1748,8 +1774,11 @@ final class RepositoryViewModel: ObservableObject {
             case .matched(let localURL):
                 worktreeCloneRequiredPathByRepositoryID.removeValue(forKey: repo.id)
                 let baseURL = preferredLocalURL(for: repo, fallback: localURL)
-                let worktrees = try withRootAccess(rootURL: rootURL) {
-                    try localActionService.listWorktrees(at: baseURL)
+                let localActionService = self.localActionService
+                let worktrees = try await runLocalGitOperation {
+                    try Self.withRootAccess(rootURL: rootURL) {
+                        try localActionService.listWorktrees(at: baseURL)
+                    }
                 }
                 loadedWorktreesByRepositoryID[repo.id] = worktrees
                 worktreesLoadErrorMessageByRepositoryID[repo.id] = nil
@@ -1768,7 +1797,7 @@ final class RepositoryViewModel: ObservableObject {
                     }
                 }
 
-                refreshLocalCurrentBranch(for: repo)
+                await refreshLocalCurrentBranch(for: repo)
             }
         } catch {
             worktreesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
@@ -2235,7 +2264,7 @@ final class RepositoryViewModel: ObservableObject {
         loadedBranchesByRepositoryID[repo.id] = branches
     }
 
-    private func refreshLocalCurrentBranch(for repo: RepoItem) {
+    private func refreshLocalCurrentBranch(for repo: RepoItem) async {
         do {
             let rootURL = try localRootProvider.currentRootURL()
             let localMatch = localResolver.resolve(repo: repo, rootURL: rootURL)
@@ -2257,8 +2286,11 @@ final class RepositoryViewModel: ObservableObject {
 
                 for (index, candidateURL) in candidateURLs.enumerated() {
                     do {
-                        let localBranchName = try withRootAccess(rootURL: rootURL) {
-                            try localActionService.currentBranchName(at: candidateURL)
+                        let localActionService = self.localActionService
+                        let localBranchName = try await runLocalGitOperation {
+                            try Self.withRootAccess(rootURL: rootURL) {
+                                try localActionService.currentBranchName(at: candidateURL)
+                            }
                         }
 
                         guard let localBranchName else {
@@ -2274,7 +2306,7 @@ final class RepositoryViewModel: ObservableObject {
                         resolvedPath = normalizedLocalPath(candidateURL)
                         break
                     } catch {
-                        if index < candidateURLs.count - 1 && isRecoverableWorktreePathError(error) {
+                        if index < candidateURLs.count - 1 && Self.isRecoverableWorktreePathError(error) {
                             continue
                         }
                         break
@@ -2430,7 +2462,7 @@ final class RepositoryViewModel: ObservableObject {
         URL(fileURLWithPath: path).standardizedFileURL.path
     }
 
-    private func isRecoverableWorktreePathError(_ error: Error) -> Bool {
+    private static func isRecoverableWorktreePathError(_ error: Error) -> Bool {
         guard let localActionError = error as? RepositoryLocalActionError else {
             return false
         }
