@@ -19,7 +19,12 @@ final class SettingsViewModel: ObservableObject {
     @Published var hapticsEnabled: Bool { didSet { persist() } }
     @Published var appLanguage: String { didSet { persist() } }
 
-    @Published var selectedAccentColorIndex: Int { didSet { persist() } }
+    @Published var selectedAccentColorIndex: Int {
+        didSet {
+            themeStore.applyAccentColorIndex(selectedAccentColorIndex)
+            persist()
+        }
+    }
 
     @Published var selectedModel: String { didSet { persist() } }
     @Published var temperature: Double { didSet { persist() } }
@@ -86,6 +91,7 @@ final class SettingsViewModel: ObservableObject {
         self.localRepositoriesRootBookmarkData = snapshot.localRepositoriesRootBookmarkData
 
         themeStore.apply(snapshot.selectedTheme)
+        themeStore.applyAccentColorIndex(snapshot.selectedAccentColorIndex)
         restoreGitHubSessionIfPossible()
     }
 

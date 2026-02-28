@@ -117,7 +117,7 @@ struct RepositoryPanelView: View {
     }
 
     private var accentColor: Color {
-        Color(red: 0.39, green: 0.44, blue: 0.99)
+        themeStore.accentColor
     }
 
     private var actionCardFillColor: Color {

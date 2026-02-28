@@ -21,15 +21,7 @@ struct SettingsView: View {
     private let windowEdgePaddingY: CGFloat = 12
 
     private var accentPalette: [Color] {
-        [
-            Color(red: 0.39, green: 0.44, blue: 0.99),
-            Color(red: 0.30, green: 0.53, blue: 0.98),
-            Color(red: 0.55, green: 0.35, blue: 0.88),
-            Color(red: 0.83, green: 0.30, blue: 0.62),
-            Color(red: 0.88, green: 0.29, blue: 0.33),
-            Color(red: 0.90, green: 0.47, blue: 0.19),
-            Color(red: 0.23, green: 0.73, blue: 0.41)
-        ]
+        themeStore.accentPalette
     }
 
     private var isDarkTheme: Bool {
@@ -37,7 +29,7 @@ struct SettingsView: View {
     }
 
     private var accentColor: Color {
-        Color(red: 0.39, green: 0.44, blue: 0.99)
+        themeStore.accentColor
     }
 
     private var panelFillColor: Color {
@@ -240,7 +232,11 @@ struct SettingsView: View {
                 .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
 
                 Button(action: closeSettingsWindow) {
-                    SettingsHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
+                    SettingsHeaderIcon(
+                        symbol: "xmark",
+                        isDarkTheme: isDarkTheme,
+                        accentColor: accentColor
+                    )
                 }
                 .buttonStyle(.plain)
             }

@@ -4,6 +4,7 @@ struct SettingsHeaderIcon: View {
     let symbol: String
     var isActive = false
     var isDarkTheme = false
+    var accentColor = Color(red: 0.39, green: 0.44, blue: 0.99)
 
     private var symbolColor: Color {
         isDarkTheme ? .white.opacity(isActive ? 0.84 : 0.66) : .black.opacity(isActive ? 0.82 : 0.62)
@@ -15,7 +16,7 @@ struct SettingsHeaderIcon: View {
 
     private var strokeColor: Color {
         if isActive {
-            return Color(red: 0.42, green: 0.41, blue: 0.80).opacity(0.45)
+            return accentColor.opacity(0.45)
         }
         return isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
     }
