@@ -33,6 +33,9 @@ final class RepositoryViewModel: ObservableObject {
 
     @Published var selectedRepoID: String? {
         didSet {
+            if oldValue != selectedRepoID {
+                cancelDetailMetricsPrefetch()
+            }
             selectedDetailDestination = nil
             selectedIssueID = nil
             isIssueComposerVisible = false
@@ -92,6 +95,7 @@ final class RepositoryViewModel: ObservableObject {
     private var hasUserCustomizedPins = false
     private var optimisticBranchNamesByRepositoryID: [String: Set<String>] = [:]
     private var prefetchingRepositoryIDs: Set<String> = []
+    private var detailMetricsPrefetchTask: Task<Void, Never>?
     @Published private(set) var loadedIssuesByRepositoryID: [String: [RepoIssueItem]] = [:]
     @Published private(set) var issuesLoadingRepositoryIDs: Set<String> = []
     @Published private(set) var issuesLoadErrorMessageByRepositoryID: [String: String] = [:]
@@ -284,9 +288,7 @@ final class RepositoryViewModel: ObservableObject {
     func selectRepository(_ repo: RepoItem) {
         selectedRepoID = repo.id
         refreshLocalCurrentBranch(for: repo)
-        Task { [weak self] in
-            await self?.prefetchDetailPanelMetricsIfNeeded(for: repo)
-        }
+        scheduleDetailMetricsPrefetch(for: repo)
     }
 
     func repository(withID repositoryID: String) -> RepoItem? {
@@ -1325,6 +1327,9 @@ final class RepositoryViewModel: ObservableObject {
                 issueCommentDraft = ""
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             issuesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedIssuesByRepositoryID[repo.id] == nil {
                 loadedIssuesByRepositoryID[repo.id] = []
@@ -1365,6 +1370,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedBranchID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             branchesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedBranchesByRepositoryID[repo.id] == nil {
                 loadedBranchesByRepositoryID[repo.id] = []
@@ -1400,6 +1408,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedPullRequestID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             pullRequestsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedPullRequestsByRepositoryID[repo.id] == nil {
                 loadedPullRequestsByRepositoryID[repo.id] = []
@@ -1471,6 +1482,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedDestinationInfoItemID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             ciRunsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedCIRunsByRepositoryID[repo.id] == nil {
                 loadedCIRunsByRepositoryID[repo.id] = []
@@ -1506,6 +1520,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedDestinationInfoItemID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             openCommitsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedOpenCommitsByRepositoryID[repo.id] == nil {
                 loadedOpenCommitsByRepositoryID[repo.id] = []
@@ -1541,6 +1558,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedDestinationInfoItemID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             tagsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedTagsByRepositoryID[repo.id] == nil {
                 loadedTagsByRepositoryID[repo.id] = []
@@ -1576,6 +1596,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedDestinationInfoItemID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             releasesLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedReleasesByRepositoryID[repo.id] == nil {
                 loadedReleasesByRepositoryID[repo.id] = []
@@ -1611,6 +1634,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedDestinationInfoItemID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             discussionsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedDiscussionsByRepositoryID[repo.id] == nil {
                 loadedDiscussionsByRepositoryID[repo.id] = []
@@ -1646,6 +1672,9 @@ final class RepositoryViewModel: ObservableObject {
                 self.selectedDestinationInfoItemID = nil
             }
         } catch {
+            if shouldIgnoreCancellation(error) {
+                return
+            }
             contributorsLoadErrorMessageByRepositoryID[repo.id] = repositoryErrorDescription(error)
             if loadedContributorsByRepositoryID[repo.id] == nil {
                 loadedContributorsByRepositoryID[repo.id] = []
@@ -1716,7 +1745,23 @@ final class RepositoryViewModel: ObservableObject {
         }
     }
 
+    private func scheduleDetailMetricsPrefetch(for repo: RepoItem) {
+        cancelDetailMetricsPrefetch()
+        detailMetricsPrefetchTask = Task { [weak self] in
+            await self?.prefetchDetailPanelMetricsIfNeeded(for: repo)
+        }
+    }
+
+    private func cancelDetailMetricsPrefetch() {
+        detailMetricsPrefetchTask?.cancel()
+        detailMetricsPrefetchTask = nil
+    }
+
     private func prefetchDetailPanelMetricsIfNeeded(for repo: RepoItem) async {
+        guard selectedRepoID == repo.id else {
+            return
+        }
+
         if prefetchingRepositoryIDs.contains(repo.id) {
             return
         }
@@ -1726,27 +1771,33 @@ final class RepositoryViewModel: ObservableObject {
             prefetchingRepositoryIDs.remove(repo.id)
         }
 
+        // Stage 1: prioritize core counters used most frequently.
         async let issuesTask: Void = loadIssuesIfNeeded(for: repo)
         async let pullRequestsTask: Void = loadPullRequestsIfNeeded(for: repo)
         async let branchesTask: Void = loadBranchesIfNeeded(for: repo)
-        async let ciRunsTask: Void = loadCIRunsIfNeeded(for: repo)
-        async let openCommitsTask: Void = loadOpenCommitsIfNeeded(for: repo)
-        async let tagsTask: Void = loadTagsIfNeeded(for: repo)
-        async let releasesTask: Void = loadReleasesIfNeeded(for: repo)
-        async let discussionsTask: Void = loadDiscussionsIfNeeded(for: repo)
-        async let contributorsTask: Void = loadContributorsIfNeeded(for: repo)
 
         _ = await (
             issuesTask,
             pullRequestsTask,
-            branchesTask,
-            ciRunsTask,
-            openCommitsTask,
-            tagsTask,
-            releasesTask,
-            discussionsTask,
-            contributorsTask
+            branchesTask
         )
+
+        guard !Task.isCancelled, selectedRepoID == repo.id else {
+            return
+        }
+
+        // Stage 2: load secondary counters sequentially to avoid request spikes.
+        await loadCIRunsIfNeeded(for: repo)
+        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
+        await loadTagsIfNeeded(for: repo)
+        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
+        await loadReleasesIfNeeded(for: repo)
+        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
+        await loadDiscussionsIfNeeded(for: repo)
+        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
+        await loadContributorsIfNeeded(for: repo)
+        guard !Task.isCancelled, selectedRepoID == repo.id else { return }
+        await loadOpenCommitsIfNeeded(for: repo)
     }
 
     private func loadIssueComments(
@@ -2380,6 +2431,15 @@ final class RepositoryViewModel: ObservableObject {
         }
 
         return error.localizedDescription
+    }
+
+    private func shouldIgnoreCancellation(_ error: Error) -> Bool {
+        if error is CancellationError {
+            return true
+        }
+
+        let nsError = error as NSError
+        return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled
     }
 
     private var trimmedIssueCommentDraft: String {
