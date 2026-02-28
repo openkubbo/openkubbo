@@ -51,7 +51,9 @@ final class AppThemeStore: ObservableObject {
         Color(red: 0.83, green: 0.30, blue: 0.62),
         Color(red: 0.88, green: 0.29, blue: 0.33),
         Color(red: 0.90, green: 0.47, blue: 0.19),
-        Color(red: 0.23, green: 0.73, blue: 0.41)
+        Color(red: 0.23, green: 0.73, blue: 0.41),
+        Color(red: 0.95, green: 0.78, blue: 0.18),
+        Color(red: 0.58, green: 0.38, blue: 0.22)
     ]
 
     private static func clampedAccentColorIndex(_ index: Int) -> Int {
