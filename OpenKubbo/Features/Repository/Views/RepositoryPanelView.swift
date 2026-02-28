@@ -18,6 +18,7 @@ struct RepositoryPanelView: View {
     @ObservedObject var viewModel: RepositoryViewModel
 
     @State private var hostWindow: NSWindow?
+    @State private var isWindowPinned = true
     @State private var localActionAlertState: LocalActionAlertState?
     @State private var newWorktreeBranchName = ""
 
@@ -211,11 +212,13 @@ struct RepositoryPanelView: View {
                 targetSize: CGSize(
                     width: panelWidth + (windowEdgePaddingX * 2),
                     height: panelHeight + (windowEdgePaddingY * 2)
-                )
+                ),
+                windowLevel: isWindowPinned ? .floating : .normal
             ) { window in
                 if hostWindow !== window {
                     hostWindow = window
                 }
+                applyWindowLevel(window)
             }
         )
         .task {
@@ -304,6 +307,18 @@ struct RepositoryPanelView: View {
                 .buttonStyle(.plain)
                 .repoCursorOnHover()
                 .disabled(viewModel.isPrimaryPanelRefreshing)
+
+                Button(action: toggleWindowPin) {
+                    RepoHeaderIcon(
+                        symbol: isWindowPinned ? "pin.fill" : "pin",
+                        isDarkTheme: isDarkTheme,
+                        isActive: isWindowPinned,
+                        accentColor: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .repoCursorOnHover()
+                .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
 
                 Button(action: closeWindow) {
                     RepoHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
@@ -3391,6 +3406,16 @@ struct RepositoryPanelView: View {
         hostWindow?.close()
     }
 
+    private func toggleWindowPin() {
+        isWindowPinned.toggle()
+        applyWindowLevel(hostWindow)
+    }
+
+    private func applyWindowLevel(_ window: NSWindow?) {
+        guard let window else { return }
+        window.level = isWindowPinned ? .floating : .normal
+    }
+
     private func openSettingsWindow() {
         openWindow(id: "settings")
         NSApp.activate(ignoringOtherApps: true)
@@ -3945,17 +3970,28 @@ private struct RepoRow: View {
 private struct RepoHeaderIcon: View {
     let symbol: String
     var isDarkTheme: Bool = false
+    var isActive: Bool = false
+    var accentColor: Color = Color(red: 0.39, green: 0.44, blue: 0.99)
 
     private var symbolColor: Color {
-        isDarkTheme ? .white.opacity(0.62) : .black.opacity(0.56)
+        if isActive {
+            return .white.opacity(0.94)
+        }
+        return isDarkTheme ? .white.opacity(0.62) : .black.opacity(0.56)
     }
 
     private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
+        if isActive {
+            return accentColor
+        }
+        return isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
     }
 
     private var strokeColor: Color {
-        isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
+        if isActive {
+            return accentColor.opacity(isDarkTheme ? 0.72 : 0.64)
+        }
+        return isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
     }
 
     var body: some View {
@@ -4020,12 +4056,18 @@ private struct RepoWindowDragRegion: NSViewRepresentable {
 
 private struct RepoWindowConfigurator: NSViewRepresentable {
     let targetSize: CGSize
+    let windowLevel: NSWindow.Level
     let onResolve: (NSWindow) -> Void
 
     private static var patchedClasses: Set<ObjectIdentifier> = []
 
-    init(targetSize: CGSize, onResolve: @escaping (NSWindow) -> Void) {
+    init(
+        targetSize: CGSize,
+        windowLevel: NSWindow.Level = .floating,
+        onResolve: @escaping (NSWindow) -> Void
+    ) {
         self.targetSize = targetSize
+        self.windowLevel = windowLevel
         self.onResolve = onResolve
     }
 
@@ -4046,6 +4088,8 @@ private struct RepoWindowConfigurator: NSViewRepresentable {
             if window.frame.size != size {
                 window.setContentSize(size)
             }
+            window.level = windowLevel
+            onResolve(window)
         }
     }
 
@@ -4054,7 +4098,7 @@ private struct RepoWindowConfigurator: NSViewRepresentable {
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = true
-        window.level = .floating
+        window.level = windowLevel
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         window.standardWindowButton(.closeButton)?.isHidden = true
         window.standardWindowButton(.miniaturizeButton)?.isHidden = true
