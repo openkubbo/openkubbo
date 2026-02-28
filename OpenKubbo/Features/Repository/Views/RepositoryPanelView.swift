@@ -584,11 +584,6 @@ struct RepositoryPanelView: View {
                     .foregroundStyle(secondaryTextColor)
             }
 
-            HStack(spacing: 12) {
-                secondaryPillButton(icon: "arrow.clockwise", title: "Sync") {}
-                secondaryPillButton(icon: "arrow.triangle.branch", title: "Rebase") {}
-                secondaryPillButton(icon: "arrow.uturn.backward", title: "Reset") {}
-            }
         }
     }
 
