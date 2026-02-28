@@ -38,6 +38,14 @@ struct OpenKubboApp: App {
         .defaultSize(width: 360, height: 728)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
+
+        Window("Task", id: "task") {
+            TaskPanelView()
+                .environmentObject(container.themeStore)
+        }
+        .defaultSize(width: 420, height: 780)
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
     }
 
     private func handleMenuSelection(_ action: MenuBarAction) {
@@ -48,11 +56,14 @@ struct OpenKubboApp: App {
         case .repository:
             NSApp.activate(ignoringOtherApps: true)
             openWindow(id: "repository")
+        case .newTask:
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "task")
         case .terminal:
             openSystemTerminal()
         case .toggleThemeMode:
             container.settingsViewModel.cycleThemeMode()
-        case .newTask, .agent:
+        case .agent:
             break
         }
     }
