@@ -37,9 +37,7 @@ struct SettingsView: View {
     }
 
     private var accentColor: Color {
-        isDarkTheme
-        ? Color(red: 0.73, green: 0.73, blue: 0.76)
-        : Color(red: 0.39, green: 0.44, blue: 0.99)
+        Color(red: 0.39, green: 0.44, blue: 0.99)
     }
 
     private var panelFillColor: Color {
@@ -103,9 +101,7 @@ struct SettingsView: View {
     }
 
     private var githubPrimaryButtonTint: Color {
-        isDarkTheme
-        ? Color(red: 0.34, green: 0.72, blue: 0.31)
-        : Color(red: 0.19, green: 0.53, blue: 0.88)
+        Color(red: 0.19, green: 0.53, blue: 0.88)
     }
 
     private var githubSecondaryButtonFillColor: Color {
