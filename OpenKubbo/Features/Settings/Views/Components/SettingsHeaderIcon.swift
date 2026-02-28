@@ -10,12 +10,14 @@ struct SettingsHeaderIcon: View {
     }
 
     private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.21, blue: 0.25) : .white
+        isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
     }
 
     private var strokeColor: Color {
         if isActive {
-            return Color(red: 0.42, green: 0.41, blue: 0.80).opacity(0.45)
+            return isDarkTheme
+                ? Color.white.opacity(0.28)
+                : Color(red: 0.42, green: 0.41, blue: 0.80).opacity(0.45)
         }
         return isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
     }

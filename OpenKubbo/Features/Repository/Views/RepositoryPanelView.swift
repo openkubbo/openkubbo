@@ -89,7 +89,7 @@ struct RepositoryPanelView: View {
     }
 
     private var panelFillColor: Color {
-        isDarkTheme ? Color(red: 0.12, green: 0.13, blue: 0.16) : Color(red: 0.97, green: 0.97, blue: 0.98)
+        isDarkTheme ? Color(red: 0.09, green: 0.09, blue: 0.10) : Color(red: 0.97, green: 0.97, blue: 0.98)
     }
 
     private var panelStrokeColor: Color {
@@ -97,7 +97,7 @@ struct RepositoryPanelView: View {
     }
 
     private var cardFillColor: Color {
-        isDarkTheme ? Color(red: 0.16, green: 0.17, blue: 0.20) : .white
+        isDarkTheme ? Color(red: 0.13, green: 0.13, blue: 0.14) : .white
     }
 
     private var cardStrokeColor: Color {
@@ -117,11 +117,13 @@ struct RepositoryPanelView: View {
     }
 
     private var accentColor: Color {
-        Color(red: 0.39, green: 0.44, blue: 0.99)
+        isDarkTheme
+        ? Color(red: 0.73, green: 0.73, blue: 0.76)
+        : Color(red: 0.39, green: 0.44, blue: 0.99)
     }
 
     private var actionCardFillColor: Color {
-        isDarkTheme ? Color(red: 0.18, green: 0.19, blue: 0.23) : .white
+        isDarkTheme ? Color(red: 0.17, green: 0.17, blue: 0.18) : .white
     }
 
     private var actionCardStrokeColor: Color {
@@ -3944,7 +3946,7 @@ private struct RepoHeaderIcon: View {
     }
 
     private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.21, blue: 0.25) : .white
+        isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
     }
 
     private var strokeColor: Color {

@@ -36,8 +36,14 @@ struct SettingsView: View {
         themeStore.resolvedColorScheme(systemColorScheme: systemColorScheme) == .dark
     }
 
+    private var accentColor: Color {
+        isDarkTheme
+        ? Color(red: 0.73, green: 0.73, blue: 0.76)
+        : Color(red: 0.39, green: 0.44, blue: 0.99)
+    }
+
     private var panelFillColor: Color {
-        isDarkTheme ? Color(red: 0.12, green: 0.13, blue: 0.16) : .white
+        isDarkTheme ? Color(red: 0.09, green: 0.09, blue: 0.10) : .white
     }
 
     private var panelStrokeColor: Color {
@@ -45,7 +51,7 @@ struct SettingsView: View {
     }
 
     private var cardFillColor: Color {
-        isDarkTheme ? Color(red: 0.16, green: 0.17, blue: 0.20) : .white
+        isDarkTheme ? Color(red: 0.13, green: 0.13, blue: 0.14) : .white
     }
 
     private var cardStrokeColor: Color {
@@ -73,11 +79,11 @@ struct SettingsView: View {
     }
 
     private var selectedTabFillColor: Color {
-        Color(red: 0.39, green: 0.41, blue: 0.93).opacity(isDarkTheme ? 0.34 : 0.20)
+        accentColor.opacity(isDarkTheme ? 0.30 : 0.20)
     }
 
     private var selectedTabStrokeColor: Color {
-        Color(red: 0.39, green: 0.41, blue: 0.93).opacity(0.45)
+        accentColor.opacity(isDarkTheme ? 0.46 : 0.45)
     }
 
     private var githubSectionFillColor: Color {
@@ -89,7 +95,7 @@ struct SettingsView: View {
     }
 
     private var githubInputFillColor: Color {
-        isDarkTheme ? Color(red: 0.12, green: 0.14, blue: 0.18) : .white
+        isDarkTheme ? Color(red: 0.11, green: 0.11, blue: 0.12) : .white
     }
 
     private var githubInputStrokeColor: Color {
@@ -104,7 +110,7 @@ struct SettingsView: View {
 
     private var githubSecondaryButtonFillColor: Color {
         isDarkTheme
-        ? Color(red: 0.26, green: 0.28, blue: 0.34)
+        ? Color(red: 0.25, green: 0.25, blue: 0.27)
         : Color(red: 0.86, green: 0.90, blue: 0.96)
     }
 
@@ -460,7 +466,7 @@ struct SettingsView: View {
                                 .fill(themePreviewBackground(for: mode))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .stroke(mode == selectedTheme ? Color(red: 0.44, green: 0.45, blue: 0.98) : cardStrokeColor.opacity(0.85), lineWidth: mode == selectedTheme ? 2 : 1)
+                                        .stroke(mode == selectedTheme ? accentColor : cardStrokeColor.opacity(0.85), lineWidth: mode == selectedTheme ? 2 : 1)
                                 )
                                 .frame(height: 76)
                                 .overlay(themePreviewContent(for: mode))
@@ -929,7 +935,7 @@ struct SettingsView: View {
             Toggle("", isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
-                .tint(Color(red: 0.39, green: 0.44, blue: 0.99))
+                .tint(accentColor)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)

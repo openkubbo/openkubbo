@@ -9,7 +9,7 @@ struct ShortcutKeysView: View {
     }
 
     private var fillColor: Color {
-        isDarkTheme ? Color(red: 0.20, green: 0.21, blue: 0.25) : .white
+        isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
     }
 
     private var strokeColor: Color {
