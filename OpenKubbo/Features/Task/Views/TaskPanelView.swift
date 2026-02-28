@@ -125,15 +125,9 @@ struct TaskPanelView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Kubbo")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(primaryTextColor)
-
-                Text("Task")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundStyle(primaryTextColor)
-            }
+            Text("Kubbo Task")
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
 
             Spacer(minLength: 0)
 
