@@ -7,6 +7,7 @@ struct TaskPanelView: View {
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(\.openWindow) private var openWindow
 
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
@@ -140,6 +141,17 @@ struct TaskPanelView: View {
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
                 .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
+
+                Button(action: openEmptyTaskWindow) {
+                    TaskHeaderIcon(
+                        symbol: "square.on.square",
+                        isDarkTheme: isDarkTheme,
+                        symbolTint: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
+                .help("Abrir novo Kubbo Task")
 
                 Button(action: closeWindow) {
                     TaskHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
@@ -384,6 +396,11 @@ struct TaskPanelView: View {
         applyWindowLevel(hostWindow)
     }
 
+    private func openEmptyTaskWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "task-empty")
+    }
+
     private func applyWindowLevel(_ window: NSWindow?) {
         guard let window else { return }
         window.level = isWindowPinned ? .floating : .normal
@@ -491,10 +508,14 @@ private struct TaskHeaderIcon: View {
     var isDarkTheme: Bool = false
     var isActive: Bool = false
     var accentColor: Color = Color(red: 0.39, green: 0.44, blue: 0.99)
+    var symbolTint: Color?
 
     private var symbolColor: Color {
         if isActive {
             return .white.opacity(0.94)
+        }
+        if let symbolTint {
+            return symbolTint.opacity(isDarkTheme ? 0.94 : 0.88)
         }
         return isDarkTheme ? .white.opacity(0.62) : .black.opacity(0.56)
     }

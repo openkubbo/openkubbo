@@ -46,6 +46,14 @@ struct OpenKubboApp: App {
         .defaultSize(width: 420, height: 780)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
+
+        WindowGroup("Task", id: "task-empty") {
+            EphemeralTaskPanelView()
+                .environmentObject(container.themeStore)
+        }
+        .defaultSize(width: 420, height: 780)
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
     }
 
     private func handleMenuSelection(_ action: MenuBarAction) {
@@ -85,5 +93,13 @@ struct OpenKubboApp: App {
 
         NSApp.activate(ignoringOtherApps: true)
         NSWorkspace.shared.open(terminalURL)
+    }
+}
+
+private struct EphemeralTaskPanelView: View {
+    @StateObject private var viewModel = TaskViewModel(repository: InMemoryTaskRepository())
+
+    var body: some View {
+        TaskPanelView(viewModel: viewModel)
     }
 }
