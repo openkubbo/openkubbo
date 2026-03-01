@@ -220,7 +220,7 @@ struct TaskPanelView: View {
             }
             .padding(.vertical, 2)
         }
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.visible)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
