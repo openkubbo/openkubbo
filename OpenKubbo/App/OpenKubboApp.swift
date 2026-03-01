@@ -43,7 +43,7 @@ struct OpenKubboApp: App {
             EphemeralTaskPanelView()
                 .environmentObject(container.themeStore)
         }
-        .defaultSize(width: 420, height: 780)
+        .defaultSize(width: 420, height: 546)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
 
@@ -51,7 +51,7 @@ struct OpenKubboApp: App {
             EphemeralTaskPanelView()
                 .environmentObject(container.themeStore)
         }
-        .defaultSize(width: 420, height: 780)
+        .defaultSize(width: 420, height: 546)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
     }

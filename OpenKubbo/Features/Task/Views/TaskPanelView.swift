@@ -17,7 +17,7 @@ struct TaskPanelView: View {
     @State private var lastDropTargetTaskID: UUID?
 
     private let panelWidth: CGFloat = 340
-    private let panelHeight: CGFloat = 704
+    private let panelHeight: CGFloat = 493
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
     private let windowEdgePaddingX: CGFloat = 10
@@ -104,7 +104,7 @@ struct TaskPanelView: View {
                     width: panelWidth + (windowEdgePaddingX * 2),
                     height: panelHeight + (windowEdgePaddingY * 2)
                 ),
-                minimumSize: CGSize(width: 360, height: 620),
+                minimumSize: CGSize(width: 360, height: 434),
                 windowIdentifier: "openkubbo.task.window",
                 windowLevel: .floating
             ) { window in
