@@ -606,6 +606,31 @@ struct SettingsView: View {
 
                     githubSectionCard {
                         VStack(alignment: .leading, spacing: 8) {
+                            Text("Using Git Push in Terminal")
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
+
+                            Text("GitHub login here enables OpenKubbo API features.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+
+                            Text("To use git push in Terminal, each user must authenticate Git on this Mac at least once.")
+                                .font(.system(size: 12, weight: .medium, design: .rounded))
+                                .foregroundStyle(secondaryTextColor)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("1. gh auth login")
+                                Text("2. gh auth setup-git")
+                                Text("3. git push --dry-run origin HEAD")
+                            }
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(primaryTextColor)
+                            .textSelection(.enabled)
+                        }
+                    }
+
+                    githubSectionCard {
+                        VStack(alignment: .leading, spacing: 8) {
                             Text("Device URL")
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(primaryTextColor)
