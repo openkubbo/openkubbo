@@ -13,6 +13,7 @@ struct SettingsView: View {
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(\.openWindow) private var openWindow
 
     private let panelWidth: CGFloat = 760
     private let panelHeight: CGFloat = 640
@@ -233,6 +234,16 @@ struct SettingsView: View {
                 .disabled(!isAppUpdateEnabled)
                 .opacity(isAppUpdateEnabled ? 1 : 0.58)
                 .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
+
+                Button(action: openRepositoryWindow) {
+                    SettingsHeaderIcon(
+                        symbol: "selection.pin.in.out",
+                        isDarkTheme: isDarkTheme,
+                        accentColor: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Open Repository")
 
                 Button(action: toggleWindowPin) {
                     SettingsHeaderIcon(
@@ -837,6 +848,11 @@ struct SettingsView: View {
         }
 
         NSWorkspace.shared.open(releaseURL)
+    }
+
+    private func openRepositoryWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "repository")
     }
 
     private func chooseLocalRepositoriesFolder() {
