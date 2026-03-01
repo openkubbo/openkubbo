@@ -114,6 +114,15 @@ struct TaskPanelView: View {
                 applyWindowLevel(window)
             }
         )
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
+            guard let closingWindow = notification.object as? NSWindow,
+                  closingWindow === hostWindow
+            else {
+                return
+            }
+
+            resetTaskStateForClose()
+        }
     }
 
     private var header: some View {
@@ -388,6 +397,7 @@ struct TaskPanelView: View {
     }
 
     private func closeWindow() {
+        resetTaskStateForClose()
         hostWindow?.close()
     }
 
@@ -399,6 +409,13 @@ struct TaskPanelView: View {
     private func openEmptyTaskWindow() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "task-empty")
+    }
+
+    private func resetTaskStateForClose() {
+        viewModel.clearAllTasks()
+        draggedTaskID = nil
+        lastDropTargetTaskID = nil
+        cancelTaskEdition()
     }
 
     private func applyWindowLevel(_ window: NSWindow?) {

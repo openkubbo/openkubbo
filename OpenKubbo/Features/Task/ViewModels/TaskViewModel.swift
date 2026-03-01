@@ -90,6 +90,13 @@ final class TaskViewModel: ObservableObject {
         persist()
     }
 
+    func clearAllTasks() {
+        guard !tasks.isEmpty || !draftTaskTitle.isEmpty else { return }
+        tasks = []
+        draftTaskTitle = ""
+        persist()
+    }
+
     private var trimmedDraftTitle: String {
         draftTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
     }

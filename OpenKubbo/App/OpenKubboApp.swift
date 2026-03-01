@@ -40,7 +40,7 @@ struct OpenKubboApp: App {
         .windowStyle(.hiddenTitleBar)
 
         Window("Task", id: "task") {
-            TaskPanelView(viewModel: container.taskViewModel)
+            EphemeralTaskPanelView()
                 .environmentObject(container.themeStore)
         }
         .defaultSize(width: 420, height: 780)
