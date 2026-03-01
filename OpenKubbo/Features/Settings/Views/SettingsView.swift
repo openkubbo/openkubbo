@@ -235,6 +235,16 @@ struct SettingsView: View {
                 .opacity(isAppUpdateEnabled ? 1 : 0.58)
                 .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
 
+                Button(action: openTaskWindow) {
+                    SettingsHeaderIcon(
+                        symbol: "text.pad.header.badge.plus",
+                        isDarkTheme: isDarkTheme,
+                        accentColor: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Open Kubbo Task")
+
                 Button(action: openRepositoryWindow) {
                     SettingsHeaderIcon(
                         symbol: "selection.pin.in.out",
@@ -853,6 +863,11 @@ struct SettingsView: View {
     private func openRepositoryWindow() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "repository")
+    }
+
+    private func openTaskWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "task")
     }
 
     private func chooseLocalRepositoriesFolder() {
