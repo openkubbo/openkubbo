@@ -44,7 +44,7 @@ final class SettingsViewModel: ObservableObject {
     let executablePath = "/usr/local/bin/codex"
     let apiKeyMasked = "••••••••••••••••"
     let models = ["Gemini 1.5 Pro", "GPT-4.1", "Claude 3.7 Sonnet"]
-    let languages = ["Português (Brasil)", "English (US)", "Español"]
+    let languages = ["English (US)", "Portuguese (Brazil)", "Spanish"]
     let shortcutGroups: [ShortcutGroup]
 
     private let repository: SettingsRepository

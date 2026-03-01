@@ -243,7 +243,7 @@ struct SettingsView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
+                .help(isWindowPinned ? "Unpin window" : "Pin window on top")
 
                 Button(action: closeSettingsWindow) {
                     SettingsHeaderIcon(
@@ -267,7 +267,7 @@ struct SettingsView: View {
             TextField(
                 "",
                 text: $viewModel.searchText,
-                prompt: Text("Buscar ajustes...").foregroundColor(searchPlaceholderColor)
+                prompt: Text("Search settings...").foregroundColor(searchPlaceholderColor)
             )
             .textFieldStyle(.plain)
             .font(.system(size: 16, weight: .medium, design: .rounded))
@@ -461,7 +461,7 @@ struct SettingsView: View {
         let selectedTheme = viewModel.selectedThemeMode
 
         return VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("TEMA")
+            sectionTitle("THEME")
             HStack(spacing: 10) {
                 ForEach(ThemeMode.allCases) { mode in
                     Button {
@@ -486,7 +486,7 @@ struct SettingsView: View {
                 }
             }
 
-            sectionTitle("COR DE DESTAQUE")
+            sectionTitle("ACCENT COLOR")
             HStack(spacing: 10) {
                 ForEach(accentPalette.indices, id: \.self) { index in
                     Button {

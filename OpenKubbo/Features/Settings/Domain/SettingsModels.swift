@@ -26,9 +26,9 @@ enum SettingsTab: String, CaseIterable, Identifiable {
 }
 
 enum ThemeMode: String, CaseIterable, Identifiable {
-    case light = "Clara"
-    case dark = "Escura"
-    case automatic = "Automática"
+    case light = "Light"
+    case dark = "Dark"
+    case automatic = "Automatic"
 
     var id: String { rawValue }
 
@@ -82,27 +82,27 @@ struct ShortcutGroup: Identifiable, Equatable {
 extension ShortcutGroup {
     static let defaults: [ShortcutGroup] = [
         ShortcutGroup(
-            title: "GERAL",
+            title: "GENERAL",
             items: [
-                ShortcutItem(name: "Nova Tarefa", keys: ["↩"]),
-                ShortcutItem(name: "Configurações", keys: ["⌘", ","]),
-                ShortcutItem(name: "Buscar", keys: ["⌘", "F"])
+                ShortcutItem(name: "New Task", keys: ["↩"]),
+                ShortcutItem(name: "Settings", keys: ["⌘", ","]),
+                ShortcutItem(name: "Search", keys: ["⌘", "F"])
             ]
         ),
         ShortcutGroup(
-            title: "JANELA",
+            title: "WINDOW",
             items: [
-                ShortcutItem(name: "Duplicar Janela", keys: ["⌘", "D"]),
-                ShortcutItem(name: "Fechar Janela", keys: ["⌘", "W"]),
-                ShortcutItem(name: "Minimizar", keys: ["⌘", "M"])
+                ShortcutItem(name: "Duplicate Window", keys: ["⌘", "D"]),
+                ShortcutItem(name: "Close Window", keys: ["⌘", "W"]),
+                ShortcutItem(name: "Minimize", keys: ["⌘", "M"])
             ]
         ),
         ShortcutGroup(
-            title: "TAREFAS",
+            title: "TASKS",
             items: [
-                ShortcutItem(name: "Editar Tarefa", keys: ["⌘", "E"]),
-                ShortcutItem(name: "Concluir Tarefa", keys: ["⌘", "↩"]),
-                ShortcutItem(name: "Excluir Tarefa", keys: ["⌘", "⌫"])
+                ShortcutItem(name: "Edit Task", keys: ["⌘", "E"]),
+                ShortcutItem(name: "Complete Task", keys: ["⌘", "↩"]),
+                ShortcutItem(name: "Delete Task", keys: ["⌘", "⌫"])
             ]
         )
     ]
@@ -135,7 +135,7 @@ struct SettingsSnapshot: Codable, Equatable {
         reopenPreviousWindows: true,
         playCompletionSound: true,
         hapticsEnabled: true,
-        appLanguage: "Português (Brasil)",
+        appLanguage: "English (US)",
         selectedAccentColorIndex: 0,
         selectedModel: "Gemini 1.5 Pro",
         temperature: 0.7,
