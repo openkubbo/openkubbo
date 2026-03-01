@@ -3,6 +3,11 @@ import Foundation
 
 @MainActor
 final class TaskViewModel: ObservableObject {
+    struct RemovedTask {
+        let task: TaskItem
+        let index: Int
+    }
+
     @Published var draftTaskTitle = ""
     @Published private(set) var tasks: [TaskItem]
 
@@ -50,10 +55,25 @@ final class TaskViewModel: ObservableObject {
     }
 
     func deleteTask(_ taskID: UUID) {
-        let oldCount = tasks.count
-        tasks.removeAll { $0.id == taskID }
+        _ = deleteTaskAndReturn(taskID)
+    }
 
-        guard tasks.count != oldCount else { return }
+    @discardableResult
+    func deleteTaskAndReturn(_ taskID: UUID) -> RemovedTask? {
+        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else {
+            return nil
+        }
+
+        let removedTask = tasks.remove(at: index)
+        persist()
+        return RemovedTask(task: removedTask, index: index)
+    }
+
+    func restoreTask(_ task: TaskItem, at index: Int) {
+        guard !tasks.contains(where: { $0.id == task.id }) else { return }
+
+        let clampedIndex = min(max(index, 0), tasks.count)
+        tasks.insert(task, at: clampedIndex)
         persist()
     }
 

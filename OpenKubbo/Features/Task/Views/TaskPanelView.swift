@@ -15,6 +15,8 @@ struct TaskPanelView: View {
     @State private var editingTaskTitle = ""
     @State private var draggedTaskID: UUID?
     @State private var lastDropTargetTaskID: UUID?
+    @State private var pendingRemovedTask: TaskViewModel.RemovedTask?
+    @State private var undoDeleteDismissTask: Task<Void, Never>?
 
     private let panelWidth: CGFloat = 340
     private let panelHeight: CGFloat = 493
@@ -94,6 +96,14 @@ struct TaskPanelView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 12)
             }
+
+            if pendingRemovedTask != nil {
+                undoDeleteToast
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 18)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
         .frame(width: panelWidth, height: panelHeight)
         .padding(.horizontal, windowEdgePaddingX)
@@ -122,6 +132,9 @@ struct TaskPanelView: View {
             }
 
             resetTaskStateForClose()
+        }
+        .onDisappear {
+            cancelUndoDeleteTimer()
         }
     }
 
@@ -229,6 +242,49 @@ struct TaskPanelView: View {
         }
         .scrollIndicators(.visible)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var undoDeleteToast: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "trash")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(secondaryTextColor)
+
+            Text("Task deleted. Undo?")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .lineLimit(1)
+
+            Spacer(minLength: 6)
+
+            Button("Undo") {
+                undoDeletedTask()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .bold, design: .rounded))
+            .foregroundStyle(accentColor)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(accentColor.opacity(isDarkTheme ? 0.20 : 0.14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(accentColor.opacity(0.42), lineWidth: 1)
+                    )
+            )
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+        .shadow(color: .black.opacity(isDarkTheme ? 0.24 : 0.10), radius: 8, x: 0, y: 4)
     }
 
     private func taskRow(_ task: TaskItem) -> some View {
@@ -390,8 +446,14 @@ struct TaskPanelView: View {
     }
 
     private func deleteTask(_ taskID: UUID) {
+        var removedTask: TaskViewModel.RemovedTask?
         withAnimation(.easeInOut(duration: 0.16)) {
-            viewModel.deleteTask(taskID)
+            removedTask = viewModel.deleteTaskAndReturn(taskID)
+            pendingRemovedTask = removedTask
+        }
+
+        guard removedTask != nil else {
+            return
         }
 
         if draggedTaskID == taskID {
@@ -401,6 +463,8 @@ struct TaskPanelView: View {
         if editingTaskID == taskID {
             cancelTaskEdition()
         }
+
+        scheduleUndoDeleteTimeout()
     }
 
     private func closeWindow() {
@@ -424,10 +488,43 @@ struct TaskPanelView: View {
     }
 
     private func resetTaskStateForClose() {
+        cancelUndoDeleteTimer()
+        pendingRemovedTask = nil
         viewModel.clearAllTasks()
         draggedTaskID = nil
         lastDropTargetTaskID = nil
         cancelTaskEdition()
+    }
+
+    private func undoDeletedTask() {
+        guard let pendingRemovedTask else { return }
+
+        withAnimation(.easeInOut(duration: 0.16)) {
+            viewModel.restoreTask(pendingRemovedTask.task, at: pendingRemovedTask.index)
+            self.pendingRemovedTask = nil
+        }
+
+        cancelUndoDeleteTimer()
+    }
+
+    private func scheduleUndoDeleteTimeout() {
+        cancelUndoDeleteTimer()
+        undoDeleteDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    pendingRemovedTask = nil
+                }
+                undoDeleteDismissTask = nil
+            }
+        }
+    }
+
+    private func cancelUndoDeleteTimer() {
+        undoDeleteDismissTask?.cancel()
+        undoDeleteDismissTask = nil
     }
 
     private func applyWindowLevel(_ window: NSWindow?) {
