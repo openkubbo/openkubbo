@@ -3,22 +3,17 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct TaskPanelView: View {
-    private struct TaskItem: Identifiable {
-        let id = UUID()
-        var title: String
-        var isDone: Bool
-    }
+    @ObservedObject var viewModel: TaskViewModel
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
 
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
-    @State private var draftTaskTitle = ""
     @State private var editingTaskID: UUID?
     @State private var editingTaskTitle = ""
     @State private var draggedTaskID: UUID?
-    @State private var tasks: [TaskItem] = []
+    @State private var lastDropTargetTaskID: UUID?
 
     private let panelWidth: CGFloat = 340
     private let panelHeight: CGFloat = 704
@@ -64,13 +59,11 @@ struct TaskPanelView: View {
     }
 
     private var pendingCount: Int {
-        tasks.filter { !$0.isDone }.count
+        viewModel.pendingCount
     }
 
     private var completionRatio: Double {
-        guard !tasks.isEmpty else { return 0 }
-        let completed = tasks.filter(\.isDone).count
-        return Double(completed) / Double(tasks.count)
+        viewModel.completionRatio
     }
 
     var body: some View {
@@ -159,12 +152,12 @@ struct TaskPanelView: View {
 
     private var newTaskInput: some View {
         HStack(spacing: 8) {
-            TextField("Nova tarefa simples...", text: $draftTaskTitle)
+            TextField("Nova tarefa simples...", text: $viewModel.draftTaskTitle)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(primaryTextColor)
 
-            Button(action: addTask) {
+            Button(action: viewModel.addTask) {
                 Image(systemName: "plus")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(primaryTextColor)
@@ -179,8 +172,8 @@ struct TaskPanelView: View {
                     )
             }
             .buttonStyle(.plain)
-            .disabled(draftTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .opacity(draftTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.55 : 1)
+            .disabled(!viewModel.canAddTask)
+            .opacity(viewModel.canAddTask ? 1 : 0.55)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -197,7 +190,7 @@ struct TaskPanelView: View {
     private var tasksList: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                ForEach(tasks) { task in
+                ForEach(viewModel.tasks) { task in
                     taskRow(task)
                 }
             }
@@ -216,7 +209,7 @@ struct TaskPanelView: View {
 
             Button {
                 withAnimation(.easeInOut(duration: 0.18)) {
-                    toggleTaskCompletion(for: task.id)
+                    viewModel.toggleTaskCompletion(for: task.id)
                 }
             } label: {
                 Image(systemName: isDone ? "checkmark.circle.fill" : "circle")
@@ -289,8 +282,9 @@ struct TaskPanelView: View {
         .modifier(
             TaskRowDragModifier(
                 taskID: task.id,
-                isEnabled: !isDone,
-                draggedTaskID: $draggedTaskID
+                isEnabled: !isDone && !isEditing,
+                draggedTaskID: $draggedTaskID,
+                lastDropTargetTaskID: $lastDropTargetTaskID
             )
         )
         .onDrop(
@@ -298,8 +292,14 @@ struct TaskPanelView: View {
             delegate: TaskRowDropDelegate(
                 targetTaskID: task.id,
                 targetTaskIsDone: isDone,
-                tasks: $tasks,
-                draggedTaskID: $draggedTaskID
+                canReorderTask: { taskID in
+                    viewModel.canReorderTask(taskID: taskID)
+                },
+                moveTask: { draggedID, targetID in
+                    viewModel.movePendingTask(draggedTaskID: draggedID, to: targetID)
+                },
+                draggedTaskID: $draggedTaskID,
+                lastDropTargetTaskID: $lastDropTargetTaskID
             )
         )
     }
@@ -343,31 +343,13 @@ struct TaskPanelView: View {
         .padding(.top, 4)
     }
 
-    private func addTask() {
-        let trimmed = draftTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        withAnimation(.easeInOut(duration: 0.18)) {
-            tasks.insert(TaskItem(title: trimmed, isDone: false), at: 0)
-            draftTaskTitle = ""
-        }
-    }
-
     private func beginTaskEdition(_ task: TaskItem) {
         editingTaskID = task.id
         editingTaskTitle = task.title
     }
 
     private func saveTaskEdition(_ taskID: UUID) {
-        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else {
-            cancelTaskEdition()
-            return
-        }
-
-        let trimmed = editingTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            tasks[index].title = trimmed
-        }
+        viewModel.updateTaskTitle(taskID, title: editingTaskTitle)
         cancelTaskEdition()
     }
 
@@ -376,26 +358,17 @@ struct TaskPanelView: View {
         editingTaskTitle = ""
     }
 
-    private func toggleTaskCompletion(for taskID: UUID) {
-        guard let index = tasks.firstIndex(where: { $0.id == taskID }) else { return }
-
-        let wasDone = tasks[index].isDone
-        tasks[index].isDone.toggle()
-
-        guard wasDone == false, tasks[index].isDone else { return }
-        let completedTask = tasks.remove(at: index)
-        tasks.append(completedTask)
-    }
-
     private func deleteTask(_ taskID: UUID) {
         withAnimation(.easeInOut(duration: 0.16)) {
-            tasks.removeAll { $0.id == taskID }
-            if draggedTaskID == taskID {
-                draggedTaskID = nil
-            }
-            if editingTaskID == taskID {
-                cancelTaskEdition()
-            }
+            viewModel.deleteTask(taskID)
+        }
+
+        if draggedTaskID == taskID {
+            draggedTaskID = nil
+        }
+
+        if editingTaskID == taskID {
+            cancelTaskEdition()
         }
     }
 
@@ -416,37 +389,33 @@ struct TaskPanelView: View {
     private struct TaskRowDropDelegate: DropDelegate {
         let targetTaskID: UUID
         let targetTaskIsDone: Bool
-        @Binding var tasks: [TaskItem]
+        let canReorderTask: (UUID) -> Bool
+        let moveTask: (UUID, UUID) -> Void
         @Binding var draggedTaskID: UUID?
+        @Binding var lastDropTargetTaskID: UUID?
 
         func validateDrop(info: DropInfo) -> Bool {
-            guard !targetTaskIsDone,
-                  let draggedTaskID,
-                  let draggedIndex = tasks.firstIndex(where: { $0.id == draggedTaskID })
-            else {
+            guard !targetTaskIsDone, let draggedTaskID else {
                 return false
             }
 
-            return !tasks[draggedIndex].isDone
+            return canReorderTask(draggedTaskID)
         }
 
         func dropEntered(info: DropInfo) {
             guard !targetTaskIsDone,
                   let draggedTaskID,
                   draggedTaskID != targetTaskID,
-                  let fromIndex = tasks.firstIndex(where: { $0.id == draggedTaskID }),
-                  let toIndex = tasks.firstIndex(where: { $0.id == targetTaskID }),
-                  !tasks[fromIndex].isDone,
-                  !tasks[toIndex].isDone
+                  canReorderTask(draggedTaskID),
+                  canReorderTask(targetTaskID),
+                  lastDropTargetTaskID != targetTaskID
             else {
                 return
             }
 
-            guard fromIndex != toIndex else { return }
-
-            withAnimation(.easeInOut(duration: 0.12)) {
-                let movedTask = tasks.remove(at: fromIndex)
-                tasks.insert(movedTask, at: toIndex)
+            lastDropTargetTaskID = targetTaskID
+            withAnimation(.easeOut(duration: 0.10)) {
+                moveTask(draggedTaskID, targetTaskID)
             }
         }
 
@@ -456,6 +425,7 @@ struct TaskPanelView: View {
 
         func performDrop(info: DropInfo) -> Bool {
             draggedTaskID = nil
+            lastDropTargetTaskID = nil
             return true
         }
     }
@@ -464,12 +434,14 @@ struct TaskPanelView: View {
         let taskID: UUID
         let isEnabled: Bool
         @Binding var draggedTaskID: UUID?
+        @Binding var lastDropTargetTaskID: UUID?
 
         @ViewBuilder
         func body(content: Content) -> some View {
             if isEnabled {
                 content.onDrag {
                     draggedTaskID = taskID
+                    lastDropTargetTaskID = nil
                     return NSItemProvider(object: taskID.uuidString as NSString)
                 }
             } else {

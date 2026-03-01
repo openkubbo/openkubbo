@@ -9,6 +9,7 @@ final class AppContainer: ObservableObject {
     let settingsViewModel: SettingsViewModel
     let menuBarViewModel: MenuBarViewModel
     let repositoryViewModel: RepositoryViewModel
+    let taskViewModel: TaskViewModel
 
     init() {
         let themeStore = AppThemeStore()
@@ -16,6 +17,7 @@ final class AppContainer: ObservableObject {
         let gitHubOAuthService = GitHubOAuthService()
         let gitHubAPIService = GitHubAPIService()
         let gitHubTokenStore = KeychainGitHubTokenStore()
+        let taskRepository = UserDefaultsTaskRepository()
         let localRootProvider = SettingsLocalRepositoryRootProvider(settingsRepository: repository)
         let localResolver = LocalRepositoryResolver()
         let localActionService = RepositoryLocalActionService()
@@ -38,5 +40,6 @@ final class AppContainer: ObservableObject {
             localActionService: localActionService,
             gitHubTokenStore: gitHubTokenStore
         )
+        self.taskViewModel = TaskViewModel(repository: taskRepository)
     }
 }
