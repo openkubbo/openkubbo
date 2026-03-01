@@ -156,6 +156,9 @@ struct TaskPanelView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(primaryTextColor)
+                .onSubmit {
+                    viewModel.addTask()
+                }
 
             Button(action: viewModel.addTask) {
                 Image(systemName: "plus")
