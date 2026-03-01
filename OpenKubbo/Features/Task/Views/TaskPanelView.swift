@@ -155,7 +155,7 @@ struct TaskPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
-                .help(isWindowPinned ? "Desafixar janela" : "Fixar janela no topo")
+                .help(isWindowPinned ? "Unpin window" : "Pin window on top")
 
                 Button(action: openEmptyTaskWindow) {
                     TaskHeaderIcon(
@@ -166,7 +166,7 @@ struct TaskPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
-                .help("Abrir novo Kubbo Task")
+                .help("Open new Kubbo Task")
 
                 Button(action: closeWindow) {
                     TaskHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
@@ -179,7 +179,7 @@ struct TaskPanelView: View {
 
     private var newTaskInput: some View {
         HStack(spacing: 8) {
-            TextField("Nova tarefa simples...", text: $viewModel.draftTaskTitle)
+            TextField("New simple task...", text: $viewModel.draftTaskTitle)
                 .textFieldStyle(.plain)
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(primaryTextColor)
@@ -252,7 +252,7 @@ struct TaskPanelView: View {
 
             Group {
                 if isEditing {
-                    TextField("Editar tarefa", text: $editingTaskTitle)
+                    TextField("Edit task", text: $editingTaskTitle)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
@@ -282,7 +282,7 @@ struct TaskPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
-                .help(isEditing ? "Salvar edição" : "Editar tarefa")
+                .help(isEditing ? "Save changes" : "Edit task")
 
                 Button {
                     if isEditing {
@@ -295,7 +295,7 @@ struct TaskPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
-                .help(isEditing ? "Cancelar edição" : "Deletar tarefa")
+                .help(isEditing ? "Cancel editing" : "Delete task")
             }
         }
         .padding(.horizontal, 14)
@@ -348,7 +348,7 @@ struct TaskPanelView: View {
                 .foregroundStyle(secondaryTextColor.opacity(0.42))
                 .padding(.top, 4)
                 .taskCursorOnHover()
-                .help("Reordenar tarefa")
+                .help("Reorder task")
         }
     }
 
@@ -359,13 +359,13 @@ struct TaskPanelView: View {
                 .frame(height: 1)
 
             HStack {
-                Text("\(pendingCount) pendentes")
+                Text("\(pendingCount) pending")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(secondaryTextColor)
 
                 Spacer(minLength: 0)
 
-                Text("\(Int((completionRatio * 100).rounded()))% concluido")
+                Text("\(Int((completionRatio * 100).rounded()))% completed")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(secondaryTextColor)
             }
