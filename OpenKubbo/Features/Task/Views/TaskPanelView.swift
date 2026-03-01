@@ -219,6 +219,7 @@ struct TaskPanelView: View {
                 }
             }
             .padding(.vertical, 2)
+            .background(TaskScrollBarVisibilityConfigurator())
         }
         .scrollIndicators(.visible)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -582,5 +583,24 @@ private struct TaskCursorOnHover: ViewModifier {
 private extension View {
     func taskCursorOnHover() -> some View {
         modifier(TaskCursorOnHover())
+    }
+}
+
+private struct TaskScrollBarVisibilityConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let scrollView = nsView.enclosingScrollView else {
+                return
+            }
+
+            scrollView.hasVerticalScroller = true
+            scrollView.hasHorizontalScroller = false
+            scrollView.scrollerStyle = .legacy
+            scrollView.autohidesScrollers = true
+        }
     }
 }
