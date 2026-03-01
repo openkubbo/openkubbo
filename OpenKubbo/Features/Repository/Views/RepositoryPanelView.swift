@@ -532,7 +532,7 @@ struct RepositoryPanelView: View {
             detailNavigationRow(icon: "terminal", title: "Open in Terminal") {
                 handleLocalAction(for: repo, action: .terminal)
             }
-            detailNavigationRow(icon: "wand.and.stars", title: "Open TARS Agent", isAccent: true) {}
+            detailNavigationRow(icon: "wand.and.stars", title: "Open Kubbo Agent", isAccent: true) {}
         }
     }
 
