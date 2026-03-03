@@ -211,30 +211,6 @@ struct SettingsView: View {
             .background(SettingsWindowDragRegion())
 
             HStack(spacing: 8) {
-                Button(action: openAppUpdatePage) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "arrow.trianglehead.clockwise")
-                            .font(.system(size: 12, weight: .semibold))
-                        Text("Update App")
-                            .font(.system(size: 11, weight: .bold, design: .rounded))
-                    }
-                    .foregroundStyle(primaryTextColor)
-                    .padding(.horizontal, 10)
-                    .frame(height: 28)
-                    .background(
-                        Capsule()
-                            .fill(cardFillColor)
-                            .overlay(
-                                Capsule()
-                                    .stroke(cardStrokeColor, lineWidth: 1)
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(!isAppUpdateEnabled)
-                .opacity(isAppUpdateEnabled ? 1 : 0.58)
-                .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
-
                 Button(action: openTaskWindow) {
                     SettingsHeaderIcon(
                         symbol: "text.pad.header.badge.plus",
