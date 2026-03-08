@@ -4,6 +4,7 @@
 # Xcode
 build/
 DerivedData/
+.sparkle-tools/
 *.pbxuser
 !default.pbxuser
 *.mode1v3

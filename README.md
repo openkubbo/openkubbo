@@ -113,6 +113,8 @@ OpenKubbo is wired to support in-app updates with Sparkle.
 - The app expects an appcast feed at `https://openkubbo.com/appcast.xml`.
 - The app expects the Sparkle public EdDSA key in the `SPARKLE_PUBLIC_ED_KEY` build setting.
 - While `SPARKLE_PUBLIC_ED_KEY` is empty, the Settings update button falls back to the latest GitHub release page.
+- Use `./scripts/release/sparkle_setup_keys.sh` to generate or fetch the Sparkle key from Keychain and write the public key into the project.
+- Use `./scripts/release/sparkle_generate_appcast.sh <archives-dir> <download-url-prefix> [release-notes-url-prefix]` to build `appcast.xml` from exported release archives.
 
 Typical setup:
 
