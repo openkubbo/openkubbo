@@ -3,13 +3,12 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var viewModel: SettingsViewModel
+    @ObservedObject var appUpdateController: AppUpdateController
 
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
-
-    private let isAppUpdateEnabled = false
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
@@ -135,6 +134,28 @@ struct SettingsView: View {
         }
 
         return "Unknown"
+    }
+
+    private var updateDescription: String {
+        if appUpdateController.isConfigured {
+            return "Check for new OpenKubbo versions and install them from inside the app."
+        }
+
+        return "In-app updates are wired up, but this build still needs the Sparkle feed and public key configured."
+    }
+
+    private var updateButtonTitle: String {
+        appUpdateController.isConfigured ? "Check for Updates" : "Open Latest Release"
+    }
+
+    private var updateButtonHelpText: String {
+        if appUpdateController.isConfigured {
+            return appUpdateController.canCheckForUpdates
+                ? "Check for a newer OpenKubbo release."
+                : "Update check is temporarily unavailable."
+        }
+
+        return "Open the latest release page while Sparkle is not fully configured."
     }
 
     var body: some View {
@@ -420,15 +441,15 @@ struct SettingsView: View {
                         .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Text("Click below to open the latest release and update the app.")
+                    Text(updateDescription)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    Button(action: openAppUpdatePage) {
+                    Button(action: performAppUpdateAction) {
                         HStack(spacing: 8) {
                             Image(systemName: "arrow.trianglehead.clockwise")
                                 .font(.system(size: 12, weight: .semibold))
-                            Text("Update App")
+                            Text(updateButtonTitle)
                                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                         }
                         .foregroundStyle(githubSecondaryButtonTextColor)
@@ -444,9 +465,9 @@ struct SettingsView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(!isAppUpdateEnabled)
-                    .opacity(isAppUpdateEnabled ? 1 : 0.58)
-                    .help(isAppUpdateEnabled ? "Open latest release page." : "Update temporarily disabled.")
+                    .disabled(appUpdateController.isConfigured && !appUpdateController.canCheckForUpdates)
+                    .opacity(appUpdateController.isConfigured && !appUpdateController.canCheckForUpdates ? 0.58 : 1)
+                    .help(updateButtonHelpText)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
@@ -851,6 +872,15 @@ struct SettingsView: View {
         if let verificationURL = viewModel.githubVerificationURL ?? URL(string: gitHubDeviceURLString) {
             NSWorkspace.shared.open(verificationURL)
         }
+    }
+
+    private func performAppUpdateAction() {
+        if appUpdateController.isConfigured {
+            appUpdateController.checkForUpdates()
+            return
+        }
+
+        openAppUpdatePage()
     }
 
     private func openAppUpdatePage() {

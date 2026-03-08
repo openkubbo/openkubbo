@@ -24,7 +24,10 @@ struct OpenKubboApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Settings", id: "settings") {
-            SettingsView(viewModel: container.settingsViewModel)
+            SettingsView(
+                viewModel: container.settingsViewModel,
+                appUpdateController: container.appUpdateController
+            )
                 .environmentObject(container.themeStore)
         }
         .defaultSize(width: 720, height: 450)

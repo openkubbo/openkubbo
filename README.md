@@ -106,6 +106,22 @@ Release flow:
 6. Zip `OpenKubbo.app`.
 7. Publish the zip on [openkubbo.com](https://openkubbo.com) or attach it to a GitHub Release.
 
+## In-App Updates
+
+OpenKubbo is wired to support in-app updates with Sparkle.
+
+- The app expects an appcast feed at `https://openkubbo.com/appcast.xml`.
+- The app expects the Sparkle public EdDSA key in the `SPARKLE_PUBLIC_ED_KEY` build setting.
+- While `SPARKLE_PUBLIC_ED_KEY` is empty, the Settings update button falls back to the latest GitHub release page.
+
+Typical setup:
+
+1. Generate Sparkle keys once and store the private key outside the repository.
+2. Copy the public key into the `SPARKLE_PUBLIC_ED_KEY` build setting for the app target.
+3. Export the notarized `OpenKubbo.app` as a zip.
+4. Generate a signed `appcast.xml` for the released zip with Sparkle's publishing tools.
+5. Publish both the zip and `appcast.xml` to a stable public URL.
+
 ## Versioning
 
 Recommended release flow:

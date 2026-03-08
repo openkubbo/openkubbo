@@ -5,12 +5,15 @@ import SwiftUI
 final class AppContainer: ObservableObject {
     let objectWillChange = ObservableObjectPublisher()
 
+    let appUpdateController: AppUpdateController
     let themeStore: AppThemeStore
     let settingsViewModel: SettingsViewModel
     let menuBarViewModel: MenuBarViewModel
     let repositoryViewModel: RepositoryViewModel
 
     init() {
+        self.appUpdateController = AppUpdateController()
+
         let themeStore = AppThemeStore()
         let repository = UserDefaultsSettingsRepository()
         let gitHubOAuthService = GitHubOAuthService()
