@@ -152,11 +152,7 @@ struct TaskPanelView: View {
             .background(SettingsWindowDragRegion())
 
             HStack(spacing: 8) {
-                Button(action: openSettingsWindow) {
-                    TaskHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme)
-                }
-                .buttonStyle(.plain)
-                .taskCursorOnHover()
+                TaskHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme)
 
                 Button(action: toggleWindowPin) {
                     TaskHeaderIcon(
@@ -480,11 +476,6 @@ struct TaskPanelView: View {
     private func openEmptyTaskWindow() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "task-empty")
-    }
-
-    private func openSettingsWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        openWindow(id: "settings")
     }
 
     private func resetTaskStateForClose() {
