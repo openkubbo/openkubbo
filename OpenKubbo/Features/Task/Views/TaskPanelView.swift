@@ -11,12 +11,15 @@ struct TaskPanelView: View {
 
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
+    @State private var isIdeaComposerPresented = false
+    @State private var ideaPrompt = ""
     @State private var editingTaskID: UUID?
     @State private var editingTaskTitle = ""
     @State private var draggedTaskID: UUID?
     @State private var lastDropTargetTaskID: UUID?
     @State private var pendingRemovedTask: TaskViewModel.RemovedTask?
     @State private var undoDeleteDismissTask: Task<Void, Never>?
+    @FocusState private var isIdeaPromptFocused: Bool
 
     private let panelWidth: CGFloat = 340
     private let panelHeight: CGFloat = 493
@@ -69,6 +72,10 @@ struct TaskPanelView: View {
         viewModel.completionRatio
     }
 
+    private var canGenerateIdeaCards: Bool {
+        !ideaPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -82,15 +89,22 @@ struct TaskPanelView: View {
 
             VStack(spacing: 14) {
                 header
-                newTaskInput
-                tasksList
-                footer
+                if isIdeaComposerPresented {
+                    ideaComposer
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    newTaskInput
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    tasksList
+                    footer
+                }
             }
             .padding(.horizontal, 18)
             .padding(.top, 20)
             .padding(.bottom, 14)
             .padding(.horizontal, panelHorizontalInset)
             .padding(.vertical, panelVerticalInset)
+            .animation(.easeInOut(duration: 0.18), value: isIdeaComposerPresented)
             .overlay(alignment: .top) {
                 SettingsWindowDragRegion()
                     .frame(maxWidth: .infinity)
@@ -152,11 +166,17 @@ struct TaskPanelView: View {
             .background(SettingsWindowDragRegion())
 
             HStack(spacing: 8) {
-                Button(action: openSettingsWindow) {
-                    TaskHeaderIcon(symbol: "gearshape", isDarkTheme: isDarkTheme)
+                Button(action: toggleIdeaComposer) {
+                    TaskHeaderIcon(
+                        symbol: "lightbulb",
+                        isDarkTheme: isDarkTheme,
+                        isActive: isIdeaComposerPresented,
+                        accentColor: accentColor
+                    )
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
+                .help(isIdeaComposerPresented ? "Close idea composer" : "Open idea composer")
 
                 Button(action: toggleWindowPin) {
                     TaskHeaderIcon(
@@ -188,6 +208,96 @@ struct TaskPanelView: View {
                 .taskCursorOnHover()
             }
         }
+    }
+
+    private var ideaComposer: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("New Idea")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(mutedCardFillColor)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(cardStrokeColor, lineWidth: 1)
+                        )
+                )
+
+            HStack(alignment: .center, spacing: 12) {
+                Text("Describe your idea")
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                Spacer(minLength: 0)
+
+                Button(action: closeIdeaComposer) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
+                .help("Close idea composer")
+            }
+
+            ZStack(alignment: .topLeading) {
+                if !canGenerateIdeaCards {
+                    Text("Ex: Prepare the launch plan for the new onboarding flow...")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor.opacity(0.58))
+                        .padding(.top, 18)
+                        .padding(.horizontal, 18)
+                        .allowsHitTesting(false)
+                }
+
+                TextEditor(text: $ideaPrompt)
+                    .scrollContentBackground(.hidden)
+                    .focused($isIdeaPromptFocused)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundColor(primaryTextColor)
+                    .background(IdeaPromptScrollViewConfigurator(text: ideaPrompt))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(cardFillColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(isIdeaPromptFocused ? accentColor.opacity(0.68) : cardStrokeColor, lineWidth: 1)
+                    )
+            )
+
+            Button(action: {}) {
+                HStack(spacing: 10) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 16, weight: .semibold))
+
+                    Text("Generate Smart Cards")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(canGenerateIdeaCards ? primaryTextColor : secondaryTextColor.opacity(0.88))
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            canGenerateIdeaCards
+                                ? accentColor.opacity(isDarkTheme ? 0.92 : 0.82)
+                                : accentColor.opacity(isDarkTheme ? 0.66 : 0.22)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .taskCursorOnHover(isEnabled: canGenerateIdeaCards)
+            .disabled(!canGenerateIdeaCards)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var newTaskInput: some View {
@@ -482,14 +592,33 @@ struct TaskPanelView: View {
         openWindow(id: "task-empty")
     }
 
-    private func openSettingsWindow() {
-        NSApp.activate(ignoringOtherApps: true)
-        openWindow(id: "settings")
+    private func toggleIdeaComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isIdeaComposerPresented.toggle()
+        }
+
+        if isIdeaComposerPresented {
+            DispatchQueue.main.async {
+                isIdeaPromptFocused = true
+            }
+        } else {
+            isIdeaPromptFocused = false
+        }
+    }
+
+    private func closeIdeaComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isIdeaComposerPresented = false
+        }
+        isIdeaPromptFocused = false
     }
 
     private func resetTaskStateForClose() {
         cancelUndoDeleteTimer()
         pendingRemovedTask = nil
+        isIdeaComposerPresented = false
+        ideaPrompt = ""
+        isIdeaPromptFocused = false
         viewModel.clearAllTasks()
         draggedTaskID = nil
         lastDropTargetTaskID = nil
@@ -676,9 +805,77 @@ private struct TaskHeaderIcon: View {
     }
 }
 
+private struct IdeaPromptScrollViewConfigurator: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let scrollView = findTextEditorScrollView(from: nsView) else {
+                return
+            }
+
+            scrollView.hasHorizontalScroller = false
+            scrollView.autohidesScrollers = true
+            scrollView.scrollerStyle = .overlay
+
+            guard let textView = scrollView.documentView as? NSTextView,
+                  let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer
+            else {
+                scrollView.hasVerticalScroller = false
+                return
+            }
+
+            layoutManager.ensureLayout(for: textContainer)
+
+            let usedHeight = layoutManager.usedRect(for: textContainer).height + (textView.textContainerInset.height * 2)
+            let visibleHeight = scrollView.contentSize.height
+            let shouldShowScroller = !text.isEmpty && usedHeight > visibleHeight + 1
+
+            scrollView.hasVerticalScroller = shouldShowScroller
+        }
+    }
+
+    private func findTextEditorScrollView(from view: NSView) -> NSScrollView? {
+        var currentView: NSView? = view
+
+        while let unwrappedCurrentView = currentView {
+            if let match = findTextEditorScrollView(in: unwrappedCurrentView) {
+                return match
+            }
+            currentView = unwrappedCurrentView.superview
+        }
+
+        return nil
+    }
+
+    private func findTextEditorScrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView,
+           scrollView.documentView is NSTextView {
+            return scrollView
+        }
+
+        for subview in view.subviews {
+            if let match = findTextEditorScrollView(in: subview) {
+                return match
+            }
+        }
+
+        return nil
+    }
+}
+
 private struct TaskCursorOnHover: ViewModifier {
+    let isEnabled: Bool
+
     func body(content: Content) -> some View {
         content.onHover { isHovering in
+            guard isEnabled else { return }
+
             if isHovering {
                 NSCursor.pointingHand.push()
             } else {
@@ -689,8 +886,8 @@ private struct TaskCursorOnHover: ViewModifier {
 }
 
 private extension View {
-    func taskCursorOnHover() -> some View {
-        modifier(TaskCursorOnHover())
+    func taskCursorOnHover(isEnabled: Bool = true) -> some View {
+        modifier(TaskCursorOnHover(isEnabled: isEnabled))
     }
 }
 
