@@ -255,6 +255,7 @@ struct TaskPanelView: View {
                     .focused($isIdeaPromptFocused)
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundColor(primaryTextColor)
+                    .background(IdeaPromptScrollViewConfigurator(text: ideaPrompt))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -792,6 +793,70 @@ private struct TaskHeaderIcon: View {
                             .stroke(strokeColor, lineWidth: 1)
                     )
             )
+    }
+}
+
+private struct IdeaPromptScrollViewConfigurator: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let scrollView = findTextEditorScrollView(from: nsView) else {
+                return
+            }
+
+            scrollView.hasHorizontalScroller = false
+            scrollView.autohidesScrollers = true
+            scrollView.scrollerStyle = .overlay
+
+            guard let textView = scrollView.documentView as? NSTextView,
+                  let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer
+            else {
+                scrollView.hasVerticalScroller = false
+                return
+            }
+
+            layoutManager.ensureLayout(for: textContainer)
+
+            let usedHeight = layoutManager.usedRect(for: textContainer).height + (textView.textContainerInset.height * 2)
+            let visibleHeight = scrollView.contentSize.height
+            let shouldShowScroller = !text.isEmpty && usedHeight > visibleHeight + 1
+
+            scrollView.hasVerticalScroller = shouldShowScroller
+        }
+    }
+
+    private func findTextEditorScrollView(from view: NSView) -> NSScrollView? {
+        var currentView: NSView? = view
+
+        while let unwrappedCurrentView = currentView {
+            if let match = findTextEditorScrollView(in: unwrappedCurrentView) {
+                return match
+            }
+            currentView = unwrappedCurrentView.superview
+        }
+
+        return nil
+    }
+
+    private func findTextEditorScrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView,
+           scrollView.documentView is NSTextView {
+            return scrollView
+        }
+
+        for subview in view.subviews {
+            if let match = findTextEditorScrollView(in: subview) {
+                return match
+            }
+        }
+
+        return nil
     }
 }
 
