@@ -153,7 +153,7 @@ struct TaskPanelView: View {
 
             HStack(spacing: 8) {
                 Button(action: openSettingsWindow) {
-                    TaskHeaderIcon(symbol: "gearshape", isDarkTheme: isDarkTheme)
+                    TaskHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme)
                 }
                 .buttonStyle(.plain)
                 .taskCursorOnHover()
