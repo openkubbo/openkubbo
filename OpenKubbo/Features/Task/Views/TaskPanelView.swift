@@ -11,12 +11,15 @@ struct TaskPanelView: View {
 
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
+    @State private var isIdeaComposerPresented = false
+    @State private var ideaPrompt = ""
     @State private var editingTaskID: UUID?
     @State private var editingTaskTitle = ""
     @State private var draggedTaskID: UUID?
     @State private var lastDropTargetTaskID: UUID?
     @State private var pendingRemovedTask: TaskViewModel.RemovedTask?
     @State private var undoDeleteDismissTask: Task<Void, Never>?
+    @FocusState private var isIdeaPromptFocused: Bool
 
     private let panelWidth: CGFloat = 340
     private let panelHeight: CGFloat = 493
@@ -82,15 +85,22 @@ struct TaskPanelView: View {
 
             VStack(spacing: 14) {
                 header
-                newTaskInput
-                tasksList
-                footer
+                if isIdeaComposerPresented {
+                    ideaComposer
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else {
+                    newTaskInput
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    tasksList
+                    footer
+                }
             }
             .padding(.horizontal, 18)
             .padding(.top, 20)
             .padding(.bottom, 14)
             .padding(.horizontal, panelHorizontalInset)
             .padding(.vertical, panelVerticalInset)
+            .animation(.easeInOut(duration: 0.18), value: isIdeaComposerPresented)
             .overlay(alignment: .top) {
                 SettingsWindowDragRegion()
                     .frame(maxWidth: .infinity)
@@ -152,8 +162,17 @@ struct TaskPanelView: View {
             .background(SettingsWindowDragRegion())
 
             HStack(spacing: 8) {
-                TaskHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme)
-                    .taskCursorOnHover()
+                Button(action: toggleIdeaComposer) {
+                    TaskHeaderIcon(
+                        symbol: "lightbulb",
+                        isDarkTheme: isDarkTheme,
+                        isActive: isIdeaComposerPresented,
+                        accentColor: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
+                .help(isIdeaComposerPresented ? "Close idea composer" : "Open idea composer")
 
                 Button(action: toggleWindowPin) {
                     TaskHeaderIcon(
@@ -185,6 +204,90 @@ struct TaskPanelView: View {
                 .taskCursorOnHover()
             }
         }
+    }
+
+    private var ideaComposer: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Nova Ideia")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(mutedCardFillColor)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(cardStrokeColor, lineWidth: 1)
+                        )
+                )
+
+            HStack(alignment: .center, spacing: 12) {
+                Text("Descreva sua ideia")
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                Spacer(minLength: 0)
+
+                Button(action: closeIdeaComposer) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .taskCursorOnHover()
+                .help("Close idea composer")
+            }
+
+            ZStack(alignment: .topLeading) {
+                if ideaPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Ex: Planejar uma viagem para o Japão em Outubro...")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor.opacity(0.58))
+                        .padding(.top, 18)
+                        .padding(.horizontal, 18)
+                        .allowsHitTesting(false)
+                }
+
+                TextEditor(text: $ideaPrompt)
+                    .scrollContentBackground(.hidden)
+                    .focused($isIdeaPromptFocused)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundColor(primaryTextColor)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(isDarkTheme ? Color(red: 0.07, green: 0.08, blue: 0.13) : .white)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(isIdeaPromptFocused ? accentColor.opacity(0.68) : cardStrokeColor, lineWidth: 1)
+                    )
+            )
+
+            Button(action: {}) {
+                HStack(spacing: 10) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 16, weight: .semibold))
+
+                    Text("Gerar Cards Inteligentes")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(secondaryTextColor.opacity(0.88))
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(accentColor.opacity(isDarkTheme ? 0.66 : 0.22))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(true)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var newTaskInput: some View {
@@ -479,9 +582,33 @@ struct TaskPanelView: View {
         openWindow(id: "task-empty")
     }
 
+    private func toggleIdeaComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isIdeaComposerPresented.toggle()
+        }
+
+        if isIdeaComposerPresented {
+            DispatchQueue.main.async {
+                isIdeaPromptFocused = true
+            }
+        } else {
+            isIdeaPromptFocused = false
+        }
+    }
+
+    private func closeIdeaComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isIdeaComposerPresented = false
+        }
+        isIdeaPromptFocused = false
+    }
+
     private func resetTaskStateForClose() {
         cancelUndoDeleteTimer()
         pendingRemovedTask = nil
+        isIdeaComposerPresented = false
+        ideaPrompt = ""
+        isIdeaPromptFocused = false
         viewModel.clearAllTasks()
         draggedTaskID = nil
         lastDropTargetTaskID = nil
