@@ -211,7 +211,9 @@ struct TaskPanelView: View {
     }
 
     private var ideaComposer: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let ideaPromptInset: CGFloat = 18
+
+        return VStack(alignment: .leading, spacing: 14) {
             Text("New Idea")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(primaryTextColor)
@@ -249,8 +251,8 @@ struct TaskPanelView: View {
                     Text("Ex: Prepare the launch plan for the new onboarding flow...")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(secondaryTextColor.opacity(0.58))
-                        .padding(.top, 18)
-                        .padding(.horizontal, 18)
+                        .padding(.top, ideaPromptInset)
+                        .padding(.horizontal, ideaPromptInset)
                         .allowsHitTesting(false)
                 }
 
@@ -260,8 +262,8 @@ struct TaskPanelView: View {
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
                     .foregroundColor(primaryTextColor)
                     .background(IdeaPromptScrollViewConfigurator(text: ideaPrompt))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, ideaPromptInset)
+                    .padding(.vertical, ideaPromptInset)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .background(
@@ -830,6 +832,8 @@ private struct IdeaPromptScrollViewConfigurator: NSViewRepresentable {
                 return
             }
 
+            textView.textContainerInset = .zero
+            textContainer.lineFragmentPadding = 0
             layoutManager.ensureLayout(for: textContainer)
 
             let usedHeight = layoutManager.usedRect(for: textContainer).height + (textView.textContainerInset.height * 2)
