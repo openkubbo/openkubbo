@@ -294,6 +294,7 @@ struct TaskPanelView: View {
                 )
             }
             .buttonStyle(.plain)
+            .taskCursorOnHover(isEnabled: canGenerateIdeaCards)
             .disabled(!canGenerateIdeaCards)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -869,8 +870,12 @@ private struct IdeaPromptScrollViewConfigurator: NSViewRepresentable {
 }
 
 private struct TaskCursorOnHover: ViewModifier {
+    let isEnabled: Bool
+
     func body(content: Content) -> some View {
         content.onHover { isHovering in
+            guard isEnabled else { return }
+
             if isHovering {
                 NSCursor.pointingHand.push()
             } else {
@@ -881,8 +886,8 @@ private struct TaskCursorOnHover: ViewModifier {
 }
 
 private extension View {
-    func taskCursorOnHover() -> some View {
-        modifier(TaskCursorOnHover())
+    func taskCursorOnHover(isEnabled: Bool = true) -> some View {
+        modifier(TaskCursorOnHover(isEnabled: isEnabled))
     }
 }
 
