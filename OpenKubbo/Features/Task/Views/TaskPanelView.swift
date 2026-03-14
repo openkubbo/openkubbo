@@ -72,6 +72,10 @@ struct TaskPanelView: View {
         viewModel.completionRatio
     }
 
+    private var canGenerateIdeaCards: Bool {
+        !ideaPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
@@ -241,7 +245,7 @@ struct TaskPanelView: View {
             }
 
             ZStack(alignment: .topLeading) {
-                if ideaPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !canGenerateIdeaCards {
                     Text("Ex: Planejar uma viagem para o Japão em Outubro...")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(secondaryTextColor.opacity(0.58))
@@ -277,16 +281,20 @@ struct TaskPanelView: View {
                     Text("Gerar Cards Inteligentes")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                 }
-                .foregroundStyle(secondaryTextColor.opacity(0.88))
+                .foregroundStyle(canGenerateIdeaCards ? primaryTextColor : secondaryTextColor.opacity(0.88))
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(accentColor.opacity(isDarkTheme ? 0.66 : 0.22))
+                        .fill(
+                            canGenerateIdeaCards
+                                ? accentColor.opacity(isDarkTheme ? 0.92 : 0.82)
+                                : accentColor.opacity(isDarkTheme ? 0.66 : 0.22)
+                        )
                 )
             }
             .buttonStyle(.plain)
-            .disabled(true)
+            .disabled(!canGenerateIdeaCards)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
