@@ -212,7 +212,7 @@ struct TaskPanelView: View {
 
     private var ideaComposer: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Nova Ideia")
+            Text("New Idea")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(primaryTextColor)
                 .padding(.horizontal, 10)
@@ -227,7 +227,7 @@ struct TaskPanelView: View {
                 )
 
             HStack(alignment: .center, spacing: 12) {
-                Text("Descreva sua ideia")
+                Text("Describe your idea")
                     .font(.system(size: 19, weight: .bold, design: .rounded))
                     .foregroundStyle(primaryTextColor)
 
@@ -246,7 +246,7 @@ struct TaskPanelView: View {
 
             ZStack(alignment: .topLeading) {
                 if !canGenerateIdeaCards {
-                    Text("Ex: Planejar uma viagem para o Japão em Outubro...")
+                    Text("Ex: Prepare the launch plan for the new onboarding flow...")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(secondaryTextColor.opacity(0.58))
                         .padding(.top, 18)
@@ -278,7 +278,7 @@ struct TaskPanelView: View {
                     Image(systemName: "wand.and.stars")
                         .font(.system(size: 16, weight: .semibold))
 
-                    Text("Gerar Cards Inteligentes")
+                    Text("Generate Smart Cards")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                 }
                 .foregroundStyle(canGenerateIdeaCards ? primaryTextColor : secondaryTextColor.opacity(0.88))
