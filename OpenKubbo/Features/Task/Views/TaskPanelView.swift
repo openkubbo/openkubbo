@@ -261,7 +261,7 @@ struct TaskPanelView: View {
             }
             .background(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(isDarkTheme ? Color(red: 0.07, green: 0.08, blue: 0.13) : .white)
+                    .fill(cardFillColor)
                     .overlay(
                         RoundedRectangle(cornerRadius: 22, style: .continuous)
                             .stroke(isIdeaPromptFocused ? accentColor.opacity(0.68) : cardStrokeColor, lineWidth: 1)
