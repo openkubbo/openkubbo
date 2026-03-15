@@ -381,52 +381,37 @@ final class SettingsViewModel: ObservableObject {
         let resolvedNodeExecutablePath = resolvedNodeExecutablePath
         let requiresNodeRuntime = resolvedCodexExecutablePath?.lowercased().hasSuffix(".js") ?? false
 
+        guard hasCodexAPIKey else {
+            codexStatusMessage = "Save your OpenAI API key to enable task generation."
+            return
+        }
+
         if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
-            codexStatusMessage = "Codex launcher selected. Choose a Node.js runtime such as `/usr/local/bin/node`."
+            codexStatusMessage = "OpenAI API key saved. Codex CLI is optional here; if you want to test the local launcher, also choose `/usr/local/bin/node`."
             return
         }
 
         if let codexExecutablePath, !codexExecutablePath.isEmpty {
             if requiresNodeRuntime, let resolvedNodeExecutablePath {
-                if hasCodexAPIKey {
-                    codexStatusMessage = "Using selected Codex executable at \(codexExecutablePath) with Node.js at \(resolvedNodeExecutablePath)."
-                } else {
-                    codexStatusMessage = "Codex executable and Node.js runtime selected. Save an OpenAI API key to enable task generation."
-                }
+                codexStatusMessage = "OpenAI API key saved. Local Codex CLI is configured at \(codexExecutablePath) with Node.js at \(resolvedNodeExecutablePath)."
                 return
             }
 
-            if hasCodexAPIKey {
-                codexStatusMessage = "Using selected Codex executable at \(codexExecutablePath)."
-            } else {
-                codexStatusMessage = "Codex executable selected. Save an OpenAI API key to enable task generation."
-            }
+            codexStatusMessage = "OpenAI API key saved. Local Codex CLI is configured at \(codexExecutablePath)."
             return
         }
 
         if let executablePath = resolvedCodexExecutablePath {
             if requiresNodeRuntime, let resolvedNodeExecutablePath {
-                if hasCodexAPIKey {
-                    codexStatusMessage = "Codex CLI detected at \(executablePath) with Node.js at \(resolvedNodeExecutablePath)."
-                } else {
-                    codexStatusMessage = "Codex CLI and Node.js were detected. Save an OpenAI API key to enable task generation."
-                }
+                codexStatusMessage = "OpenAI API key saved. Task generation is ready. Local Codex CLI was also detected at \(executablePath) with Node.js at \(resolvedNodeExecutablePath)."
                 return
             }
 
-            if hasCodexAPIKey {
-                codexStatusMessage = "Codex CLI detected at \(executablePath)."
-            } else {
-                codexStatusMessage = "Codex CLI detected at \(executablePath). Save an OpenAI API key to enable task generation."
-            }
+            codexStatusMessage = "OpenAI API key saved. Task generation is ready. Local Codex CLI was also detected at \(executablePath)."
             return
         }
 
-        if hasCodexAPIKey {
-            codexStatusMessage = "OpenAI API key is saved, but Codex CLI was not found in a supported location."
-        } else {
-            codexStatusMessage = "Install Codex CLI and save an OpenAI API key to enable task generation."
-        }
+        codexStatusMessage = "OpenAI API key saved. Task generation is ready."
     }
 
     private func persist() {

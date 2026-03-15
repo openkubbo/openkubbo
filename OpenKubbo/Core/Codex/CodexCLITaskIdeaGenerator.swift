@@ -5,6 +5,71 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         let tasks: [String]
     }
 
+    private struct OpenAIResponsesRequest: Encodable {
+        struct TextConfiguration: Encodable {
+            struct OutputFormat: Encodable {
+                let type: String
+                let name: String
+                let strict: Bool
+                let schema: Schema
+            }
+
+            let format: OutputFormat
+        }
+
+        struct Schema: Encodable {
+            let type: String
+            let additionalProperties: Bool
+            let properties: [String: SchemaValue]
+            let required: [String]
+        }
+
+        struct SchemaValue: Encodable {
+            let type: String
+            let minItems: Int?
+            let maxItems: Int?
+            let items: SchemaItems?
+
+            init(type: String, minItems: Int? = nil, maxItems: Int? = nil, items: SchemaItems? = nil) {
+                self.type = type
+                self.minItems = minItems
+                self.maxItems = maxItems
+                self.items = items
+            }
+        }
+
+        struct SchemaItems: Encodable {
+            let type: String
+        }
+
+        let model: String
+        let input: String
+        let text: TextConfiguration
+    }
+
+    private struct OpenAIResponsesResponse: Decodable {
+        struct OutputItem: Decodable {
+            struct ContentItem: Decodable {
+                let type: String
+                let text: String?
+                let refusal: String?
+            }
+
+            let type: String
+            let content: [ContentItem]?
+        }
+
+        let output: [OutputItem]
+    }
+
+    private struct OpenAIErrorEnvelope: Decodable {
+        struct APIError: Decodable {
+            let message: String
+        }
+
+        let error: APIError
+    }
+
     private struct ExecutableDescriptor {
         let path: String
         let bookmarkData: Data?
@@ -21,6 +86,8 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
     private let nodeExecutableResolver: NodeRuntimeExecutableResolving
     private let fileManager: FileManager
     private let decoder: JSONDecoder
+    private let encoder: JSONEncoder
+    private let session: URLSession
 
     init(
         settingsRepository: SettingsRepository,
@@ -28,7 +95,9 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         executableResolver: CodexCLIExecutableResolving,
         nodeExecutableResolver: NodeRuntimeExecutableResolving,
         fileManager: FileManager = .default,
-        decoder: JSONDecoder = JSONDecoder()
+        decoder: JSONDecoder = JSONDecoder(),
+        encoder: JSONEncoder = JSONEncoder(),
+        session: URLSession = .shared
     ) {
         self.settingsRepository = settingsRepository
         self.apiKeyStore = apiKeyStore
@@ -36,6 +105,8 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         self.nodeExecutableResolver = nodeExecutableResolver
         self.fileManager = fileManager
         self.decoder = decoder
+        self.encoder = encoder
+        self.session = session
     }
 
     func generateTasks(from idea: String) async throws -> [String] {
@@ -48,91 +119,7 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
             throw CodexTaskIdeaError.missingAPIKey
         }
 
-        let executableDescriptor = try resolvedExecutableDescriptor()
-        let nodeExecutableDescriptor = try resolvedNodeExecutableDescriptor(for: executableDescriptor)
-        guard !executableDescriptor.path.isEmpty else {
-            throw CodexTaskIdeaError.executableNotFound
-        }
-
-        let codexHomeURL = try prepareCodexHomeDirectory()
-        let tempDirectoryURL = codexHomeURL.appendingPathComponent("temp", isDirectory: true)
-        try fileManager.createDirectory(at: tempDirectoryURL, withIntermediateDirectories: true, attributes: nil)
-
-        let requestID = UUID().uuidString.lowercased()
-        let schemaURL = tempDirectoryURL.appendingPathComponent("idea-schema-\(requestID).json")
-        let outputURL = tempDirectoryURL.appendingPathComponent("idea-output-\(requestID).json")
-        defer {
-            try? fileManager.removeItem(at: schemaURL)
-            try? fileManager.removeItem(at: outputURL)
-        }
-
-        try writeOutputSchema(to: schemaURL)
-
-        let environment = executionEnvironment(codexHomeURL: codexHomeURL, apiKey: apiKey)
-
-        let loginLaunchConfiguration = try launchConfiguration(
-            for: executableDescriptor,
-            nodeExecutableDescriptor: nodeExecutableDescriptor,
-            arguments: ["login", "--with-api-key"]
-        )
-
-        let loginResult = try await withSecurityScopedExecutableAccess(
-            descriptors: [executableDescriptor, nodeExecutableDescriptor].compactMap { $0 }
-        ) {
-            try await runProcess(
-                executablePath: loginLaunchConfiguration.executablePath,
-                arguments: loginLaunchConfiguration.arguments,
-                currentDirectoryURL: codexHomeURL,
-                environment: environment,
-                standardInputData: Data(apiKey.utf8)
-            )
-        }
-
-        guard loginResult.exitCode == 0 else {
-            throw CodexTaskIdeaError.commandFailed(
-                normalizedCommandOutput(stderr: loginResult.stderr, stdout: loginResult.stdout)
-            )
-        }
-
-        let generationLaunchConfiguration = try launchConfiguration(
-            for: executableDescriptor,
-            nodeExecutableDescriptor: nodeExecutableDescriptor,
-            arguments: executionArguments(
-                schemaURL: schemaURL,
-                outputURL: outputURL,
-                prompt: prompt(for: trimmedIdea),
-                model: normalizedModelIdentifier
-            )
-        )
-
-        let generationResult = try await withSecurityScopedExecutableAccess(
-            descriptors: [executableDescriptor, nodeExecutableDescriptor].compactMap { $0 }
-        ) {
-            try await runProcess(
-                executablePath: generationLaunchConfiguration.executablePath,
-                arguments: generationLaunchConfiguration.arguments,
-                currentDirectoryURL: codexHomeURL,
-                environment: environment
-            )
-        }
-
-        guard generationResult.exitCode == 0 else {
-            throw CodexTaskIdeaError.commandFailed(
-                normalizedCommandOutput(stderr: generationResult.stderr, stdout: generationResult.stdout)
-            )
-        }
-
-        guard fileManager.fileExists(atPath: outputURL.path) else {
-            throw CodexTaskIdeaError.invalidResponse
-        }
-
-        let responseData = try Data(contentsOf: outputURL)
-        let payload: TaskIdeaPayload
-        do {
-            payload = try decoder.decode(TaskIdeaPayload.self, from: responseData)
-        } catch {
-            throw CodexTaskIdeaError.invalidResponse
-        }
+        let payload = try await generateTasksViaOpenAIAPI(from: trimmedIdea, apiKey: apiKey)
         let titles = deduplicatedTaskTitles(from: payload.tasks)
 
         guard !titles.isEmpty else {
@@ -160,6 +147,98 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
             return nil
         default:
             return rawValue
+        }
+    }
+
+    private var fallbackAPIModelIdentifier: String {
+        normalizedModelIdentifier ?? "gpt-5"
+    }
+
+    private func generateTasksViaOpenAIAPI(from idea: String, apiKey: String) async throws -> TaskIdeaPayload {
+        let schema = OpenAIResponsesRequest.Schema(
+            type: "object",
+            additionalProperties: false,
+            properties: [
+                "tasks": OpenAIResponsesRequest.SchemaValue(
+                    type: "array",
+                    minItems: 2,
+                    maxItems: 8,
+                    items: OpenAIResponsesRequest.SchemaItems(type: "string")
+                )
+            ],
+            required: ["tasks"]
+        )
+
+        let requestBody = OpenAIResponsesRequest(
+            model: fallbackAPIModelIdentifier,
+            input: prompt(for: idea),
+            text: .init(
+                format: .init(
+                    type: "json_schema",
+                    name: "task_cards",
+                    strict: true,
+                    schema: schema
+                )
+            )
+        )
+
+        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 60
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try encoder.encode(requestBody)
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw CodexTaskIdeaError.commandFailed("OpenAI returned an invalid HTTP response.")
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let errorEnvelope = try? decoder.decode(OpenAIErrorEnvelope.self, from: data) {
+                throw CodexTaskIdeaError.commandFailed(errorEnvelope.error.message)
+            }
+
+            throw CodexTaskIdeaError.commandFailed(
+                "OpenAI request failed with status \(httpResponse.statusCode)."
+            )
+        }
+
+        let responsesPayload: OpenAIResponsesResponse
+        do {
+            responsesPayload = try decoder.decode(OpenAIResponsesResponse.self, from: data)
+        } catch {
+            throw CodexTaskIdeaError.invalidResponse
+        }
+
+        let outputText = responsesPayload.output
+            .flatMap { $0.content ?? [] }
+            .filter { $0.type == "output_text" }
+            .compactMap(\.text)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !outputText.isEmpty else {
+            if let refusalMessage = responsesPayload.output
+                .flatMap({ $0.content ?? [] })
+                .first(where: { $0.type == "refusal" })?
+                .refusal,
+               !refusalMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw CodexTaskIdeaError.commandFailed(refusalMessage)
+            }
+
+            throw CodexTaskIdeaError.invalidResponse
+        }
+
+        guard let responseData = outputText.data(using: .utf8) else {
+            throw CodexTaskIdeaError.invalidResponse
+        }
+
+        do {
+            return try decoder.decode(TaskIdeaPayload.self, from: responseData)
+        } catch {
+            throw CodexTaskIdeaError.invalidResponse
         }
     }
 

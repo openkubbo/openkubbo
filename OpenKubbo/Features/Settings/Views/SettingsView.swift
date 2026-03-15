@@ -536,7 +536,7 @@ struct SettingsView: View {
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Text("OpenKubbo runs your local Codex CLI in non-interactive mode and stores the OpenAI API key in Keychain.")
+                    Text("OpenKubbo stores your OpenAI API key in Keychain and generates tasks directly with the OpenAI API. Local Codex CLI support is optional.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
@@ -565,7 +565,7 @@ struct SettingsView: View {
                                     )
                             )
 
-                        Text("Current build auto-detects common locations such as `/usr/local/bin/codex` and `/opt/homebrew/bin/codex`.")
+                        Text("Optional developer override. The app auto-detects common Codex CLI locations such as `/usr/local/bin/codex` and `/opt/homebrew/bin/codex`.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(tertiaryTextColor)
 
@@ -611,7 +611,7 @@ struct SettingsView: View {
                                     )
                             )
 
-                        Text("Required when the selected Codex executable is a JavaScript launcher. For npm installs on this Mac, choose `/usr/local/bin/node`.")
+                        Text("Optional for local Codex CLI testing. If the selected Codex executable is a JavaScript launcher, choose `/usr/local/bin/node`.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(tertiaryTextColor)
 
