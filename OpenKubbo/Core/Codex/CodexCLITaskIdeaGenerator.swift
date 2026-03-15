@@ -115,6 +115,22 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
             throw CodexTaskIdeaError.invalidResponse
         }
 
+        if canUseLocalCodexCLI,
+           let executableDescriptor = try localCodexExecutableDescriptorIfAvailable() {
+            let nodeExecutableDescriptor = try resolvedNodeExecutableDescriptor(for: executableDescriptor)
+            let titles = try await generateTasksViaLocalCodexCLI(
+                from: trimmedIdea,
+                executableDescriptor: executableDescriptor,
+                nodeExecutableDescriptor: nodeExecutableDescriptor
+            )
+
+            guard !titles.isEmpty else {
+                throw CodexTaskIdeaError.invalidResponse
+            }
+
+            return titles
+        }
+
         guard let apiKey = normalizedAPIKey else {
             throw CodexTaskIdeaError.missingAPIKey
         }
@@ -127,6 +143,10 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         }
 
         return titles
+    }
+
+    private var canUseLocalCodexCLI: Bool {
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil
     }
 
     private var normalizedAPIKey: String? {
@@ -152,6 +172,82 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
 
     private var fallbackAPIModelIdentifier: String {
         normalizedModelIdentifier ?? "gpt-5"
+    }
+
+    private func localCodexExecutableDescriptorIfAvailable() throws -> ExecutableDescriptor? {
+        do {
+            return try resolvedExecutableDescriptor()
+        } catch CodexTaskIdeaError.executableNotFound {
+            return nil
+        } catch {
+            throw error
+        }
+    }
+
+    private func generateTasksViaLocalCodexCLI(
+        from idea: String,
+        executableDescriptor: ExecutableDescriptor,
+        nodeExecutableDescriptor: ExecutableDescriptor?
+    ) async throws -> [String] {
+        guard !executableDescriptor.path.isEmpty else {
+            throw CodexTaskIdeaError.executableNotFound
+        }
+
+        let workingDirectoryURL = try prepareCodexHomeDirectory()
+        let tempDirectoryURL = workingDirectoryURL.appendingPathComponent("temp", isDirectory: true)
+        try fileManager.createDirectory(at: tempDirectoryURL, withIntermediateDirectories: true, attributes: nil)
+
+        let requestID = UUID().uuidString.lowercased()
+        let schemaURL = tempDirectoryURL.appendingPathComponent("idea-schema-\(requestID).json")
+        let outputURL = tempDirectoryURL.appendingPathComponent("idea-output-\(requestID).json")
+        defer {
+            try? fileManager.removeItem(at: schemaURL)
+            try? fileManager.removeItem(at: outputURL)
+        }
+
+        try writeOutputSchema(to: schemaURL)
+
+        let generationLaunchConfiguration = try launchConfiguration(
+            for: executableDescriptor,
+            nodeExecutableDescriptor: nodeExecutableDescriptor,
+            arguments: executionArguments(
+                schemaURL: schemaURL,
+                outputURL: outputURL,
+                prompt: prompt(for: idea),
+                model: normalizedModelIdentifier
+            )
+        )
+
+        let generationResult = try await withSecurityScopedExecutableAccess(
+            descriptors: [executableDescriptor, nodeExecutableDescriptor].compactMap { $0 }
+        ) {
+            try await runProcess(
+                executablePath: generationLaunchConfiguration.executablePath,
+                arguments: generationLaunchConfiguration.arguments,
+                currentDirectoryURL: workingDirectoryURL,
+                environment: executionEnvironment()
+            )
+        }
+
+        guard generationResult.exitCode == 0 else {
+            throw CodexTaskIdeaError.commandFailed(
+                normalizedLocalCLIError(stderr: generationResult.stderr, stdout: generationResult.stdout)
+            )
+        }
+
+        guard fileManager.fileExists(atPath: outputURL.path) else {
+            throw CodexTaskIdeaError.invalidResponse
+        }
+
+        let responseData = try Data(contentsOf: outputURL)
+        let payload: TaskIdeaPayload
+        do {
+            payload = try decoder.decode(TaskIdeaPayload.self, from: responseData)
+        } catch {
+            throw CodexTaskIdeaError.invalidResponse
+        }
+
+        return deduplicatedTaskTitles(from: payload.tasks)
     }
 
     private func generateTasksViaOpenAIAPI(from idea: String, apiKey: String) async throws -> TaskIdeaPayload {
@@ -364,10 +460,8 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         return arguments
     }
 
-    private func executionEnvironment(codexHomeURL: URL, apiKey: String) -> [String: String] {
+    private func executionEnvironment() -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
-        environment["CODEX_HOME"] = codexHomeURL.path
-        environment["OPENAI_API_KEY"] = apiKey
         environment["PATH"] = effectiveExecutionPATH
         return environment
     }
@@ -472,6 +566,25 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         }
 
         return "Codex CLI failed to generate tasks."
+    }
+
+    private func normalizedLocalCLIError(stderr: String, stdout: String) -> String {
+        let message = normalizedCommandOutput(stderr: stderr, stdout: stdout)
+        let normalizedMessage = message.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+
+        if normalizedMessage.contains("login required") ||
+            normalizedMessage.contains("please login") ||
+            normalizedMessage.contains("please log in") ||
+            normalizedMessage.contains("not logged in") ||
+            normalizedMessage.contains("not authenticated") ||
+            normalizedMessage.contains("auth") {
+            return "Codex CLI is installed, but your local session is not authenticated. In Terminal, run `codex login` and choose ChatGPT."
+        }
+
+        return message
     }
 
     private func withSecurityScopedExecutableAccess<T>(

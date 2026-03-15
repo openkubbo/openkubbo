@@ -82,7 +82,7 @@ enum CodexTaskIdeaError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            return "Save your OpenAI API key in Settings > API Keys before generating tasks."
+            return "Install and sign in to Codex CLI, or save an OpenAI API key in Settings > API Keys."
         case .executableNotFound:
             return "Codex CLI was not found. Install `codex` first."
         case .nodeRuntimeNotFound:

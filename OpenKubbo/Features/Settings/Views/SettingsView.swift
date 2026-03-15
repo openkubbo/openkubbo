@@ -536,7 +536,7 @@ struct SettingsView: View {
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Text("OpenKubbo stores your OpenAI API key in Keychain and generates tasks directly with the OpenAI API. Local Codex CLI support is optional.")
+                    Text("OpenKubbo prefers your local Codex CLI session. Run `codex login` in Terminal and choose ChatGPT to use your Plus plan. The OpenAI API key below is only a fallback.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
@@ -565,7 +565,7 @@ struct SettingsView: View {
                                     )
                             )
 
-                        Text("Optional developer override. The app auto-detects common Codex CLI locations such as `/usr/local/bin/codex` and `/opt/homebrew/bin/codex`.")
+                        Text("OpenKubbo auto-detects common Codex CLI locations such as `/usr/local/bin/codex` and `/opt/homebrew/bin/codex`. Choose one manually only if detection is wrong.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(tertiaryTextColor)
 
@@ -611,7 +611,7 @@ struct SettingsView: View {
                                     )
                             )
 
-                        Text("Optional for local Codex CLI testing. If the selected Codex executable is a JavaScript launcher, choose `/usr/local/bin/node`.")
+                        Text("Required when the selected Codex executable is a JavaScript launcher. For npm installs on this Mac, choose `/usr/local/bin/node`.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(tertiaryTextColor)
 
@@ -637,7 +637,7 @@ struct SettingsView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("OpenAI API Key")
+                        Text("OpenAI API Key (fallback)")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
                             .foregroundStyle(primaryTextColor)
 
@@ -659,7 +659,7 @@ struct SettingsView: View {
                             }
                         }
 
-                        Text(viewModel.hasCodexAPIKey ? "Saved in Keychain." : "No API key saved yet.")
+                        Text(viewModel.hasCodexAPIKey ? "Saved in Keychain for API fallback." : "Optional. Only needed if you do not want to use Codex CLI.")
                             .font(.system(size: 12, weight: .medium, design: .rounded))
                             .foregroundStyle(secondaryTextColor)
                     }
@@ -700,15 +700,19 @@ struct SettingsView: View {
             sectionTitle("TASK FLOW")
             settingsCard {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("1. Open Kubbo Task and click the lightbulb icon.")
+                    Text("1. In Terminal, run `codex login` and choose ChatGPT.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    Text("2. Paste an idea or feature goal.")
+                    Text("2. Open Kubbo Task and click the lightbulb icon.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    Text("3. Click Generate Smart Cards to create small actionable tasks.")
+                    Text("3. Paste an idea or feature goal.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Text("4. Click Generate Smart Cards to create small actionable tasks.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
                 }

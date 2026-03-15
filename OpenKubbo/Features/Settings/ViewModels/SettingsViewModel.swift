@@ -172,6 +172,10 @@ final class SettingsViewModel: ObservableObject {
         nodeExecutablePath?.isEmpty == false && nodeExecutableBookmarkData != nil
     }
 
+    private var canLaunchLocalCodexCLI: Bool {
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil
+    }
+
     func selectTab(_ tab: SettingsTab) {
         selectedTab = tab
     }
@@ -381,37 +385,50 @@ final class SettingsViewModel: ObservableObject {
         let resolvedNodeExecutablePath = resolvedNodeExecutablePath
         let requiresNodeRuntime = resolvedCodexExecutablePath?.lowercased().hasSuffix(".js") ?? false
 
-        guard hasCodexAPIKey else {
-            codexStatusMessage = "Save your OpenAI API key to enable task generation."
-            return
-        }
-
-        if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
-            codexStatusMessage = "OpenAI API key saved. Codex CLI is optional here; if you want to test the local launcher, also choose `/usr/local/bin/node`."
-            return
-        }
-
         if let codexExecutablePath, !codexExecutablePath.isEmpty {
-            if requiresNodeRuntime, let resolvedNodeExecutablePath {
-                codexStatusMessage = "OpenAI API key saved. Local Codex CLI is configured at \(codexExecutablePath) with Node.js at \(resolvedNodeExecutablePath)."
+            if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
+                codexStatusMessage = "Codex CLI is configured at \(codexExecutablePath), but this launcher still needs Node.js. Choose `/usr/local/bin/node`."
                 return
             }
 
-            codexStatusMessage = "OpenAI API key saved. Local Codex CLI is configured at \(codexExecutablePath)."
+            if requiresNodeRuntime, let resolvedNodeExecutablePath {
+                codexStatusMessage = canLaunchLocalCodexCLI
+                    ? "Codex CLI is ready at \(codexExecutablePath) with Node.js at \(resolvedNodeExecutablePath). In Terminal, run `codex login` and choose ChatGPT."
+                    : "Codex CLI is configured at \(codexExecutablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
+                return
+            }
+
+            codexStatusMessage = canLaunchLocalCodexCLI
+                ? "Codex CLI is ready at \(codexExecutablePath). In Terminal, run `codex login` and choose ChatGPT."
+                : "Codex CLI is configured at \(codexExecutablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
             return
         }
 
         if let executablePath = resolvedCodexExecutablePath {
-            if requiresNodeRuntime, let resolvedNodeExecutablePath {
-                codexStatusMessage = "OpenAI API key saved. Task generation is ready. Local Codex CLI was also detected at \(executablePath) with Node.js at \(resolvedNodeExecutablePath)."
+            if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
+                codexStatusMessage = "Codex CLI was detected at \(executablePath), but this launcher still needs Node.js. Choose `/usr/local/bin/node`."
                 return
             }
 
-            codexStatusMessage = "OpenAI API key saved. Task generation is ready. Local Codex CLI was also detected at \(executablePath)."
+            if requiresNodeRuntime, let resolvedNodeExecutablePath {
+                codexStatusMessage = canLaunchLocalCodexCLI
+                    ? "Codex CLI was detected at \(executablePath) with Node.js at \(resolvedNodeExecutablePath). In Terminal, run `codex login` and choose ChatGPT."
+                    : "Codex CLI was detected at \(executablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
+                return
+            }
+
+            codexStatusMessage = canLaunchLocalCodexCLI
+                ? "Codex CLI was detected at \(executablePath). In Terminal, run `codex login` and choose ChatGPT."
+                : "Codex CLI was detected at \(executablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
             return
         }
 
-        codexStatusMessage = "OpenAI API key saved. Task generation is ready."
+        if hasCodexAPIKey {
+            codexStatusMessage = "No local Codex CLI was detected. Task generation will use the saved OpenAI API key."
+            return
+        }
+
+        codexStatusMessage = "Install Codex CLI and run `codex login`, or save an OpenAI API key as fallback."
     }
 
     private func persist() {

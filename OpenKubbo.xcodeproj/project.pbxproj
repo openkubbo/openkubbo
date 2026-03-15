@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		6D52F63F6B3341C5950A1E01 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 6D52F63F6B3341C5950A1E03 /* Sparkle */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		2B4B4CB92F4A93430040FB99 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -22,10 +26,6 @@
 			remoteInfo = OpenKubbo;
 		};
 /* End PBXContainerItemProxy section */
-
-/* Begin PBXBuildFile section */
-		6D52F63F6B3341C5950A1E01 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 6D52F63F6B3341C5950A1E03 /* Sparkle */; };
-/* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2B4B4CAB2F4A93420040FB99 /* OpenKubbo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OpenKubbo.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -277,17 +277,6 @@
 		};
 /* End PBXTargetDependency section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		6D52F63F6B3341C5950A1E02 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.8.1;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
 /* Begin XCBuildConfiguration section */
 		2B4B4CCA2F4A93430040FB99 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -413,13 +402,13 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_ENTITLEMENTS = OpenKubbo/OpenKubbo.entitlements;
+				CODE_SIGN_ENTITLEMENTS = OpenKubbo/OpenKubboDebug.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = XH7GJF24HY;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_INCOMING_NETWORK_CONNECTIONS = NO;
 				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
@@ -435,7 +424,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = OpenKubbo-Info.plist;
+				INFOPLIST_FILE = "OpenKubbo-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -490,7 +479,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = OpenKubbo-Info.plist;
+				INFOPLIST_FILE = "OpenKubbo-Info.plist";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -595,14 +584,6 @@
 		};
 /* End XCBuildConfiguration section */
 
-/* Begin XCSwiftPackageProductDependency section */
-		6D52F63F6B3341C5950A1E03 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 6D52F63F6B3341C5950A1E02 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
-		};
-/* End XCSwiftPackageProductDependency section */
-
 /* Begin XCConfigurationList section */
 		2B4B4CA62F4A93420040FB99 /* Build configuration list for PBXProject "OpenKubbo" */ = {
 			isa = XCConfigurationList;
@@ -641,6 +622,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		6D52F63F6B3341C5950A1E02 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.8.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		6D52F63F6B3341C5950A1E03 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6D52F63F6B3341C5950A1E02 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 2B4B4CA32F4A93420040FB99 /* Project object */;
 }
