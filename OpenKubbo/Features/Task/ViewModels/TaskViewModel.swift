@@ -10,11 +10,15 @@ final class TaskViewModel: ObservableObject {
 
     @Published var draftTaskTitle = ""
     @Published private(set) var tasks: [TaskItem]
+    @Published private(set) var isGeneratingIdeaTasks = false
+    @Published private(set) var ideaGenerationErrorMessage: String?
 
     private let repository: TaskRepository
+    private let ideaGenerator: TaskIdeaGenerating?
 
-    init(repository: TaskRepository) {
+    init(repository: TaskRepository, ideaGenerator: TaskIdeaGenerating? = nil) {
         self.repository = repository
+        self.ideaGenerator = ideaGenerator
         self.tasks = repository.load().tasks
     }
 
@@ -117,8 +121,51 @@ final class TaskViewModel: ObservableObject {
         persist()
     }
 
+    func clearIdeaGenerationError() {
+        ideaGenerationErrorMessage = nil
+    }
+
+    func generateTasks(from idea: String) async -> Bool {
+        let trimmedIdea = idea.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedIdea.isEmpty else {
+            ideaGenerationErrorMessage = "Describe an idea before generating tasks."
+            return false
+        }
+
+        guard let ideaGenerator else {
+            ideaGenerationErrorMessage = "Configure Codex CLI in Settings > API Keys first."
+            return false
+        }
+
+        guard !isGeneratingIdeaTasks else {
+            return false
+        }
+
+        ideaGenerationErrorMessage = nil
+        isGeneratingIdeaTasks = true
+
+        defer {
+            isGeneratingIdeaTasks = false
+        }
+
+        do {
+            let generatedTitles = try await ideaGenerator.generateTasks(from: trimmedIdea)
+            addGeneratedTasks(generatedTitles)
+            return true
+        } catch {
+            ideaGenerationErrorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     private var trimmedDraftTitle: String {
         draftTaskTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func addGeneratedTasks(_ titles: [String]) {
+        let newTasks = titles.map { TaskItem(title: $0, isDone: false) }
+        tasks.insert(contentsOf: newTasks, at: 0)
+        persist()
     }
 
     private func persist() {

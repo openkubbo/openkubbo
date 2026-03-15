@@ -33,7 +33,11 @@ final class SettingsViewModel: ObservableObject {
     @Published var syncProfilesEnabled: Bool { didSet { persist() } }
 
     @Published var githubClientID: String { didSet { persist() } }
+    @Published var codexAPIKeyInput = ""
     @Published private(set) var localRepositoriesRootPath: String?
+    @Published private(set) var hasCodexAPIKey = false
+    @Published private(set) var codexStatusMessage = ""
+    @Published private(set) var codexExecutablePath: String?
     @Published private(set) var isGitHubAuthenticating = false
     @Published private(set) var githubStatusMessage = "Not connected."
     @Published private(set) var githubErrorMessage: String?
@@ -41,9 +45,6 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var githubVerificationURL: URL?
     @Published private(set) var githubAuthenticatedUser: GitHubAuthenticatedUser?
 
-    let executablePath = "/usr/local/bin/codex"
-    let apiKeyMasked = "••••••••••••••••"
-    let models = ["Gemini 1.5 Pro", "GPT-4.1", "Claude 3.7 Sonnet"]
     let languages = ["English (US)", "Portuguese (Brazil)", "Spanish"]
     let shortcutGroups: [ShortcutGroup]
 
@@ -51,6 +52,9 @@ final class SettingsViewModel: ObservableObject {
     private let themeStore: AppThemeStore
     private let gitHubOAuthService: GitHubOAuthServicing
     private let gitHubTokenStore: GitHubTokenStoring
+    private let codexAPIKeyStore: CodexAPIKeyStoring
+    private let codexExecutableResolver: CodexCLIExecutableResolving
+    private var codexExecutableBookmarkData: Data?
     private var localRepositoriesRootBookmarkData: Data?
 
     private let gitHubOAuthScope = "repo read:org workflow gist"
@@ -60,12 +64,16 @@ final class SettingsViewModel: ObservableObject {
         themeStore: AppThemeStore,
         gitHubOAuthService: GitHubOAuthServicing,
         gitHubTokenStore: GitHubTokenStoring,
+        codexAPIKeyStore: CodexAPIKeyStoring,
+        codexExecutableResolver: CodexCLIExecutableResolving,
         shortcutGroups: [ShortcutGroup]? = nil
     ) {
         self.repository = repository
         self.themeStore = themeStore
         self.gitHubOAuthService = gitHubOAuthService
         self.gitHubTokenStore = gitHubTokenStore
+        self.codexAPIKeyStore = codexAPIKeyStore
+        self.codexExecutableResolver = codexExecutableResolver
         self.shortcutGroups = shortcutGroups ?? ShortcutGroup.defaults
 
         let snapshot = repository.load()
@@ -80,18 +88,21 @@ final class SettingsViewModel: ObservableObject {
 
         self.selectedAccentColorIndex = snapshot.selectedAccentColorIndex
 
-        self.selectedModel = snapshot.selectedModel
+        self.selectedModel = Self.normalizedCodexModelIdentifier(snapshot.selectedModel)
         self.temperature = snapshot.temperature
         self.terminalSuggestionsEnabled = snapshot.terminalSuggestionsEnabled
         self.automaticErrorAnalysis = snapshot.automaticErrorAnalysis
         self.syncProfilesEnabled = snapshot.syncProfilesEnabled
 
         self.githubClientID = snapshot.githubClientID ?? ""
+        self.codexExecutablePath = snapshot.codexExecutablePath
+        self.codexExecutableBookmarkData = snapshot.codexExecutableBookmarkData
         self.localRepositoriesRootPath = snapshot.localRepositoriesRootPath
         self.localRepositoriesRootBookmarkData = snapshot.localRepositoriesRootBookmarkData
 
         themeStore.apply(snapshot.selectedTheme)
         themeStore.applyAccentColorIndex(snapshot.selectedAccentColorIndex)
+        refreshCodexCLIState()
         restoreGitHubSessionIfPossible()
     }
 
@@ -134,6 +145,18 @@ final class SettingsViewModel: ObservableObject {
         localRepositoriesRootPath?.isEmpty == false && localRepositoriesRootBookmarkData != nil
     }
 
+    var resolvedCodexExecutablePath: String? {
+        codexExecutablePath ?? codexExecutableResolver.resolveExecutablePath()
+    }
+
+    var canSaveCodexAPIKey: Bool {
+        !codexAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasCodexExecutableOverride: Bool {
+        codexExecutablePath?.isEmpty == false && codexExecutableBookmarkData != nil
+    }
+
     func selectTab(_ tab: SettingsTab) {
         selectedTab = tab
     }
@@ -169,6 +192,43 @@ final class SettingsViewModel: ObservableObject {
         localRepositoriesRootPath = nil
         localRepositoriesRootBookmarkData = nil
         persist()
+    }
+
+    func setCodexExecutable(url: URL) throws {
+        let bookmarkData = try url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+
+        codexExecutablePath = url.path
+        codexExecutableBookmarkData = bookmarkData
+        persist()
+        refreshCodexCLIState(statusOverride: "Codex executable saved.")
+    }
+
+    func clearCodexExecutableOverride() {
+        codexExecutablePath = nil
+        codexExecutableBookmarkData = nil
+        persist()
+        refreshCodexCLIState()
+    }
+
+    func saveCodexAPIKey() {
+        let trimmedAPIKey = codexAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAPIKey.isEmpty else {
+            return
+        }
+
+        codexAPIKeyStore.save(apiKey: trimmedAPIKey)
+        codexAPIKeyInput = ""
+        refreshCodexCLIState(statusOverride: "OpenAI API key saved in Keychain.")
+    }
+
+    func clearCodexAPIKey() {
+        codexAPIKeyStore.clear()
+        codexAPIKeyInput = ""
+        refreshCodexCLIState(statusOverride: "OpenAI API key removed.")
     }
 
     func loginWithGitHub() async {
@@ -274,9 +334,43 @@ final class SettingsViewModel: ObservableObject {
         return error.localizedDescription
     }
 
+    private func refreshCodexCLIState(statusOverride: String? = nil) {
+        hasCodexAPIKey = !(codexAPIKeyStore.apiKey()?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+
+        if let statusOverride {
+            codexStatusMessage = statusOverride
+            return
+        }
+
+        if let codexExecutablePath, !codexExecutablePath.isEmpty {
+            if hasCodexAPIKey {
+                codexStatusMessage = "Using selected Codex executable at \(codexExecutablePath)."
+            } else {
+                codexStatusMessage = "Codex executable selected. Save an OpenAI API key to enable task generation."
+            }
+            return
+        }
+
+        if let executablePath = resolvedCodexExecutablePath {
+            if hasCodexAPIKey {
+                codexStatusMessage = "Codex CLI detected at \(executablePath)."
+            } else {
+                codexStatusMessage = "Codex CLI detected at \(executablePath). Save an OpenAI API key to enable task generation."
+            }
+            return
+        }
+
+        if hasCodexAPIKey {
+            codexStatusMessage = "OpenAI API key is saved, but Codex CLI was not found in a supported location."
+        } else {
+            codexStatusMessage = "Install Codex CLI and save an OpenAI API key to enable task generation."
+        }
+    }
+
     private func persist() {
         let normalizedGitHubClientID = githubClientID
             .trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedSelectedModel = Self.normalizedCodexModelIdentifier(selectedModel)
 
         repository.save(
             SettingsSnapshot(
@@ -287,15 +381,28 @@ final class SettingsViewModel: ObservableObject {
                 hapticsEnabled: hapticsEnabled,
                 appLanguage: appLanguage,
                 selectedAccentColorIndex: selectedAccentColorIndex,
-                selectedModel: selectedModel,
+                selectedModel: normalizedSelectedModel,
                 temperature: temperature,
                 terminalSuggestionsEnabled: terminalSuggestionsEnabled,
                 automaticErrorAnalysis: automaticErrorAnalysis,
                 syncProfilesEnabled: syncProfilesEnabled,
+                codexExecutablePath: codexExecutablePath,
+                codexExecutableBookmarkData: codexExecutableBookmarkData,
                 githubClientID: normalizedGitHubClientID.isEmpty ? nil : normalizedGitHubClientID,
                 localRepositoriesRootPath: localRepositoriesRootPath,
                 localRepositoriesRootBookmarkData: localRepositoriesRootBookmarkData
             )
         )
+    }
+
+    private static func normalizedCodexModelIdentifier(_ value: String) -> String {
+        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch trimmedValue {
+        case "Gemini 1.5 Pro", "Claude 3.7 Sonnet":
+            return ""
+        default:
+            return trimmedValue
+        }
     }
 }

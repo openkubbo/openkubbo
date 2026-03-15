@@ -125,6 +125,8 @@ struct SettingsSnapshot: Codable, Equatable {
     var automaticErrorAnalysis: Bool
     var syncProfilesEnabled: Bool
 
+    var codexExecutablePath: String? = nil
+    var codexExecutableBookmarkData: Data? = nil
     var githubClientID: String? = nil
     var localRepositoriesRootPath: String? = nil
     var localRepositoriesRootBookmarkData: Data? = nil
@@ -137,7 +139,7 @@ struct SettingsSnapshot: Codable, Equatable {
         hapticsEnabled: true,
         appLanguage: "English (US)",
         selectedAccentColorIndex: 0,
-        selectedModel: "Gemini 1.5 Pro",
+        selectedModel: "",
         temperature: 0.7,
         terminalSuggestionsEnabled: true,
         automaticErrorAnalysis: false,

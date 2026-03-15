@@ -7,6 +7,8 @@ struct SettingsView: View {
 
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
+    @State private var isCodexAPIKeyVisible = false
+    @State private var codexExecutableErrorMessage: String?
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
 
@@ -528,12 +530,138 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("CODEX CLI")
             settingsCard {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Under Construction")
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Generate task cards from a single idea")
                         .font(.system(size: 15, weight: .semibold, design: .rounded))
                         .foregroundStyle(primaryTextColor)
 
-                    Text("Codex CLI settings are under construction.")
+                    Text("OpenKubbo runs your local Codex CLI in non-interactive mode and stores the OpenAI API key in Keychain.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Rectangle()
+                        .fill(dividerColor)
+                        .frame(height: 1)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Executable")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+
+                        Text(viewModel.resolvedCodexExecutablePath ?? "Codex CLI not found.")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(primaryTextColor)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(githubInputFillColor)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(githubInputStrokeColor, lineWidth: 1)
+                                    )
+                            )
+
+                        Text("Current build auto-detects common locations such as `/usr/local/bin/codex` and `/opt/homebrew/bin/codex`.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(tertiaryTextColor)
+
+                        HStack(spacing: 10) {
+                            githubSecondaryButton("Choose Executable") {
+                                chooseCodexExecutable()
+                            }
+
+                            githubSecondaryButton(
+                                "Clear Executable",
+                                isDisabled: !viewModel.hasCodexExecutableOverride
+                            ) {
+                                codexExecutableErrorMessage = nil
+                                viewModel.clearCodexExecutableOverride()
+                            }
+                        }
+
+                        if let codexExecutableErrorMessage {
+                            Text(codexExecutableErrorMessage)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.red.opacity(0.85))
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("OpenAI API Key")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+
+                        codexAPIKeyInput
+
+                        HStack(spacing: 10) {
+                            githubSecondaryButton(
+                                "Save API Key",
+                                isDisabled: !viewModel.canSaveCodexAPIKey
+                            ) {
+                                viewModel.saveCodexAPIKey()
+                            }
+
+                            githubSecondaryButton(
+                                "Clear API Key",
+                                isDisabled: !viewModel.hasCodexAPIKey
+                            ) {
+                                viewModel.clearCodexAPIKey()
+                            }
+                        }
+
+                        Text(viewModel.hasCodexAPIKey ? "Saved in Keychain." : "No API key saved yet.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(secondaryTextColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Model override (optional)")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+
+                        TextField("Leave empty to use the Codex CLI default model", text: $viewModel.selectedModel)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+                            .padding(.horizontal, 10)
+                            .frame(height: 34)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .fill(githubInputFillColor)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .stroke(githubInputStrokeColor, lineWidth: 1)
+                                    )
+                            )
+
+                        Text("Example: `gpt-5.4` or another supported OpenAI model identifier.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(tertiaryTextColor)
+                    }
+
+                    Text(viewModel.codexStatusMessage)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+
+            sectionTitle("TASK FLOW")
+            settingsCard {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("1. Open Kubbo Task and click the lightbulb icon.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Text("2. Paste an idea or feature goal.")
+                        .font(.system(size: 13, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+
+                    Text("3. Click Generate Smart Cards to create small actionable tasks.")
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
                 }
@@ -874,6 +1002,25 @@ struct SettingsView: View {
         }
     }
 
+    private func chooseCodexExecutable() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Codex executable"
+        panel.message = "Choose the `codex` executable or launcher script."
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+
+        if panel.runModal() == .OK, let selectedURL = panel.url {
+            do {
+                try viewModel.setCodexExecutable(url: selectedURL)
+                codexExecutableErrorMessage = nil
+            } catch {
+                codexExecutableErrorMessage = "Unable to save the selected executable."
+            }
+        }
+    }
+
     private func performAppUpdateAction() {
         if appUpdateController.isConfigured {
             appUpdateController.checkForUpdates()
@@ -943,6 +1090,48 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
             .help(isGitHubClientIDVisible ? "Client ID is visible. Click to hide." : "Client ID is hidden. Click to show.")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(githubInputFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(githubInputStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
+    private var codexAPIKeyInput: some View {
+        HStack(spacing: 8) {
+            Group {
+                if isCodexAPIKeyVisible {
+                    TextField(
+                        viewModel.hasCodexAPIKey ? "Stored in Keychain. Enter a new key to replace it." : "OpenAI API key",
+                        text: $viewModel.codexAPIKeyInput
+                    )
+                } else {
+                    SecureField(
+                        viewModel.hasCodexAPIKey ? "Stored in Keychain. Enter a new key to replace it." : "OpenAI API key",
+                        text: $viewModel.codexAPIKeyInput
+                    )
+                }
+            }
+            .textFieldStyle(.plain)
+            .font(.system(size: 14, weight: .medium, design: .rounded))
+            .foregroundStyle(primaryTextColor)
+
+            Button {
+                isCodexAPIKeyVisible.toggle()
+            } label: {
+                Image(systemName: isCodexAPIKeyVisible ? "eye" : "eye.slash")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .help(isCodexAPIKeyVisible ? "API key is visible. Click to hide." : "API key is hidden. Click to show.")
         }
         .padding(.horizontal, 10)
         .frame(height: 34)

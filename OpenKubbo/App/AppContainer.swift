@@ -11,24 +11,36 @@ final class AppContainer: ObservableObject {
     let menuBarViewModel: MenuBarViewModel
     let repositoryViewModel: RepositoryViewModel
 
+    private let taskIdeaGenerator: TaskIdeaGenerating
+
     init() {
         self.appUpdateController = AppUpdateController()
 
         let themeStore = AppThemeStore()
-        let repository = UserDefaultsSettingsRepository()
+        let settingsRepository = UserDefaultsSettingsRepository()
         let gitHubOAuthService = GitHubOAuthService()
         let gitHubAPIService = GitHubAPIService()
         let gitHubTokenStore = KeychainGitHubTokenStore()
-        let localRootProvider = SettingsLocalRepositoryRootProvider(settingsRepository: repository)
+        let codexAPIKeyStore = KeychainCodexAPIKeyStore()
+        let codexExecutableResolver = DefaultCodexCLIExecutableResolver()
+        let localRootProvider = SettingsLocalRepositoryRootProvider(settingsRepository: settingsRepository)
         let localResolver = LocalRepositoryResolver()
         let localActionService = RepositoryLocalActionService()
+        let taskIdeaGenerator = CodexCLITaskIdeaGenerator(
+            settingsRepository: settingsRepository,
+            apiKeyStore: codexAPIKeyStore,
+            executableResolver: codexExecutableResolver
+        )
 
         self.themeStore = themeStore
+        self.taskIdeaGenerator = taskIdeaGenerator
         self.settingsViewModel = SettingsViewModel(
-            repository: repository,
+            repository: settingsRepository,
             themeStore: themeStore,
             gitHubOAuthService: gitHubOAuthService,
-            gitHubTokenStore: gitHubTokenStore
+            gitHubTokenStore: gitHubTokenStore,
+            codexAPIKeyStore: codexAPIKeyStore,
+            codexExecutableResolver: codexExecutableResolver
         )
         self.menuBarViewModel = MenuBarViewModel()
         self.repositoryViewModel = RepositoryViewModel(
@@ -40,6 +52,13 @@ final class AppContainer: ObservableObject {
             localResolver: localResolver,
             localActionService: localActionService,
             gitHubTokenStore: gitHubTokenStore
+        )
+    }
+
+    func makeTaskViewModel() -> TaskViewModel {
+        TaskViewModel(
+            repository: UserDefaultsTaskRepository(),
+            ideaGenerator: taskIdeaGenerator
         )
     }
 }

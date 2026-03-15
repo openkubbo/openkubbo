@@ -275,29 +275,44 @@ struct TaskPanelView: View {
                     )
             )
 
-            Button(action: {}) {
+            Button(action: generateIdeaCards) {
                 HStack(spacing: 10) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 16, weight: .semibold))
+                    if viewModel.isGeneratingIdeaTasks {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
 
-                    Text("Generate Smart Cards")
+                    Text(viewModel.isGeneratingIdeaTasks ? "Generating..." : "Generate Smart Cards")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                 }
-                .foregroundStyle(canGenerateIdeaCards ? primaryTextColor : secondaryTextColor.opacity(0.88))
+                .foregroundStyle(
+                    canGenerateIdeaCards && !viewModel.isGeneratingIdeaTasks
+                        ? primaryTextColor
+                        : secondaryTextColor.opacity(0.88)
+                )
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
-                            canGenerateIdeaCards
+                            canGenerateIdeaCards && !viewModel.isGeneratingIdeaTasks
                                 ? accentColor.opacity(isDarkTheme ? 0.92 : 0.82)
                                 : accentColor.opacity(isDarkTheme ? 0.66 : 0.22)
                         )
                 )
             }
             .buttonStyle(.plain)
-            .taskCursorOnHover(isEnabled: canGenerateIdeaCards)
-            .disabled(!canGenerateIdeaCards)
+            .taskCursorOnHover(isEnabled: canGenerateIdeaCards && !viewModel.isGeneratingIdeaTasks)
+            .disabled(!canGenerateIdeaCards || viewModel.isGeneratingIdeaTasks)
+
+            if let ideaGenerationErrorMessage = viewModel.ideaGenerationErrorMessage {
+                Text(ideaGenerationErrorMessage)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.red.opacity(0.85))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -599,6 +614,8 @@ struct TaskPanelView: View {
             isIdeaComposerPresented.toggle()
         }
 
+        viewModel.clearIdeaGenerationError()
+
         if isIdeaComposerPresented {
             DispatchQueue.main.async {
                 isIdeaPromptFocused = true
@@ -613,6 +630,7 @@ struct TaskPanelView: View {
             isIdeaComposerPresented = false
         }
         isIdeaPromptFocused = false
+        viewModel.clearIdeaGenerationError()
     }
 
     private func resetTaskStateForClose() {
@@ -621,10 +639,22 @@ struct TaskPanelView: View {
         isIdeaComposerPresented = false
         ideaPrompt = ""
         isIdeaPromptFocused = false
-        viewModel.clearAllTasks()
+        viewModel.clearIdeaGenerationError()
         draggedTaskID = nil
         lastDropTargetTaskID = nil
         cancelTaskEdition()
+    }
+
+    private func generateIdeaCards() {
+        Task { @MainActor in
+            let didGenerate = await viewModel.generateTasks(from: ideaPrompt)
+            guard didGenerate else {
+                return
+            }
+
+            ideaPrompt = ""
+            closeIdeaComposer()
+        }
     }
 
     private func undoDeletedTask() {

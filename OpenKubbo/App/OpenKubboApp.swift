@@ -43,7 +43,7 @@ struct OpenKubboApp: App {
         .windowStyle(.hiddenTitleBar)
 
         Window("Task", id: "task") {
-            EphemeralTaskPanelView()
+            TaskSceneView(makeViewModel: container.makeTaskViewModel)
                 .environmentObject(container.themeStore)
         }
         .defaultSize(width: 420, height: 546)
@@ -51,7 +51,7 @@ struct OpenKubboApp: App {
         .windowStyle(.hiddenTitleBar)
 
         WindowGroup("Task", id: "task-empty") {
-            EphemeralTaskPanelView()
+            TaskSceneView(makeViewModel: container.makeTaskViewModel)
                 .environmentObject(container.themeStore)
         }
         .defaultSize(width: 420, height: 546)
@@ -99,8 +99,12 @@ struct OpenKubboApp: App {
     }
 }
 
-private struct EphemeralTaskPanelView: View {
-    @StateObject private var viewModel = TaskViewModel(repository: InMemoryTaskRepository())
+private struct TaskSceneView: View {
+    @StateObject private var viewModel: TaskViewModel
+
+    init(makeViewModel: @escaping () -> TaskViewModel) {
+        _viewModel = StateObject(wrappedValue: makeViewModel())
+    }
 
     var body: some View {
         TaskPanelView(viewModel: viewModel)
