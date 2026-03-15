@@ -23,13 +23,15 @@ final class AppContainer: ObservableObject {
         let gitHubTokenStore = KeychainGitHubTokenStore()
         let codexAPIKeyStore = KeychainCodexAPIKeyStore()
         let codexExecutableResolver = DefaultCodexCLIExecutableResolver()
+        let nodeExecutableResolver = DefaultNodeRuntimeExecutableResolver()
         let localRootProvider = SettingsLocalRepositoryRootProvider(settingsRepository: settingsRepository)
         let localResolver = LocalRepositoryResolver()
         let localActionService = RepositoryLocalActionService()
         let taskIdeaGenerator = CodexCLITaskIdeaGenerator(
             settingsRepository: settingsRepository,
             apiKeyStore: codexAPIKeyStore,
-            executableResolver: codexExecutableResolver
+            executableResolver: codexExecutableResolver,
+            nodeExecutableResolver: nodeExecutableResolver
         )
 
         self.themeStore = themeStore
@@ -40,7 +42,8 @@ final class AppContainer: ObservableObject {
             gitHubOAuthService: gitHubOAuthService,
             gitHubTokenStore: gitHubTokenStore,
             codexAPIKeyStore: codexAPIKeyStore,
-            codexExecutableResolver: codexExecutableResolver
+            codexExecutableResolver: codexExecutableResolver,
+            nodeExecutableResolver: nodeExecutableResolver
         )
         self.menuBarViewModel = MenuBarViewModel()
         self.repositoryViewModel = RepositoryViewModel(

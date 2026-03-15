@@ -38,6 +38,7 @@ final class SettingsViewModel: ObservableObject {
     @Published private(set) var hasCodexAPIKey = false
     @Published private(set) var codexStatusMessage = ""
     @Published private(set) var codexExecutablePath: String?
+    @Published private(set) var nodeExecutablePath: String?
     @Published private(set) var isGitHubAuthenticating = false
     @Published private(set) var githubStatusMessage = "Not connected."
     @Published private(set) var githubErrorMessage: String?
@@ -54,7 +55,9 @@ final class SettingsViewModel: ObservableObject {
     private let gitHubTokenStore: GitHubTokenStoring
     private let codexAPIKeyStore: CodexAPIKeyStoring
     private let codexExecutableResolver: CodexCLIExecutableResolving
+    private let nodeExecutableResolver: NodeRuntimeExecutableResolving
     private var codexExecutableBookmarkData: Data?
+    private var nodeExecutableBookmarkData: Data?
     private var localRepositoriesRootBookmarkData: Data?
 
     private let gitHubOAuthScope = "repo read:org workflow gist"
@@ -66,6 +69,7 @@ final class SettingsViewModel: ObservableObject {
         gitHubTokenStore: GitHubTokenStoring,
         codexAPIKeyStore: CodexAPIKeyStoring,
         codexExecutableResolver: CodexCLIExecutableResolving,
+        nodeExecutableResolver: NodeRuntimeExecutableResolving,
         shortcutGroups: [ShortcutGroup]? = nil
     ) {
         self.repository = repository
@@ -74,6 +78,7 @@ final class SettingsViewModel: ObservableObject {
         self.gitHubTokenStore = gitHubTokenStore
         self.codexAPIKeyStore = codexAPIKeyStore
         self.codexExecutableResolver = codexExecutableResolver
+        self.nodeExecutableResolver = nodeExecutableResolver
         self.shortcutGroups = shortcutGroups ?? ShortcutGroup.defaults
 
         let snapshot = repository.load()
@@ -97,6 +102,8 @@ final class SettingsViewModel: ObservableObject {
         self.githubClientID = snapshot.githubClientID ?? ""
         self.codexExecutablePath = snapshot.codexExecutablePath
         self.codexExecutableBookmarkData = snapshot.codexExecutableBookmarkData
+        self.nodeExecutablePath = snapshot.nodeExecutablePath
+        self.nodeExecutableBookmarkData = snapshot.nodeExecutableBookmarkData
         self.localRepositoriesRootPath = snapshot.localRepositoriesRootPath
         self.localRepositoriesRootBookmarkData = snapshot.localRepositoriesRootBookmarkData
 
@@ -149,12 +156,20 @@ final class SettingsViewModel: ObservableObject {
         codexExecutablePath ?? codexExecutableResolver.resolveExecutablePath()
     }
 
+    var resolvedNodeExecutablePath: String? {
+        nodeExecutablePath ?? nodeExecutableResolver.resolveNodeExecutablePath()
+    }
+
     var canSaveCodexAPIKey: Bool {
         !codexAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var hasCodexExecutableOverride: Bool {
         codexExecutablePath?.isEmpty == false && codexExecutableBookmarkData != nil
+    }
+
+    var hasNodeExecutableOverride: Bool {
+        nodeExecutablePath?.isEmpty == false && nodeExecutableBookmarkData != nil
     }
 
     func selectTab(_ tab: SettingsTab) {
@@ -210,6 +225,26 @@ final class SettingsViewModel: ObservableObject {
     func clearCodexExecutableOverride() {
         codexExecutablePath = nil
         codexExecutableBookmarkData = nil
+        persist()
+        refreshCodexCLIState()
+    }
+
+    func setNodeExecutable(url: URL) throws {
+        let bookmarkData = try url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+
+        nodeExecutablePath = url.path
+        nodeExecutableBookmarkData = bookmarkData
+        persist()
+        refreshCodexCLIState(statusOverride: "Node.js runtime saved.")
+    }
+
+    func clearNodeExecutableOverride() {
+        nodeExecutablePath = nil
+        nodeExecutableBookmarkData = nil
         persist()
         refreshCodexCLIState()
     }
@@ -342,7 +377,25 @@ final class SettingsViewModel: ObservableObject {
             return
         }
 
+        let resolvedCodexExecutablePath = resolvedCodexExecutablePath
+        let resolvedNodeExecutablePath = resolvedNodeExecutablePath
+        let requiresNodeRuntime = resolvedCodexExecutablePath?.lowercased().hasSuffix(".js") ?? false
+
+        if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
+            codexStatusMessage = "Codex launcher selected. Choose a Node.js runtime such as `/usr/local/bin/node`."
+            return
+        }
+
         if let codexExecutablePath, !codexExecutablePath.isEmpty {
+            if requiresNodeRuntime, let resolvedNodeExecutablePath {
+                if hasCodexAPIKey {
+                    codexStatusMessage = "Using selected Codex executable at \(codexExecutablePath) with Node.js at \(resolvedNodeExecutablePath)."
+                } else {
+                    codexStatusMessage = "Codex executable and Node.js runtime selected. Save an OpenAI API key to enable task generation."
+                }
+                return
+            }
+
             if hasCodexAPIKey {
                 codexStatusMessage = "Using selected Codex executable at \(codexExecutablePath)."
             } else {
@@ -352,6 +405,15 @@ final class SettingsViewModel: ObservableObject {
         }
 
         if let executablePath = resolvedCodexExecutablePath {
+            if requiresNodeRuntime, let resolvedNodeExecutablePath {
+                if hasCodexAPIKey {
+                    codexStatusMessage = "Codex CLI detected at \(executablePath) with Node.js at \(resolvedNodeExecutablePath)."
+                } else {
+                    codexStatusMessage = "Codex CLI and Node.js were detected. Save an OpenAI API key to enable task generation."
+                }
+                return
+            }
+
             if hasCodexAPIKey {
                 codexStatusMessage = "Codex CLI detected at \(executablePath)."
             } else {
@@ -388,6 +450,8 @@ final class SettingsViewModel: ObservableObject {
                 syncProfilesEnabled: syncProfilesEnabled,
                 codexExecutablePath: codexExecutablePath,
                 codexExecutableBookmarkData: codexExecutableBookmarkData,
+                nodeExecutablePath: nodeExecutablePath,
+                nodeExecutableBookmarkData: nodeExecutableBookmarkData,
                 githubClientID: normalizedGitHubClientID.isEmpty ? nil : normalizedGitHubClientID,
                 localRepositoriesRootPath: localRepositoriesRootPath,
                 localRepositoriesRootBookmarkData: localRepositoriesRootBookmarkData

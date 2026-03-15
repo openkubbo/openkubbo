@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var isWindowPinned = true
     @State private var isCodexAPIKeyVisible = false
     @State private var codexExecutableErrorMessage: String?
+    @State private var nodeExecutableErrorMessage: String?
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
 
@@ -589,6 +590,52 @@ struct SettingsView: View {
                         }
                     }
 
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Node Runtime")
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(primaryTextColor)
+
+                        Text(viewModel.resolvedNodeExecutablePath ?? "Node.js runtime not selected.")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(primaryTextColor)
+                            .textSelection(.enabled)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(githubInputFillColor)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .stroke(githubInputStrokeColor, lineWidth: 1)
+                                    )
+                            )
+
+                        Text("Required when the selected Codex executable is a JavaScript launcher. For npm installs on this Mac, choose `/usr/local/bin/node`.")
+                            .font(.system(size: 12, weight: .medium, design: .rounded))
+                            .foregroundStyle(tertiaryTextColor)
+
+                        HStack(spacing: 10) {
+                            githubSecondaryButton("Choose Node Runtime") {
+                                chooseNodeExecutable()
+                            }
+
+                            githubSecondaryButton(
+                                "Clear Node Runtime",
+                                isDisabled: !viewModel.hasNodeExecutableOverride
+                            ) {
+                                nodeExecutableErrorMessage = nil
+                                viewModel.clearNodeExecutableOverride()
+                            }
+                        }
+
+                        if let nodeExecutableErrorMessage {
+                            Text(nodeExecutableErrorMessage)
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.red.opacity(0.85))
+                        }
+                    }
+
                     VStack(alignment: .leading, spacing: 8) {
                         Text("OpenAI API Key")
                             .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -1017,6 +1064,25 @@ struct SettingsView: View {
                 codexExecutableErrorMessage = nil
             } catch {
                 codexExecutableErrorMessage = "Unable to save the selected executable."
+            }
+        }
+    }
+
+    private func chooseNodeExecutable() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Node.js runtime"
+        panel.message = "Choose the `node` executable used to run Codex."
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+
+        if panel.runModal() == .OK, let selectedURL = panel.url {
+            do {
+                try viewModel.setNodeExecutable(url: selectedURL)
+                nodeExecutableErrorMessage = nil
+            } catch {
+                nodeExecutableErrorMessage = "Unable to save the selected Node.js runtime."
             }
         }
     }

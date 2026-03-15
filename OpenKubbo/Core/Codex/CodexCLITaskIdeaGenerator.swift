@@ -18,6 +18,7 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
     private let settingsRepository: SettingsRepository
     private let apiKeyStore: CodexAPIKeyStoring
     private let executableResolver: CodexCLIExecutableResolving
+    private let nodeExecutableResolver: NodeRuntimeExecutableResolving
     private let fileManager: FileManager
     private let decoder: JSONDecoder
 
@@ -25,12 +26,14 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         settingsRepository: SettingsRepository,
         apiKeyStore: CodexAPIKeyStoring,
         executableResolver: CodexCLIExecutableResolving,
+        nodeExecutableResolver: NodeRuntimeExecutableResolving,
         fileManager: FileManager = .default,
         decoder: JSONDecoder = JSONDecoder()
     ) {
         self.settingsRepository = settingsRepository
         self.apiKeyStore = apiKeyStore
         self.executableResolver = executableResolver
+        self.nodeExecutableResolver = nodeExecutableResolver
         self.fileManager = fileManager
         self.decoder = decoder
     }
@@ -46,6 +49,7 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         }
 
         let executableDescriptor = try resolvedExecutableDescriptor()
+        let nodeExecutableDescriptor = try resolvedNodeExecutableDescriptor(for: executableDescriptor)
         guard !executableDescriptor.path.isEmpty else {
             throw CodexTaskIdeaError.executableNotFound
         }
@@ -68,10 +72,13 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
 
         let loginLaunchConfiguration = try launchConfiguration(
             for: executableDescriptor,
+            nodeExecutableDescriptor: nodeExecutableDescriptor,
             arguments: ["login", "--with-api-key"]
         )
 
-        let loginResult = try await withSecurityScopedExecutableAccess(bookmarkData: executableDescriptor.bookmarkData) {
+        let loginResult = try await withSecurityScopedExecutableAccess(
+            descriptors: [executableDescriptor, nodeExecutableDescriptor].compactMap { $0 }
+        ) {
             try await runProcess(
                 executablePath: loginLaunchConfiguration.executablePath,
                 arguments: loginLaunchConfiguration.arguments,
@@ -89,6 +96,7 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
 
         let generationLaunchConfiguration = try launchConfiguration(
             for: executableDescriptor,
+            nodeExecutableDescriptor: nodeExecutableDescriptor,
             arguments: executionArguments(
                 schemaURL: schemaURL,
                 outputURL: outputURL,
@@ -97,7 +105,9 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
             )
         )
 
-        let generationResult = try await withSecurityScopedExecutableAccess(bookmarkData: executableDescriptor.bookmarkData) {
+        let generationResult = try await withSecurityScopedExecutableAccess(
+            descriptors: [executableDescriptor, nodeExecutableDescriptor].compactMap { $0 }
+        ) {
             try await runProcess(
                 executablePath: generationLaunchConfiguration.executablePath,
                 arguments: generationLaunchConfiguration.arguments,
@@ -171,17 +181,40 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         return ExecutableDescriptor(path: detectedPath, bookmarkData: nil)
     }
 
+    private func resolvedNodeExecutableDescriptor(
+        for codexExecutableDescriptor: ExecutableDescriptor
+    ) throws -> ExecutableDescriptor? {
+        guard requiresNodeRuntime(for: codexExecutableDescriptor) else {
+            return nil
+        }
+
+        let snapshot = settingsRepository.load()
+        if let manualPath = snapshot.nodeExecutablePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !manualPath.isEmpty {
+            return ExecutableDescriptor(
+                path: manualPath,
+                bookmarkData: snapshot.nodeExecutableBookmarkData
+            )
+        }
+
+        guard let detectedPath = nodeExecutableResolver.resolveNodeExecutablePath() else {
+            throw CodexTaskIdeaError.nodeRuntimeNotFound
+        }
+
+        return ExecutableDescriptor(path: detectedPath, bookmarkData: nil)
+    }
+
     private func launchConfiguration(
         for executableDescriptor: ExecutableDescriptor,
+        nodeExecutableDescriptor: ExecutableDescriptor?,
         arguments: [String]
     ) throws -> LaunchConfiguration {
-        let resolvedPath = URL(fileURLWithPath: executableDescriptor.path).resolvingSymlinksInPath().path
-        let launchPath = resolvedPath.isEmpty ? executableDescriptor.path : resolvedPath
+        let launchPath = preferredLaunchPath(for: executableDescriptor)
 
-        if launchPath.hasSuffix(".js") {
+        if let nodeExecutableDescriptor {
             return LaunchConfiguration(
-                executablePath: "/usr/bin/env",
-                arguments: ["node", launchPath] + arguments
+                executablePath: preferredLaunchPath(for: nodeExecutableDescriptor),
+                arguments: [launchPath] + arguments
             )
         }
 
@@ -314,6 +347,40 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
         return titles
     }
 
+    private func preferredLaunchPath(for executableDescriptor: ExecutableDescriptor) -> String {
+        guard executableDescriptor.bookmarkData == nil else {
+            return executableDescriptor.path
+        }
+
+        let resolvedPath = URL(fileURLWithPath: executableDescriptor.path).resolvingSymlinksInPath().path
+        return resolvedPath.isEmpty ? executableDescriptor.path : resolvedPath
+    }
+
+    private func requiresNodeRuntime(for executableDescriptor: ExecutableDescriptor) -> Bool {
+        let launchPath = preferredLaunchPath(for: executableDescriptor)
+        if launchPath.lowercased().hasSuffix(".js") {
+            return true
+        }
+
+        guard fileManager.fileExists(atPath: launchPath),
+              let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: launchPath)) else {
+            return false
+        }
+        defer {
+            try? handle.close()
+        }
+
+        guard let data = try? handle.read(upToCount: 160),
+              let shebang = String(data: data, encoding: .utf8)?
+                .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+                .first
+                .map(String.init) else {
+            return false
+        }
+
+        return shebang.hasPrefix("#!") && shebang.contains("node")
+    }
+
     private func normalizedCommandOutput(stderr: String, stdout: String) -> String {
         let trimmedError = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedError.isEmpty {
@@ -329,24 +396,30 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
     }
 
     private func withSecurityScopedExecutableAccess<T>(
-        bookmarkData: Data?,
+        descriptors: [ExecutableDescriptor],
         operation: () async throws -> T
     ) async throws -> T {
-        guard let bookmarkData else {
+        let bookmarkPayloads = descriptors.compactMap(\.bookmarkData)
+        guard !bookmarkPayloads.isEmpty else {
             return try await operation()
         }
 
-        var isStale = false
-        let executableURL = try URL(
-            resolvingBookmarkData: bookmarkData,
-            options: [.withSecurityScope],
-            relativeTo: nil,
-            bookmarkDataIsStale: &isStale
-        )
+        var securityScopedURLs: [URL] = []
+        for bookmarkData in bookmarkPayloads {
+            var isStale = false
+            let executableURL = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
 
-        let hasSecurityAccess = executableURL.startAccessingSecurityScopedResource()
+            if executableURL.startAccessingSecurityScopedResource() {
+                securityScopedURLs.append(executableURL)
+            }
+        }
         defer {
-            if hasSecurityAccess {
+            for executableURL in securityScopedURLs {
                 executableURL.stopAccessingSecurityScopedResource()
             }
         }

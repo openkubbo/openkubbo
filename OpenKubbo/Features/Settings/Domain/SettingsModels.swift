@@ -127,6 +127,8 @@ struct SettingsSnapshot: Codable, Equatable {
 
     var codexExecutablePath: String? = nil
     var codexExecutableBookmarkData: Data? = nil
+    var nodeExecutablePath: String? = nil
+    var nodeExecutableBookmarkData: Data? = nil
     var githubClientID: String? = nil
     var localRepositoriesRootPath: String? = nil
     var localRepositoriesRootBookmarkData: Data? = nil

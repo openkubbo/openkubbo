@@ -10,6 +10,10 @@ protocol CodexCLIExecutableResolving {
     func resolveExecutablePath() -> String?
 }
 
+protocol NodeRuntimeExecutableResolving {
+    func resolveNodeExecutablePath() -> String?
+}
+
 protocol TaskIdeaGenerating {
     func generateTasks(from idea: String) async throws -> [String]
 }
@@ -44,9 +48,34 @@ struct DefaultCodexCLIExecutableResolver: CodexCLIExecutableResolving {
     }
 }
 
+struct DefaultNodeRuntimeExecutableResolver: NodeRuntimeExecutableResolving {
+    private let fileManager: FileManager
+
+    init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+    }
+
+    func resolveNodeExecutablePath() -> String? {
+        let homePath = fileManager.homeDirectoryForCurrentUser.path
+
+        return resolveLaunchablePath(
+            candidatePaths: [
+                "/usr/local/bin/node",
+                "/opt/homebrew/bin/node",
+                "\(homePath)/.npm-global/bin/node",
+                "\(homePath)/.local/bin/node",
+                "\(homePath)/.nvm/versions/node/current/bin/node"
+            ],
+            shellCommand: "node",
+            fileManager: fileManager
+        )
+    }
+}
+
 enum CodexTaskIdeaError: LocalizedError {
     case missingAPIKey
     case executableNotFound
+    case nodeRuntimeNotFound
     case invalidResponse
     case commandFailed(String)
 
@@ -56,6 +85,8 @@ enum CodexTaskIdeaError: LocalizedError {
             return "Save your OpenAI API key in Settings > API Keys before generating tasks."
         case .executableNotFound:
             return "Codex CLI was not found. Install `codex` first."
+        case .nodeRuntimeNotFound:
+            return "Node.js runtime was not found. In Settings > API Keys, choose `/usr/local/bin/node`."
         case .invalidResponse:
             return "Codex CLI returned an invalid task list. Please try again."
         case .commandFailed(let message):
