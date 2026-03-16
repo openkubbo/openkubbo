@@ -2,6 +2,40 @@ import AppKit
 import SwiftUI
 
 struct SettingsView: View {
+    private enum AIProvider: String, CaseIterable, Identifiable {
+        case openAI = "OpenAI"
+        case anthropic = "Anthropic"
+        case google = "Google"
+
+        var id: String { rawValue }
+
+        var iconName: String {
+            switch self {
+            case .openAI:
+                return "sparkles.rectangle.stack"
+            case .anthropic:
+                return "text.book.closed"
+            case .google:
+                return "globe"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .openAI:
+                return "Codex CLI and API fallback"
+            case .anthropic:
+                return "Claude integration coming later"
+            case .google:
+                return "Gemini integration coming later"
+            }
+        }
+
+        var isEnabled: Bool {
+            self == .openAI
+        }
+    }
+
     @ObservedObject var viewModel: SettingsViewModel
     @ObservedObject var appUpdateController: AppUpdateController
 
@@ -12,6 +46,7 @@ struct SettingsView: View {
     @State private var nodeExecutableErrorMessage: String?
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
+    @State private var selectedAIProvider: AIProvider = .openAI
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
@@ -529,7 +564,26 @@ struct SettingsView: View {
 
     private var codexContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("CODEX CLI")
+            sectionTitle("AI PROVIDERS")
+            settingsCard {
+                VStack(spacing: 10) {
+                    ForEach(AIProvider.allCases) { provider in
+                        aiProviderButton(provider)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+            }
+
+            if selectedAIProvider == .openAI {
+                openAIProviderContent
+            }
+        }
+    }
+
+    private var openAIProviderContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("OPENAI")
             settingsCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Generate task cards from a single idea")
@@ -1217,6 +1271,70 @@ struct SettingsView: View {
 
     private var gitHubDeviceURLString: String {
         "https://github.com/login/device"
+    }
+
+    private func aiProviderButton(_ provider: AIProvider) -> some View {
+        Button {
+            guard provider.isEnabled else {
+                return
+            }
+
+            selectedAIProvider = provider
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(provider.isEnabled ? accentColor.opacity(isDarkTheme ? 0.22 : 0.16) : githubSecondaryButtonFillColor)
+                        .frame(width: 36, height: 36)
+
+                    Image(systemName: provider.iconName)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(provider.isEnabled ? accentColor : secondaryTextColor)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(provider.rawValue)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+
+                    Text(provider.subtitle)
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+
+                Spacer()
+
+                Text(provider.isEnabled ? (selectedAIProvider == provider ? "Selected" : "Available") : "Disabled")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(provider.isEnabled ? primaryTextColor : secondaryTextColor)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(provider.isEnabled ? accentColor.opacity(selectedAIProvider == provider ? 0.26 : 0.14) : githubSecondaryButtonFillColor)
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(provider.isEnabled ? accentColor.opacity(0.35) : githubSecondaryButtonStrokeColor, lineWidth: 1)
+                            )
+                    )
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(selectedAIProvider == provider ? selectedTabFillColor : githubSectionFillColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(
+                                selectedAIProvider == provider ? selectedTabStrokeColor : githubSectionStrokeColor,
+                                lineWidth: 1
+                            )
+                    )
+            )
+            .opacity(provider.isEnabled ? 1 : 0.58)
+        }
+        .buttonStyle(.plain)
+        .disabled(!provider.isEnabled)
     }
 
     private func rowValue(title: String, value: String) -> some View {
