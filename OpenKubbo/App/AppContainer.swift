@@ -60,7 +60,7 @@ final class AppContainer: ObservableObject {
 
     func makeTaskViewModel() -> TaskViewModel {
         TaskViewModel(
-            repository: UserDefaultsTaskRepository(),
+            repository: InMemoryTaskRepository(),
             ideaGenerator: taskIdeaGenerator
         )
     }

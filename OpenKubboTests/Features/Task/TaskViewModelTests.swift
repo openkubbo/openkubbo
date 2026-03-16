@@ -95,6 +95,26 @@ struct TaskViewModelTests {
 
         #expect(viewModel.tasks.first?.title == "A")
     }
+
+    @Test
+    func clearAllTasks_emptiesState_andPersistsSnapshot() {
+        let repository = InMemoryTaskRepository(
+            snapshot: TaskSnapshot(
+                tasks: [
+                    TaskItem(title: "A", isDone: false),
+                    TaskItem(title: "B", isDone: false)
+                ]
+            )
+        )
+        let viewModel = TaskViewModel(repository: repository)
+        viewModel.draftTaskTitle = "Draft"
+
+        viewModel.clearAllTasks()
+
+        #expect(viewModel.tasks.isEmpty)
+        #expect(viewModel.draftTaskTitle.isEmpty)
+        #expect(repository.savedSnapshots.last == .defaultValue)
+    }
 }
 
 private final class InMemoryTaskRepository: TaskRepository {

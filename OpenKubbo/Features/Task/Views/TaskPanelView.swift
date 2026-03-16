@@ -595,7 +595,6 @@ struct TaskPanelView: View {
     }
 
     private func closeWindow() {
-        resetTaskStateForClose()
         hostWindow?.close()
     }
 
@@ -634,6 +633,7 @@ struct TaskPanelView: View {
     }
 
     private func resetTaskStateForClose() {
+        viewModel.clearAllTasks()
         cancelUndoDeleteTimer()
         pendingRemovedTask = nil
         isIdeaComposerPresented = false
