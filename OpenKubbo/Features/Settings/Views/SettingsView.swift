@@ -46,7 +46,7 @@ struct SettingsView: View {
     @State private var nodeExecutableErrorMessage: String?
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
-    @State private var selectedAIProvider: AIProvider = .openAI
+    @State private var selectedAIProvider: AIProvider?
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
@@ -569,6 +569,15 @@ struct SettingsView: View {
                 VStack(spacing: 10) {
                     ForEach(AIProvider.allCases) { provider in
                         aiProviderButton(provider)
+
+                        if provider == .openAI, selectedAIProvider == .openAI {
+                            Rectangle()
+                                .fill(dividerColor)
+                                .frame(height: 1)
+                                .padding(.vertical, 2)
+
+                            openAIProviderDetails
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -576,181 +585,178 @@ struct SettingsView: View {
             }
 
             if selectedAIProvider == .openAI {
-                openAIProviderContent
+                taskFlowContent
             }
         }
     }
 
-    private var openAIProviderContent: some View {
+    private var openAIProviderDetails: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionTitle("OPENAI")
-            settingsCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Generate task cards from a single idea")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-                        .foregroundStyle(primaryTextColor)
+            Text("Generate task cards from a single idea")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
 
-                    Text("OpenKubbo prefers your local Codex CLI session. Run `codex login` in Terminal and choose ChatGPT to use your Plus plan. The OpenAI API key below is only a fallback.")
-                        .font(.system(size: 13, weight: .medium, design: .rounded))
-                        .foregroundStyle(secondaryTextColor)
+            Text("OpenKubbo prefers your local Codex CLI session. Run `codex login` in Terminal and choose ChatGPT to use your Plus plan. The OpenAI API key below is only a fallback.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
 
-                    Rectangle()
-                        .fill(dividerColor)
-                        .frame(height: 1)
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Executable")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Executable")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
 
-                        Text(viewModel.resolvedCodexExecutablePath ?? "Codex CLI not found.")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(primaryTextColor)
-                            .textSelection(.enabled)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
+                Text(viewModel.resolvedCodexExecutablePath ?? "Codex CLI not found.")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(primaryTextColor)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(githubInputFillColor)
+                            .overlay(
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(githubInputFillColor)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(githubInputStrokeColor, lineWidth: 1)
-                                    )
+                                    .stroke(githubInputStrokeColor, lineWidth: 1)
                             )
+                    )
 
-                        Text("OpenKubbo auto-detects common Codex CLI locations such as `/usr/local/bin/codex` and `/opt/homebrew/bin/codex`. Choose one manually only if detection is wrong.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(tertiaryTextColor)
+                Text("OpenKubbo auto-detects common Codex CLI locations such as `/usr/local/bin/codex` and `/opt/homebrew/bin/codex`. Choose one manually only if detection is wrong.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(tertiaryTextColor)
 
-                        HStack(spacing: 10) {
-                            githubSecondaryButton("Choose Executable") {
-                                chooseCodexExecutable()
-                            }
-
-                            githubSecondaryButton(
-                                "Clear Executable",
-                                isDisabled: !viewModel.hasCodexExecutableOverride
-                            ) {
-                                codexExecutableErrorMessage = nil
-                                viewModel.clearCodexExecutableOverride()
-                            }
-                        }
-
-                        if let codexExecutableErrorMessage {
-                            Text(codexExecutableErrorMessage)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color.red.opacity(0.85))
-                        }
+                HStack(spacing: 10) {
+                    githubSecondaryButton("Choose Executable") {
+                        chooseCodexExecutable()
                     }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Node Runtime")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
-
-                        Text(viewModel.resolvedNodeExecutablePath ?? "Node.js runtime not selected.")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(primaryTextColor)
-                            .textSelection(.enabled)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(githubInputFillColor)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .stroke(githubInputStrokeColor, lineWidth: 1)
-                                    )
-                            )
-
-                        Text("Required when the selected Codex executable is a JavaScript launcher. For npm installs on this Mac, choose `/usr/local/bin/node`.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(tertiaryTextColor)
-
-                        HStack(spacing: 10) {
-                            githubSecondaryButton("Choose Node Runtime") {
-                                chooseNodeExecutable()
-                            }
-
-                            githubSecondaryButton(
-                                "Clear Node Runtime",
-                                isDisabled: !viewModel.hasNodeExecutableOverride
-                            ) {
-                                nodeExecutableErrorMessage = nil
-                                viewModel.clearNodeExecutableOverride()
-                            }
-                        }
-
-                        if let nodeExecutableErrorMessage {
-                            Text(nodeExecutableErrorMessage)
-                                .font(.system(size: 12, weight: .semibold, design: .rounded))
-                                .foregroundStyle(Color.red.opacity(0.85))
-                        }
+                    githubSecondaryButton(
+                        "Clear Executable",
+                        isDisabled: !viewModel.hasCodexExecutableOverride
+                    ) {
+                        codexExecutableErrorMessage = nil
+                        viewModel.clearCodexExecutableOverride()
                     }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("OpenAI API Key (fallback)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
-
-                        codexAPIKeyInput
-
-                        HStack(spacing: 10) {
-                            githubSecondaryButton(
-                                "Save API Key",
-                                isDisabled: !viewModel.canSaveCodexAPIKey
-                            ) {
-                                viewModel.saveCodexAPIKey()
-                            }
-
-                            githubSecondaryButton(
-                                "Clear API Key",
-                                isDisabled: !viewModel.hasCodexAPIKey
-                            ) {
-                                viewModel.clearCodexAPIKey()
-                            }
-                        }
-
-                        Text(viewModel.hasCodexAPIKey ? "Saved in Keychain for API fallback." : "Optional. Only needed if you do not want to use Codex CLI.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(secondaryTextColor)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Model override (optional)")
-                            .font(.system(size: 12, weight: .semibold, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
-
-                        TextField("Leave empty to use the Codex CLI default model", text: $viewModel.selectedModel)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
-                            .foregroundStyle(primaryTextColor)
-                            .padding(.horizontal, 10)
-                            .frame(height: 34)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill(githubInputFillColor)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .stroke(githubInputStrokeColor, lineWidth: 1)
-                                    )
-                            )
-
-                        Text("Example: `gpt-5.4` or another supported OpenAI model identifier.")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(tertiaryTextColor)
-                    }
-
-                    Text(viewModel.codexStatusMessage)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(secondaryTextColor)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+
+                if let codexExecutableErrorMessage {
+                    Text(codexExecutableErrorMessage)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.red.opacity(0.85))
+                }
             }
 
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Node Runtime")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                Text(viewModel.resolvedNodeExecutablePath ?? "Node.js runtime not selected.")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(primaryTextColor)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(githubInputFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(githubInputStrokeColor, lineWidth: 1)
+                            )
+                    )
+
+                Text("Required when the selected Codex executable is a JavaScript launcher. For npm installs on this Mac, choose `/usr/local/bin/node`.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(tertiaryTextColor)
+
+                HStack(spacing: 10) {
+                    githubSecondaryButton("Choose Node Runtime") {
+                        chooseNodeExecutable()
+                    }
+
+                    githubSecondaryButton(
+                        "Clear Node Runtime",
+                        isDisabled: !viewModel.hasNodeExecutableOverride
+                    ) {
+                        nodeExecutableErrorMessage = nil
+                        viewModel.clearNodeExecutableOverride()
+                    }
+                }
+
+                if let nodeExecutableErrorMessage {
+                    Text(nodeExecutableErrorMessage)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.red.opacity(0.85))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("OpenAI API Key (fallback)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                codexAPIKeyInput
+
+                HStack(spacing: 10) {
+                    githubSecondaryButton(
+                        "Save API Key",
+                        isDisabled: !viewModel.canSaveCodexAPIKey
+                    ) {
+                        viewModel.saveCodexAPIKey()
+                    }
+
+                    githubSecondaryButton(
+                        "Clear API Key",
+                        isDisabled: !viewModel.hasCodexAPIKey
+                    ) {
+                        viewModel.clearCodexAPIKey()
+                    }
+                }
+
+                Text(viewModel.hasCodexAPIKey ? "Saved in Keychain for API fallback." : "Optional. Only needed if you do not want to use Codex CLI.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Model override (optional)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                TextField("Leave empty to use the Codex CLI default model", text: $viewModel.selectedModel)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(githubInputFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(githubInputStrokeColor, lineWidth: 1)
+                            )
+                    )
+
+                Text("Example: `gpt-5.4` or another supported OpenAI model identifier.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(tertiaryTextColor)
+            }
+
+            Text(viewModel.codexStatusMessage)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+        }
+    }
+
+    private var taskFlowContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
             sectionTitle("TASK FLOW")
             settingsCard {
                 VStack(alignment: .leading, spacing: 6) {
@@ -1279,7 +1285,7 @@ struct SettingsView: View {
                 return
             }
 
-            selectedAIProvider = provider
+            selectedAIProvider = selectedAIProvider == provider ? nil : provider
         } label: {
             HStack(spacing: 12) {
                 ZStack {
@@ -1304,7 +1310,7 @@ struct SettingsView: View {
 
                 Spacer()
 
-                Text(provider.isEnabled ? (selectedAIProvider == provider ? "Selected" : "Available") : "Disabled")
+                Text(provider.isEnabled ? (selectedAIProvider == provider ? "Open" : "Closed") : "Disabled")
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(provider.isEnabled ? primaryTextColor : secondaryTextColor)
                     .padding(.horizontal, 10)
@@ -1317,6 +1323,10 @@ struct SettingsView: View {
                                     .stroke(provider.isEnabled ? accentColor.opacity(0.35) : githubSecondaryButtonStrokeColor, lineWidth: 1)
                             )
                     )
+
+                Image(systemName: selectedAIProvider == provider ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(provider.isEnabled ? secondaryTextColor : tertiaryTextColor)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 12)
