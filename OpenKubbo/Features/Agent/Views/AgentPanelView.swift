@@ -6,6 +6,7 @@ struct AgentPanelView: View {
     @Environment(\.colorScheme) private var systemColorScheme
 
     @State private var hostWindow: NSWindow?
+    @State private var isWindowPinned = true
 
     private let panelWidth: CGFloat = 340
     private let panelHeight: CGFloat = 248
@@ -88,6 +89,7 @@ struct AgentPanelView: View {
                 if hostWindow !== window {
                     hostWindow = window
                 }
+                applyWindowLevel(window)
             }
         )
     }
@@ -102,18 +104,25 @@ struct AgentPanelView: View {
 
             Spacer(minLength: 10)
 
-            Button(action: closeWindow) {
-                ZStack {
-                    Circle()
-                        .fill(isDarkTheme ? .white.opacity(0.10) : .black.opacity(0.08))
-                        .frame(width: 42, height: 42)
-
-                    Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(primaryTextColor)
+            HStack(spacing: 8) {
+                Button(action: toggleWindowPin) {
+                    AgentHeaderIcon(
+                        symbol: isWindowPinned ? "pin.fill" : "pin",
+                        isDarkTheme: isDarkTheme,
+                        isActive: isWindowPinned,
+                        accentColor: accentColor
+                    )
                 }
+                .buttonStyle(.plain)
+                .agentCursorOnHover()
+                .help(isWindowPinned ? "Unpin window" : "Pin window on top")
+
+                Button(action: closeWindow) {
+                    AgentHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
+                }
+                .buttonStyle(.plain)
+                .agentCursorOnHover()
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -169,5 +178,80 @@ struct AgentPanelView: View {
 
     private func closeWindow() {
         hostWindow?.close()
+    }
+
+    private func toggleWindowPin() {
+        isWindowPinned.toggle()
+        applyWindowLevel(hostWindow)
+    }
+
+    private func applyWindowLevel(_ window: NSWindow?) {
+        guard let window else { return }
+        window.level = isWindowPinned ? .floating : .normal
+    }
+}
+
+private struct AgentHeaderIcon: View {
+    let symbol: String
+    var isDarkTheme: Bool = false
+    var isActive: Bool = false
+    var accentColor: Color = Color(red: 0.39, green: 0.44, blue: 0.99)
+    var symbolTint: Color?
+
+    private var symbolColor: Color {
+        if isActive {
+            return .white.opacity(0.94)
+        }
+        if let symbolTint {
+            return symbolTint.opacity(isDarkTheme ? 0.94 : 0.88)
+        }
+        return isDarkTheme ? .white.opacity(0.62) : .black.opacity(0.56)
+    }
+
+    private var fillColor: Color {
+        if isActive {
+            return accentColor
+        }
+        return isDarkTheme ? Color(red: 0.20, green: 0.20, blue: 0.21) : .white
+    }
+
+    private var strokeColor: Color {
+        if isActive {
+            return accentColor.opacity(isDarkTheme ? 0.72 : 0.64)
+        }
+        return isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.10)
+    }
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(symbolColor)
+            .frame(width: 36, height: 36)
+            .background(
+                Circle()
+                    .fill(fillColor)
+                    .overlay(
+                        Circle()
+                            .stroke(strokeColor, lineWidth: 1)
+                    )
+            )
+    }
+}
+
+private struct AgentCursorOnHover: ViewModifier {
+    func body(content: Content) -> some View {
+        content.onHover { isHovering in
+            if isHovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
+    }
+}
+
+private extension View {
+    func agentCursorOnHover() -> some View {
+        modifier(AgentCursorOnHover())
     }
 }
