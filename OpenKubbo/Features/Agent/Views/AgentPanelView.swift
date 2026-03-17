@@ -96,13 +96,16 @@ struct AgentPanelView: View {
 
     private var header: some View {
         HStack(alignment: .center) {
-            Text("Kubbo Agent")
-                .font(.system(size: 19, weight: .semibold, design: .rounded))
-                .foregroundStyle(primaryTextColor)
-                .frame(height: 36, alignment: .center)
-                .background(SettingsWindowDragRegion())
+            HStack(spacing: 0) {
+                Text("Kubbo Agent")
+                    .font(.system(size: 19, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .frame(height: 36, alignment: .center)
 
-            Spacer(minLength: 10)
+                Spacer()
+            }
+            .frame(height: 36)
+            .background(SettingsWindowDragRegion())
 
             HStack(spacing: 8) {
                 Button(action: toggleWindowPin) {
