@@ -50,6 +50,14 @@ struct OpenKubboApp: App {
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
 
+        Window("Agent", id: "agent") {
+            AgentPanelView()
+                .environmentObject(container.themeStore)
+        }
+        .defaultSize(width: 360, height: 272)
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
+
         WindowGroup("Task", id: "task-empty") {
             TaskSceneView(makeViewModel: container.makeTaskViewModel)
                 .environmentObject(container.themeStore)
@@ -75,7 +83,8 @@ struct OpenKubboApp: App {
         case .toggleThemeMode:
             container.settingsViewModel.cycleThemeMode()
         case .agent:
-            break
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "agent")
         }
     }
 
