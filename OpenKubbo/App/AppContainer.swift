@@ -22,16 +22,29 @@ final class AppContainer: ObservableObject {
         let gitHubAPIService = GitHubAPIService()
         let gitHubTokenStore = KeychainGitHubTokenStore()
         let codexAPIKeyStore = KeychainCodexAPIKeyStore()
+        let geminiAPIKeyStore = KeychainGeminiAPIKeyStore()
         let codexExecutableResolver = DefaultCodexCLIExecutableResolver()
+        let geminiExecutableResolver = DefaultGeminiCLIExecutableResolver()
         let nodeExecutableResolver = DefaultNodeRuntimeExecutableResolver()
         let localRootProvider = SettingsLocalRepositoryRootProvider(settingsRepository: settingsRepository)
         let localResolver = LocalRepositoryResolver()
         let localActionService = RepositoryLocalActionService()
-        let taskIdeaGenerator = CodexCLITaskIdeaGenerator(
+        let codexTaskIdeaGenerator = CodexCLITaskIdeaGenerator(
             settingsRepository: settingsRepository,
             apiKeyStore: codexAPIKeyStore,
             executableResolver: codexExecutableResolver,
             nodeExecutableResolver: nodeExecutableResolver
+        )
+        let geminiTaskIdeaGenerator = GeminiCLITaskIdeaGenerator(
+            settingsRepository: settingsRepository,
+            apiKeyStore: geminiAPIKeyStore,
+            executableResolver: geminiExecutableResolver,
+            nodeExecutableResolver: nodeExecutableResolver
+        )
+        let taskIdeaGenerator = ProviderBackedTaskIdeaGenerator(
+            settingsRepository: settingsRepository,
+            openAITaskIdeaGenerator: codexTaskIdeaGenerator,
+            googleTaskIdeaGenerator: geminiTaskIdeaGenerator
         )
 
         self.themeStore = themeStore
@@ -43,6 +56,8 @@ final class AppContainer: ObservableObject {
             gitHubTokenStore: gitHubTokenStore,
             codexAPIKeyStore: codexAPIKeyStore,
             codexExecutableResolver: codexExecutableResolver,
+            geminiAPIKeyStore: geminiAPIKeyStore,
+            geminiExecutableResolver: geminiExecutableResolver,
             nodeExecutableResolver: nodeExecutableResolver
         )
         self.menuBarViewModel = MenuBarViewModel()

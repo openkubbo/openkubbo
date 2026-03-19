@@ -23,16 +23,36 @@ struct SettingsView: View {
         var subtitle: String {
             switch self {
             case .openAI:
-                return "Codex CLI and API fallback"
+                return "Codex CLI and OpenAI fallback"
             case .anthropic:
                 return "Claude integration coming later"
             case .google:
-                return "Gemini integration coming later"
+                return "Gemini CLI with headless mode"
             }
         }
 
         var isEnabled: Bool {
-            self == .openAI
+            self != .anthropic
+        }
+
+        var taskGenerationProvider: TaskGenerationProvider? {
+            switch self {
+            case .openAI:
+                return .openAI
+            case .anthropic:
+                return nil
+            case .google:
+                return .google
+            }
+        }
+
+        init(taskGenerationProvider: TaskGenerationProvider) {
+            switch taskGenerationProvider {
+            case .openAI:
+                self = .openAI
+            case .google:
+                self = .google
+            }
         }
     }
 
@@ -42,11 +62,13 @@ struct SettingsView: View {
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
     @State private var isCodexAPIKeyVisible = false
+    @State private var isGeminiAPIKeyVisible = false
     @State private var codexExecutableErrorMessage: String?
+    @State private var geminiExecutableErrorMessage: String?
     @State private var nodeExecutableErrorMessage: String?
     @State private var isGitHubClientIDVisible = false
     @State private var localRepositoriesRootErrorMessage: String?
-    @State private var selectedAIProvider: AIProvider?
+    @State private var expandedAIProvider: AIProvider?
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
@@ -240,6 +262,11 @@ struct SettingsView: View {
                 applyWindowLevel(window)
             }
         )
+        .onAppear {
+            if expandedAIProvider == nil {
+                expandedAIProvider = AIProvider(taskGenerationProvider: viewModel.taskGenerationProvider)
+            }
+        }
     }
 
     private var settingsWorkspace: some View {
@@ -570,13 +597,13 @@ struct SettingsView: View {
                     ForEach(AIProvider.allCases) { provider in
                         aiProviderButton(provider)
 
-                        if provider == .openAI, selectedAIProvider == .openAI {
+                        if expandedAIProvider == provider {
                             Rectangle()
                                 .fill(dividerColor)
                                 .frame(height: 1)
                                 .padding(.vertical, 2)
 
-                            openAIProviderDetails
+                            providerDetails(provider)
                         }
                     }
                 }
@@ -584,9 +611,21 @@ struct SettingsView: View {
                 .padding(.vertical, 14)
             }
 
-            if selectedAIProvider == .openAI {
-                taskFlowContent
+            if let expandedAIProvider {
+                taskFlowContent(for: expandedAIProvider)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func providerDetails(_ provider: AIProvider) -> some View {
+        switch provider {
+        case .openAI:
+            openAIProviderDetails
+        case .google:
+            geminiProviderDetails
+        case .anthropic:
+            EmptyView()
         }
     }
 
@@ -650,51 +689,7 @@ struct SettingsView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Node Runtime")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(primaryTextColor)
-
-                Text(viewModel.resolvedNodeExecutablePath ?? "Node.js runtime not selected.")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(primaryTextColor)
-                    .textSelection(.enabled)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(githubInputFillColor)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .stroke(githubInputStrokeColor, lineWidth: 1)
-                            )
-                    )
-
-                Text("Required when the selected Codex executable is a JavaScript launcher. For npm installs on this Mac, choose `/usr/local/bin/node`.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(tertiaryTextColor)
-
-                HStack(spacing: 10) {
-                    githubSecondaryButton("Choose Node Runtime") {
-                        chooseNodeExecutable()
-                    }
-
-                    githubSecondaryButton(
-                        "Clear Node Runtime",
-                        isDisabled: !viewModel.hasNodeExecutableOverride
-                    ) {
-                        nodeExecutableErrorMessage = nil
-                        viewModel.clearNodeExecutableOverride()
-                    }
-                }
-
-                if let nodeExecutableErrorMessage {
-                    Text(nodeExecutableErrorMessage)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(Color.red.opacity(0.85))
-                }
-            }
+            nodeRuntimeSection(cliName: "Codex")
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("OpenAI API Key (fallback)")
@@ -755,30 +750,216 @@ struct SettingsView: View {
         }
     }
 
-    private var taskFlowContent: some View {
+    private var geminiProviderDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Generate task cards with Gemini CLI")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+
+            Text("OpenKubbo runs Gemini CLI in headless mode using `gemini -p`. Sign in once with `gemini` in Terminal, or save a Gemini API key below so Kubbo can pass `GEMINI_API_KEY` when launching the CLI.")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Executable")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                Text(viewModel.resolvedGeminiExecutablePath ?? "Gemini CLI not found.")
+                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(primaryTextColor)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(githubInputFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(githubInputStrokeColor, lineWidth: 1)
+                            )
+                    )
+
+                Text("OpenKubbo auto-detects common Gemini CLI locations such as `/usr/local/bin/gemini` and `/opt/homebrew/bin/gemini`. Choose one manually only if detection is wrong.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(tertiaryTextColor)
+
+                HStack(spacing: 10) {
+                    githubSecondaryButton("Choose Executable") {
+                        chooseGeminiExecutable()
+                    }
+
+                    githubSecondaryButton(
+                        "Clear Executable",
+                        isDisabled: !viewModel.hasGeminiExecutableOverride
+                    ) {
+                        geminiExecutableErrorMessage = nil
+                        viewModel.clearGeminiExecutableOverride()
+                    }
+                }
+
+                if let geminiExecutableErrorMessage {
+                    Text(geminiExecutableErrorMessage)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color.red.opacity(0.85))
+                }
+            }
+
+            nodeRuntimeSection(cliName: "Gemini")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Gemini API Key (optional)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                geminiAPIKeyInput
+
+                HStack(spacing: 10) {
+                    githubSecondaryButton(
+                        "Save API Key",
+                        isDisabled: !viewModel.canSaveGeminiAPIKey
+                    ) {
+                        viewModel.saveGeminiAPIKey()
+                    }
+
+                    githubSecondaryButton(
+                        "Clear API Key",
+                        isDisabled: !viewModel.hasGeminiAPIKey
+                    ) {
+                        viewModel.clearGeminiAPIKey()
+                    }
+                }
+
+                Text(viewModel.hasGeminiAPIKey ? "Saved in Keychain and injected as `GEMINI_API_KEY` when Kubbo launches Gemini CLI." : "Optional. Useful when you want Kubbo to authenticate Gemini CLI in headless mode.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Model override (optional)")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                TextField("Leave empty to use the Gemini CLI default model", text: $viewModel.geminiSelectedModel)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(githubInputFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(githubInputStrokeColor, lineWidth: 1)
+                            )
+                    )
+
+                Text("Example: `gemini-2.5-pro` or `gemini-2.5-flash`.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(tertiaryTextColor)
+            }
+
+            Text(viewModel.geminiStatusMessage)
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+        }
+    }
+
+    private func nodeRuntimeSection(cliName: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Node Runtime")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+
+            Text(viewModel.resolvedNodeExecutablePath ?? "Node.js runtime not selected.")
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(primaryTextColor)
+                .textSelection(.enabled)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(githubInputFillColor)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(githubInputStrokeColor, lineWidth: 1)
+                        )
+                )
+
+            Text("Required when the selected \(cliName) executable is a JavaScript launcher. For npm installs on this Mac, choose `/usr/local/bin/node`.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(tertiaryTextColor)
+
+            HStack(spacing: 10) {
+                githubSecondaryButton("Choose Node Runtime") {
+                    chooseNodeExecutable()
+                }
+
+                githubSecondaryButton(
+                    "Clear Node Runtime",
+                    isDisabled: !viewModel.hasNodeExecutableOverride
+                ) {
+                    nodeExecutableErrorMessage = nil
+                    viewModel.clearNodeExecutableOverride()
+                }
+            }
+
+            if let nodeExecutableErrorMessage {
+                Text(nodeExecutableErrorMessage)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.red.opacity(0.85))
+            }
+        }
+    }
+
+    private func taskFlowContent(for provider: AIProvider) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionTitle("TASK FLOW")
             settingsCard {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("1. In Terminal, run `codex login` and choose ChatGPT.")
+                    Text(taskFlowStepText(for: provider, step: 1))
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    Text("2. Open Kubbo Task and click the lightbulb icon.")
+                    Text(taskFlowStepText(for: provider, step: 2))
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    Text("3. Paste an idea or feature goal.")
+                    Text(taskFlowStepText(for: provider, step: 3))
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
 
-                    Text("4. Click Generate Smart Cards to create small actionable tasks.")
+                    Text(taskFlowStepText(for: provider, step: 4))
                         .font(.system(size: 13, weight: .medium, design: .rounded))
                         .foregroundStyle(secondaryTextColor)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
+        }
+    }
+
+    private func taskFlowStepText(for provider: AIProvider, step: Int) -> String {
+        switch (provider, step) {
+        case (.openAI, 1):
+            return "1. In Terminal, run `codex login` and choose ChatGPT."
+        case (.google, 1):
+            return "1. In Terminal, run `gemini` once and choose Sign in with Google, or save a Gemini API key above."
+        case (_, 2):
+            return "2. Open Kubbo Task and click the lightbulb icon."
+        case (_, 3):
+            return "3. Paste an idea or feature goal."
+        case (_, 4):
+            return "4. Click Generate Smart Cards to create small actionable tasks."
+        default:
+            return ""
         }
     }
 
@@ -1132,10 +1313,29 @@ struct SettingsView: View {
         }
     }
 
+    private func chooseGeminiExecutable() {
+        let panel = NSOpenPanel()
+        panel.title = "Select Gemini executable"
+        panel.message = "Choose the `gemini` executable or launcher script."
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.canCreateDirectories = false
+        panel.allowsMultipleSelection = false
+
+        if panel.runModal() == .OK, let selectedURL = panel.url {
+            do {
+                try viewModel.setGeminiExecutable(url: selectedURL)
+                geminiExecutableErrorMessage = nil
+            } catch {
+                geminiExecutableErrorMessage = "Unable to save the selected executable."
+            }
+        }
+    }
+
     private func chooseNodeExecutable() {
         let panel = NSOpenPanel()
         panel.title = "Select Node.js runtime"
-        panel.message = "Choose the `node` executable used to run Codex."
+        panel.message = "Choose the `node` executable used to run Codex or Gemini."
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.canCreateDirectories = false
@@ -1271,6 +1471,48 @@ struct SettingsView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(githubInputStrokeColor, lineWidth: 1)
+            )
+        )
+    }
+
+    private var geminiAPIKeyInput: some View {
+        HStack(spacing: 8) {
+            Group {
+                if isGeminiAPIKeyVisible {
+                    TextField(
+                        viewModel.hasGeminiAPIKey ? "Stored in Keychain. Enter a new key to replace it." : "Gemini API key",
+                        text: $viewModel.geminiAPIKeyInput
+                    )
+                } else {
+                    SecureField(
+                        viewModel.hasGeminiAPIKey ? "Stored in Keychain. Enter a new key to replace it." : "Gemini API key",
+                        text: $viewModel.geminiAPIKeyInput
+                    )
+                }
+            }
+            .textFieldStyle(.plain)
+            .font(.system(size: 14, weight: .medium, design: .rounded))
+            .foregroundStyle(primaryTextColor)
+
+            Button {
+                isGeminiAPIKeyVisible.toggle()
+            } label: {
+                Image(systemName: isGeminiAPIKeyVisible ? "eye" : "eye.slash")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .help(isGeminiAPIKeyVisible ? "API key is visible. Click to hide." : "API key is hidden. Click to show.")
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(githubInputFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(githubInputStrokeColor, lineWidth: 1)
                 )
         )
     }
@@ -1285,7 +1527,11 @@ struct SettingsView: View {
                 return
             }
 
-            selectedAIProvider = selectedAIProvider == provider ? nil : provider
+            if let taskGenerationProvider = provider.taskGenerationProvider {
+                viewModel.taskGenerationProvider = taskGenerationProvider
+            }
+
+            expandedAIProvider = expandedAIProvider == provider ? nil : provider
         } label: {
             HStack(spacing: 12) {
                 ZStack {
@@ -1310,21 +1556,21 @@ struct SettingsView: View {
 
                 Spacer()
 
-                Text(provider.isEnabled ? (selectedAIProvider == provider ? "Open" : "Closed") : "Disabled")
+                Text(providerBadgeLabel(for: provider))
                     .font(.system(size: 11, weight: .semibold, design: .rounded))
                     .foregroundStyle(provider.isEnabled ? primaryTextColor : secondaryTextColor)
                     .padding(.horizontal, 10)
                     .frame(height: 24)
                     .background(
                         Capsule(style: .continuous)
-                            .fill(provider.isEnabled ? accentColor.opacity(selectedAIProvider == provider ? 0.26 : 0.14) : githubSecondaryButtonFillColor)
+                            .fill(provider.isEnabled ? accentColor.opacity(expandedAIProvider == provider ? 0.26 : 0.14) : githubSecondaryButtonFillColor)
                             .overlay(
                                 Capsule(style: .continuous)
                                     .stroke(provider.isEnabled ? accentColor.opacity(0.35) : githubSecondaryButtonStrokeColor, lineWidth: 1)
                             )
                     )
 
-                Image(systemName: selectedAIProvider == provider ? "chevron.up" : "chevron.down")
+                Image(systemName: expandedAIProvider == provider ? "chevron.up" : "chevron.down")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(provider.isEnabled ? secondaryTextColor : tertiaryTextColor)
             }
@@ -1332,11 +1578,11 @@ struct SettingsView: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(selectedAIProvider == provider ? selectedTabFillColor : githubSectionFillColor)
+                    .fill(expandedAIProvider == provider ? selectedTabFillColor : githubSectionFillColor)
                     .overlay(
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .stroke(
-                                selectedAIProvider == provider ? selectedTabStrokeColor : githubSectionStrokeColor,
+                                expandedAIProvider == provider ? selectedTabStrokeColor : githubSectionStrokeColor,
                                 lineWidth: 1
                             )
                     )
@@ -1345,6 +1591,25 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
         .disabled(!provider.isEnabled)
+    }
+
+    private func providerBadgeLabel(for provider: AIProvider) -> String {
+        guard provider.isEnabled else {
+            return "Disabled"
+        }
+
+        let isSelected = provider.taskGenerationProvider == viewModel.taskGenerationProvider
+        let isExpanded = expandedAIProvider == provider
+
+        if isSelected && isExpanded {
+            return "Active"
+        }
+
+        if isSelected {
+            return "Selected"
+        }
+
+        return isExpanded ? "Open" : "Choose"
     }
 
     private func rowValue(title: String, value: String) -> some View {

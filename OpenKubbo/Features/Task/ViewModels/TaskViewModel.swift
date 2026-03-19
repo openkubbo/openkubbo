@@ -133,7 +133,7 @@ final class TaskViewModel: ObservableObject {
         }
 
         guard let ideaGenerator else {
-            ideaGenerationErrorMessage = "Configure Codex CLI in Settings > API Keys first."
+            ideaGenerationErrorMessage = "Configure an AI provider in Settings > API Keys first."
             return false
         }
 

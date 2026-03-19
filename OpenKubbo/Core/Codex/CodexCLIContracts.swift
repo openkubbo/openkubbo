@@ -6,7 +6,17 @@ protocol CodexAPIKeyStoring {
     func clear()
 }
 
+protocol GeminiAPIKeyStoring {
+    func apiKey() -> String?
+    func save(apiKey: String)
+    func clear()
+}
+
 protocol CodexCLIExecutableResolving {
+    func resolveExecutablePath() -> String?
+}
+
+protocol GeminiCLIExecutableResolving {
     func resolveExecutablePath() -> String?
 }
 
@@ -69,6 +79,36 @@ struct DefaultNodeRuntimeExecutableResolver: NodeRuntimeExecutableResolving {
             shellCommand: "node",
             fileManager: fileManager
         )
+    }
+}
+
+struct DefaultGeminiCLIExecutableResolver: GeminiCLIExecutableResolving {
+    private let fileManager: FileManager
+
+    init(fileManager: FileManager = .default) {
+        self.fileManager = fileManager
+    }
+
+    func resolveExecutablePath() -> String? {
+        resolveLaunchablePath(
+            candidatePaths: candidateExecutablePaths,
+            shellCommand: "gemini",
+            fileManager: fileManager
+        )
+    }
+
+    private var candidateExecutablePaths: [String] {
+        let homePath = fileManager.homeDirectoryForCurrentUser.path
+
+        return [
+            "/usr/local/bin/gemini",
+            "/opt/homebrew/bin/gemini",
+            "/usr/local/lib/node_modules/@google/gemini-cli/bin/gemini.js",
+            "/opt/homebrew/lib/node_modules/@google/gemini-cli/bin/gemini.js",
+            "\(homePath)/.npm-global/bin/gemini",
+            "\(homePath)/.local/bin/gemini",
+            "\(homePath)/.nvm/versions/node/current/bin/gemini"
+        ]
     }
 }
 

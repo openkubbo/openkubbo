@@ -26,7 +26,14 @@ final class SettingsViewModel: ObservableObject {
         }
     }
 
+    @Published var taskGenerationProvider: TaskGenerationProvider {
+        didSet {
+            persist()
+            refreshProviderStates()
+        }
+    }
     @Published var selectedModel: String { didSet { persist() } }
+    @Published var geminiSelectedModel: String { didSet { persist() } }
     @Published var temperature: Double { didSet { persist() } }
     @Published var terminalSuggestionsEnabled: Bool { didSet { persist() } }
     @Published var automaticErrorAnalysis: Bool { didSet { persist() } }
@@ -34,10 +41,14 @@ final class SettingsViewModel: ObservableObject {
 
     @Published var githubClientID: String { didSet { persist() } }
     @Published var codexAPIKeyInput = ""
+    @Published var geminiAPIKeyInput = ""
     @Published private(set) var localRepositoriesRootPath: String?
     @Published private(set) var hasCodexAPIKey = false
+    @Published private(set) var hasGeminiAPIKey = false
     @Published private(set) var codexStatusMessage = ""
+    @Published private(set) var geminiStatusMessage = ""
     @Published private(set) var codexExecutablePath: String?
+    @Published private(set) var geminiExecutablePath: String?
     @Published private(set) var nodeExecutablePath: String?
     @Published private(set) var isGitHubAuthenticating = false
     @Published private(set) var githubStatusMessage = "Not connected."
@@ -54,9 +65,12 @@ final class SettingsViewModel: ObservableObject {
     private let gitHubOAuthService: GitHubOAuthServicing
     private let gitHubTokenStore: GitHubTokenStoring
     private let codexAPIKeyStore: CodexAPIKeyStoring
+    private let geminiAPIKeyStore: GeminiAPIKeyStoring
     private let codexExecutableResolver: CodexCLIExecutableResolving
+    private let geminiExecutableResolver: GeminiCLIExecutableResolving
     private let nodeExecutableResolver: NodeRuntimeExecutableResolving
     private var codexExecutableBookmarkData: Data?
+    private var geminiExecutableBookmarkData: Data?
     private var nodeExecutableBookmarkData: Data?
     private var localRepositoriesRootBookmarkData: Data?
 
@@ -69,6 +83,8 @@ final class SettingsViewModel: ObservableObject {
         gitHubTokenStore: GitHubTokenStoring,
         codexAPIKeyStore: CodexAPIKeyStoring,
         codexExecutableResolver: CodexCLIExecutableResolving,
+        geminiAPIKeyStore: GeminiAPIKeyStoring,
+        geminiExecutableResolver: GeminiCLIExecutableResolving,
         nodeExecutableResolver: NodeRuntimeExecutableResolving,
         shortcutGroups: [ShortcutGroup]? = nil
     ) {
@@ -77,7 +93,9 @@ final class SettingsViewModel: ObservableObject {
         self.gitHubOAuthService = gitHubOAuthService
         self.gitHubTokenStore = gitHubTokenStore
         self.codexAPIKeyStore = codexAPIKeyStore
+        self.geminiAPIKeyStore = geminiAPIKeyStore
         self.codexExecutableResolver = codexExecutableResolver
+        self.geminiExecutableResolver = geminiExecutableResolver
         self.nodeExecutableResolver = nodeExecutableResolver
         self.shortcutGroups = shortcutGroups ?? ShortcutGroup.defaults
 
@@ -93,7 +111,9 @@ final class SettingsViewModel: ObservableObject {
 
         self.selectedAccentColorIndex = snapshot.selectedAccentColorIndex
 
-        self.selectedModel = Self.normalizedCodexModelIdentifier(snapshot.selectedModel)
+        self.taskGenerationProvider = snapshot.taskGenerationProvider
+        self.selectedModel = Self.normalizedModelIdentifier(snapshot.selectedModel)
+        self.geminiSelectedModel = Self.normalizedModelIdentifier(snapshot.geminiSelectedModel)
         self.temperature = snapshot.temperature
         self.terminalSuggestionsEnabled = snapshot.terminalSuggestionsEnabled
         self.automaticErrorAnalysis = snapshot.automaticErrorAnalysis
@@ -102,6 +122,8 @@ final class SettingsViewModel: ObservableObject {
         self.githubClientID = snapshot.githubClientID ?? ""
         self.codexExecutablePath = snapshot.codexExecutablePath
         self.codexExecutableBookmarkData = snapshot.codexExecutableBookmarkData
+        self.geminiExecutablePath = snapshot.geminiExecutablePath
+        self.geminiExecutableBookmarkData = snapshot.geminiExecutableBookmarkData
         self.nodeExecutablePath = snapshot.nodeExecutablePath
         self.nodeExecutableBookmarkData = snapshot.nodeExecutableBookmarkData
         self.localRepositoriesRootPath = snapshot.localRepositoriesRootPath
@@ -109,7 +131,7 @@ final class SettingsViewModel: ObservableObject {
 
         themeStore.apply(snapshot.selectedTheme)
         themeStore.applyAccentColorIndex(snapshot.selectedAccentColorIndex)
-        refreshCodexCLIState()
+        refreshProviderStates()
         restoreGitHubSessionIfPossible()
     }
 
@@ -156,6 +178,10 @@ final class SettingsViewModel: ObservableObject {
         codexExecutablePath ?? codexExecutableResolver.resolveExecutablePath()
     }
 
+    var resolvedGeminiExecutablePath: String? {
+        geminiExecutablePath ?? geminiExecutableResolver.resolveExecutablePath()
+    }
+
     var resolvedNodeExecutablePath: String? {
         nodeExecutablePath ?? nodeExecutableResolver.resolveNodeExecutablePath()
     }
@@ -164,15 +190,23 @@ final class SettingsViewModel: ObservableObject {
         !codexAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    var canSaveGeminiAPIKey: Bool {
+        !geminiAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     var hasCodexExecutableOverride: Bool {
         codexExecutablePath?.isEmpty == false && codexExecutableBookmarkData != nil
+    }
+
+    var hasGeminiExecutableOverride: Bool {
+        geminiExecutablePath?.isEmpty == false && geminiExecutableBookmarkData != nil
     }
 
     var hasNodeExecutableOverride: Bool {
         nodeExecutablePath?.isEmpty == false && nodeExecutableBookmarkData != nil
     }
 
-    private var canLaunchLocalCodexCLI: Bool {
+    private var canLaunchLocalCLI: Bool {
         ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil
     }
 
@@ -233,6 +267,26 @@ final class SettingsViewModel: ObservableObject {
         refreshCodexCLIState()
     }
 
+    func setGeminiExecutable(url: URL) throws {
+        let bookmarkData = try url.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+
+        geminiExecutablePath = url.path
+        geminiExecutableBookmarkData = bookmarkData
+        persist()
+        refreshGeminiCLIState(statusOverride: "Gemini executable saved.")
+    }
+
+    func clearGeminiExecutableOverride() {
+        geminiExecutablePath = nil
+        geminiExecutableBookmarkData = nil
+        persist()
+        refreshGeminiCLIState()
+    }
+
     func setNodeExecutable(url: URL) throws {
         let bookmarkData = try url.bookmarkData(
             options: [.withSecurityScope],
@@ -243,14 +297,17 @@ final class SettingsViewModel: ObservableObject {
         nodeExecutablePath = url.path
         nodeExecutableBookmarkData = bookmarkData
         persist()
-        refreshCodexCLIState(statusOverride: "Node.js runtime saved.")
+        refreshProviderStates(
+            codexStatusOverride: "Node.js runtime saved.",
+            geminiStatusOverride: "Node.js runtime saved."
+        )
     }
 
     func clearNodeExecutableOverride() {
         nodeExecutablePath = nil
         nodeExecutableBookmarkData = nil
         persist()
-        refreshCodexCLIState()
+        refreshProviderStates()
     }
 
     func saveCodexAPIKey() {
@@ -268,6 +325,23 @@ final class SettingsViewModel: ObservableObject {
         codexAPIKeyStore.clear()
         codexAPIKeyInput = ""
         refreshCodexCLIState(statusOverride: "OpenAI API key removed.")
+    }
+
+    func saveGeminiAPIKey() {
+        let trimmedAPIKey = geminiAPIKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAPIKey.isEmpty else {
+            return
+        }
+
+        geminiAPIKeyStore.save(apiKey: trimmedAPIKey)
+        geminiAPIKeyInput = ""
+        refreshGeminiCLIState(statusOverride: "Gemini API key saved in Keychain.")
+    }
+
+    func clearGeminiAPIKey() {
+        geminiAPIKeyStore.clear()
+        geminiAPIKeyInput = ""
+        refreshGeminiCLIState(statusOverride: "Gemini API key removed.")
     }
 
     func loginWithGitHub() async {
@@ -373,6 +447,14 @@ final class SettingsViewModel: ObservableObject {
         return error.localizedDescription
     }
 
+    private func refreshProviderStates(
+        codexStatusOverride: String? = nil,
+        geminiStatusOverride: String? = nil
+    ) {
+        refreshCodexCLIState(statusOverride: codexStatusOverride)
+        refreshGeminiCLIState(statusOverride: geminiStatusOverride)
+    }
+
     private func refreshCodexCLIState(statusOverride: String? = nil) {
         hasCodexAPIKey = !(codexAPIKeyStore.apiKey()?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
 
@@ -381,9 +463,9 @@ final class SettingsViewModel: ObservableObject {
             return
         }
 
-        let resolvedCodexExecutablePath = resolvedCodexExecutablePath
+        let resolvedExecutablePath = resolvedCodexExecutablePath
         let resolvedNodeExecutablePath = resolvedNodeExecutablePath
-        let requiresNodeRuntime = resolvedCodexExecutablePath?.lowercased().hasSuffix(".js") ?? false
+        let requiresNodeRuntime = resolvedExecutablePath?.lowercased().hasSuffix(".js") ?? false
 
         if let codexExecutablePath, !codexExecutablePath.isEmpty {
             if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
@@ -392,32 +474,32 @@ final class SettingsViewModel: ObservableObject {
             }
 
             if requiresNodeRuntime, let resolvedNodeExecutablePath {
-                codexStatusMessage = canLaunchLocalCodexCLI
+                codexStatusMessage = canLaunchLocalCLI
                     ? "Codex CLI is ready at \(codexExecutablePath) with Node.js at \(resolvedNodeExecutablePath). In Terminal, run `codex login` and choose ChatGPT."
                     : "Codex CLI is configured at \(codexExecutablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
                 return
             }
 
-            codexStatusMessage = canLaunchLocalCodexCLI
+            codexStatusMessage = canLaunchLocalCLI
                 ? "Codex CLI is ready at \(codexExecutablePath). In Terminal, run `codex login` and choose ChatGPT."
                 : "Codex CLI is configured at \(codexExecutablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
             return
         }
 
-        if let executablePath = resolvedCodexExecutablePath {
+        if let executablePath = resolvedExecutablePath {
             if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
                 codexStatusMessage = "Codex CLI was detected at \(executablePath), but this launcher still needs Node.js. Choose `/usr/local/bin/node`."
                 return
             }
 
             if requiresNodeRuntime, let resolvedNodeExecutablePath {
-                codexStatusMessage = canLaunchLocalCodexCLI
+                codexStatusMessage = canLaunchLocalCLI
                     ? "Codex CLI was detected at \(executablePath) with Node.js at \(resolvedNodeExecutablePath). In Terminal, run `codex login` and choose ChatGPT."
                     : "Codex CLI was detected at \(executablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
                 return
             }
 
-            codexStatusMessage = canLaunchLocalCodexCLI
+            codexStatusMessage = canLaunchLocalCLI
                 ? "Codex CLI was detected at \(executablePath). In Terminal, run `codex login` and choose ChatGPT."
                 : "Codex CLI was detected at \(executablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Codex session."
             return
@@ -431,10 +513,69 @@ final class SettingsViewModel: ObservableObject {
         codexStatusMessage = "Install Codex CLI and run `codex login`, or save an OpenAI API key as fallback."
     }
 
+    private func refreshGeminiCLIState(statusOverride: String? = nil) {
+        hasGeminiAPIKey = !(geminiAPIKeyStore.apiKey()?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+
+        if let statusOverride {
+            geminiStatusMessage = statusOverride
+            return
+        }
+
+        let resolvedExecutablePath = resolvedGeminiExecutablePath
+        let resolvedNodeExecutablePath = resolvedNodeExecutablePath
+        let requiresNodeRuntime = resolvedExecutablePath?.lowercased().hasSuffix(".js") ?? false
+
+        if let geminiExecutablePath, !geminiExecutablePath.isEmpty {
+            if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
+                geminiStatusMessage = "Gemini CLI is configured at \(geminiExecutablePath), but this launcher still needs Node.js. Choose `/usr/local/bin/node`."
+                return
+            }
+
+            if requiresNodeRuntime, let resolvedNodeExecutablePath {
+                geminiStatusMessage = canLaunchLocalCLI
+                    ? "Gemini CLI is ready at \(geminiExecutablePath) with Node.js at \(resolvedNodeExecutablePath). In Terminal, run `gemini` and sign in with Google."
+                    : "Gemini CLI is configured at \(geminiExecutablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Gemini session."
+                return
+            }
+
+            geminiStatusMessage = canLaunchLocalCLI
+                ? "Gemini CLI is ready at \(geminiExecutablePath). In Terminal, run `gemini` and sign in with Google."
+                : "Gemini CLI is configured at \(geminiExecutablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Gemini session."
+            return
+        }
+
+        if let executablePath = resolvedExecutablePath {
+            if requiresNodeRuntime, resolvedNodeExecutablePath == nil {
+                geminiStatusMessage = "Gemini CLI was detected at \(executablePath), but this launcher still needs Node.js. Choose `/usr/local/bin/node`."
+                return
+            }
+
+            if requiresNodeRuntime, let resolvedNodeExecutablePath {
+                geminiStatusMessage = canLaunchLocalCLI
+                    ? "Gemini CLI was detected at \(executablePath) with Node.js at \(resolvedNodeExecutablePath). In Terminal, run `gemini` and sign in with Google."
+                    : "Gemini CLI was detected at \(executablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Gemini session."
+                return
+            }
+
+            geminiStatusMessage = canLaunchLocalCLI
+                ? "Gemini CLI was detected at \(executablePath). In Terminal, run `gemini` and sign in with Google."
+                : "Gemini CLI was detected at \(executablePath), but this sandboxed build cannot launch it. Run the Debug build from Xcode to use your local Gemini session."
+            return
+        }
+
+        if hasGeminiAPIKey {
+            geminiStatusMessage = "No local Gemini CLI was detected. Kubbo will still pass the saved Gemini API key to the CLI when it is available."
+            return
+        }
+
+        geminiStatusMessage = "Install Gemini CLI and run `gemini` to sign in, or save a Gemini API key for headless auth."
+    }
+
     private func persist() {
         let normalizedGitHubClientID = githubClientID
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedSelectedModel = Self.normalizedCodexModelIdentifier(selectedModel)
+        let normalizedSelectedModel = Self.normalizedModelIdentifier(selectedModel)
+        let normalizedGeminiSelectedModel = Self.normalizedModelIdentifier(geminiSelectedModel)
 
         repository.save(
             SettingsSnapshot(
@@ -445,13 +586,17 @@ final class SettingsViewModel: ObservableObject {
                 hapticsEnabled: hapticsEnabled,
                 appLanguage: appLanguage,
                 selectedAccentColorIndex: selectedAccentColorIndex,
+                taskGenerationProvider: taskGenerationProvider,
                 selectedModel: normalizedSelectedModel,
+                geminiSelectedModel: normalizedGeminiSelectedModel,
                 temperature: temperature,
                 terminalSuggestionsEnabled: terminalSuggestionsEnabled,
                 automaticErrorAnalysis: automaticErrorAnalysis,
                 syncProfilesEnabled: syncProfilesEnabled,
                 codexExecutablePath: codexExecutablePath,
                 codexExecutableBookmarkData: codexExecutableBookmarkData,
+                geminiExecutablePath: geminiExecutablePath,
+                geminiExecutableBookmarkData: geminiExecutableBookmarkData,
                 nodeExecutablePath: nodeExecutablePath,
                 nodeExecutableBookmarkData: nodeExecutableBookmarkData,
                 githubClientID: normalizedGitHubClientID.isEmpty ? nil : normalizedGitHubClientID,
@@ -461,14 +606,7 @@ final class SettingsViewModel: ObservableObject {
         )
     }
 
-    private static func normalizedCodexModelIdentifier(_ value: String) -> String {
-        let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        switch trimmedValue {
-        case "Gemini 1.5 Pro", "Claude 3.7 Sonnet":
-            return ""
-        default:
-            return trimmedValue
-        }
+    private static func normalizedModelIdentifier(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
