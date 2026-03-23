@@ -506,16 +506,21 @@ struct AgentPanelView: View {
                     )
             )
 
-            Button(action: previewGenerateIdeaCards) {
+            Button(action: generateIdeaCards) {
                 HStack(spacing: 10) {
-                    Image(systemName: "wand.and.stars")
-                        .font(.system(size: 16, weight: .semibold))
+                    if taskViewModel.isGeneratingIdeaTasks {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "wand.and.stars")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
 
-                    Text("Generate Smart Cards")
+                    Text(taskViewModel.isGeneratingIdeaTasks ? "Generating..." : "Generate Smart Cards")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
                 }
                 .foregroundStyle(
-                    canGenerateIdeaCards
+                    canGenerateIdeaCards && !taskViewModel.isGeneratingIdeaTasks
                         ? primaryTextColor
                         : secondaryTextColor.opacity(0.88)
                 )
@@ -524,15 +529,21 @@ struct AgentPanelView: View {
                 .background(
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(
-                            canGenerateIdeaCards
+                            canGenerateIdeaCards && !taskViewModel.isGeneratingIdeaTasks
                                 ? accentColor.opacity(isDarkTheme ? 0.92 : 0.82)
                                 : accentColor.opacity(isDarkTheme ? 0.66 : 0.22)
                         )
                 )
             }
             .buttonStyle(.plain)
-            .agentCursorOnHover(isEnabled: canGenerateIdeaCards)
-            .disabled(!canGenerateIdeaCards)
+            .agentCursorOnHover(isEnabled: canGenerateIdeaCards && !taskViewModel.isGeneratingIdeaTasks)
+            .disabled(!canGenerateIdeaCards || taskViewModel.isGeneratingIdeaTasks)
+
+            if let ideaGenerationErrorMessage = taskViewModel.ideaGenerationErrorMessage {
+                Text(ideaGenerationErrorMessage)
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.red.opacity(0.85))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
@@ -656,6 +667,8 @@ struct AgentPanelView: View {
             isIdeaComposerPresented.toggle()
         }
 
+        taskViewModel.clearIdeaGenerationError()
+
         if isIdeaComposerPresented {
             DispatchQueue.main.async {
                 isIdeaPromptFocused = true
@@ -670,10 +683,21 @@ struct AgentPanelView: View {
             isIdeaComposerPresented = false
         }
         isIdeaPromptFocused = false
+        taskViewModel.clearIdeaGenerationError()
     }
 
-    private func previewGenerateIdeaCards() {
+    private func generateIdeaCards() {
         guard canGenerateIdeaCards else { return }
+
+        Task { @MainActor in
+            let didGenerate = await taskViewModel.generateTasks(from: ideaPrompt)
+            guard didGenerate else {
+                return
+            }
+
+            ideaPrompt = ""
+            closeIdeaComposer()
+        }
     }
 
     private func addSidebarTask() {
