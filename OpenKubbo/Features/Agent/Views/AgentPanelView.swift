@@ -3,6 +3,7 @@ import SwiftUI
 
 struct AgentPanelView: View {
     @ObservedObject var taskViewModel: TaskViewModel
+    @AppStorage("openkubbo.settings.snapshot.v1") private var settingsSnapshotData = Data()
 
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
@@ -87,6 +88,43 @@ struct AgentPanelView: View {
 
     private var canGenerateIdeaCards: Bool {
         !ideaPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var settingsSnapshot: SettingsSnapshot {
+        guard !settingsSnapshotData.isEmpty,
+              let snapshot = try? JSONDecoder().decode(SettingsSnapshot.self, from: settingsSnapshotData)
+        else {
+            return .defaultValue
+        }
+
+        return snapshot
+    }
+
+    private var smartTaskEngineLabel: String {
+        switch settingsSnapshot.taskGenerationProvider {
+        case .openAI:
+            return "Codex"
+        case .google:
+            return "Gemini"
+        }
+    }
+
+    private var smartTaskModelLabel: String {
+        let configuredModel: String
+
+        switch settingsSnapshot.taskGenerationProvider {
+        case .openAI:
+            configuredModel = settingsSnapshot.selectedModel
+        case .google:
+            configuredModel = settingsSnapshot.geminiSelectedModel
+        }
+
+        let trimmedModel = configuredModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedModel.isEmpty ? "Default model" : trimmedModel
+    }
+
+    private var smartTaskStatusLabel: String {
+        "\(smartTaskEngineLabel) / \(smartTaskModelLabel)"
     }
 
     private var taskCompletionText: String {
@@ -391,6 +429,8 @@ struct AgentPanelView: View {
             }
             .frame(height: 36)
 
+            smartTaskStatusStrip
+
             if isIdeaComposerPresented {
                 smartTaskComposer
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -439,6 +479,33 @@ struct AgentPanelView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: isIdeaComposerPresented)
+    }
+
+    private var smartTaskStatusStrip: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Smart model")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+
+            Spacer(minLength: 0)
+
+            Text(smartTaskStatusLabel)
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(primaryTextColor)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(mutedCardFillColor)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(cardStrokeColor, lineWidth: 1)
+                        )
+                )
+                .help("Smart task generation is currently configured to use \(smartTaskEngineLabel) with \(smartTaskModelLabel).")
+        }
     }
 
     private var smartTaskComposer: some View {
