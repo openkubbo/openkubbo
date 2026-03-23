@@ -13,7 +13,7 @@ struct AgentPanelView: View {
     @State private var responseTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
 
-    private let panelWidth: CGFloat = 430
+    private let panelWidth: CGFloat = 420
     private let panelHeight: CGFloat = 560
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
@@ -30,23 +30,23 @@ struct AgentPanelView: View {
     }
 
     private var panelFillColor: Color {
-        isDarkTheme ? Color(red: 0.08, green: 0.09, blue: 0.10) : Color(red: 0.975, green: 0.978, blue: 0.984)
+        isDarkTheme ? Color(red: 0.09, green: 0.09, blue: 0.10) : Color(red: 0.97, green: 0.97, blue: 0.98)
     }
 
     private var panelStrokeColor: Color {
-        isDarkTheme ? .white.opacity(0.12) : .black.opacity(0.08)
+        isDarkTheme ? .white.opacity(0.14) : .black.opacity(0.08)
     }
 
-    private var chromeFillColor: Color {
-        isDarkTheme ? Color(red: 0.11, green: 0.12, blue: 0.13) : Color(red: 0.94, green: 0.945, blue: 0.955)
+    private var cardFillColor: Color {
+        isDarkTheme ? Color(red: 0.13, green: 0.13, blue: 0.14) : .white
     }
 
-    private var promptFillColor: Color {
-        isDarkTheme ? Color(red: 0.09, green: 0.10, blue: 0.11) : Color(red: 0.965, green: 0.968, blue: 0.976)
+    private var cardStrokeColor: Color {
+        isDarkTheme ? .white.opacity(0.10) : .black.opacity(0.08)
     }
 
-    private var dividerColor: Color {
-        isDarkTheme ? .white.opacity(0.10) : .black.opacity(0.07)
+    private var terminalFillColor: Color {
+        isDarkTheme ? Color(red: 0.10, green: 0.10, blue: 0.11) : Color(red: 0.985, green: 0.986, blue: 0.992)
     }
 
     private var primaryTextColor: Color {
@@ -54,50 +54,51 @@ struct AgentPanelView: View {
     }
 
     private var secondaryTextColor: Color {
-        isDarkTheme ? .white.opacity(0.58) : .black.opacity(0.48)
+        isDarkTheme ? .white.opacity(0.60) : .black.opacity(0.48)
     }
 
     private var tertiaryTextColor: Color {
         isDarkTheme ? .white.opacity(0.42) : .black.opacity(0.34)
     }
 
+    private var mutedCardFillColor: Color {
+        isDarkTheme ? .white.opacity(0.06) : .black.opacity(0.04)
+    }
+
+    private var dividerColor: Color {
+        isDarkTheme ? .white.opacity(0.08) : .black.opacity(0.06)
+    }
+
     private var canSendPrompt: Bool {
         !draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isResponding
     }
 
-    private var sessionStatusText: String {
-        isResponding ? "session busy" : "session ready"
-    }
-
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
                 .fill(panelFillColor)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
                         .strokeBorder(panelStrokeColor, lineWidth: 1)
                 )
                 .padding(.horizontal, panelHorizontalInset)
                 .padding(.vertical, panelVerticalInset)
 
-            VStack(spacing: 0) {
-                terminalToolbar
-
-                Rectangle()
-                    .fill(dividerColor)
-                    .frame(height: 1)
-
-                transcriptView
-
-                Rectangle()
-                    .fill(dividerColor)
-                    .frame(height: 1)
-
-                promptBar
+            VStack(spacing: 14) {
+                header
+                sessionStrip
+                terminalSurface
             }
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .padding(.horizontal, 18)
+            .padding(.top, 20)
+            .padding(.bottom, 14)
             .padding(.horizontal, panelHorizontalInset)
             .padding(.vertical, panelVerticalInset)
+            .overlay(alignment: .top) {
+                SettingsWindowDragRegion()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 12)
+            }
         }
         .frame(width: panelWidth, height: panelHeight)
         .padding(.horizontal, windowEdgePaddingX)
@@ -126,31 +127,20 @@ struct AgentPanelView: View {
         }
     }
 
-    private var terminalToolbar: some View {
-        ZStack {
-            SettingsWindowDragRegion()
-
-            HStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(Color(red: 0.99, green: 0.37, blue: 0.33).opacity(isDarkTheme ? 0.92 : 0.78))
-                    Circle()
-                        .fill(Color(red: 0.96, green: 0.74, blue: 0.24).opacity(isDarkTheme ? 0.92 : 0.78))
-                    Circle()
-                        .fill(Color(red: 0.23, green: 0.73, blue: 0.41).opacity(isDarkTheme ? 0.92 : 0.78))
-                }
-                .frame(width: 42, alignment: .leading)
-
+    private var header: some View {
+        HStack(alignment: .center) {
+            HStack(spacing: 0) {
                 Text("Kubbo Agent")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(.system(size: 19, weight: .semibold, design: .rounded))
                     .foregroundStyle(primaryTextColor)
+                    .frame(height: 36, alignment: .center)
 
-                Spacer(minLength: 0)
+                Spacer()
+            }
+            .frame(height: 36)
+            .background(SettingsWindowDragRegion())
 
-                Text(sessionStatusText)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(isResponding ? accentColor : secondaryTextColor)
-
+            HStack(spacing: 8) {
                 Button(action: toggleWindowPin) {
                     AgentHeaderIcon(
                         symbol: isWindowPinned ? "pin.fill" : "pin",
@@ -168,120 +158,170 @@ struct AgentPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .agentCursorOnHover()
-                .help("Close window")
             }
-            .padding(.horizontal, 14)
         }
-        .frame(height: 48)
-        .background(chromeFillColor)
     }
 
-    private var transcriptView: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    statusLine
-
-                    ForEach(consoleEntries) { entry in
-                        AgentConsoleRow(
-                            entry: entry,
-                            accentColor: accentColor,
-                            primaryTextColor: primaryTextColor,
-                            secondaryTextColor: secondaryTextColor
+    private var sessionStrip: some View {
+        HStack(spacing: 10) {
+            Text("Shell")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(mutedCardFillColor)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(cardStrokeColor, lineWidth: 1)
                         )
-                        .id(entry.id)
-                    }
+                )
 
-                    if isResponding {
-                        AgentTypingIndicator(secondaryTextColor: secondaryTextColor)
-                            .id(typingIndicatorID)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 20)
-            }
-            .scrollIndicators(.visible)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(panelFillColor)
-            .onAppear {
-                scrollToBottom(with: proxy)
-            }
-            .onChange(of: consoleEntries.count) {
-                scrollToBottom(with: proxy)
-            }
-            .onChange(of: isResponding) {
-                scrollToBottom(with: proxy)
-            }
+            Circle()
+                .fill(isResponding ? accentColor : Color(red: 0.23, green: 0.73, blue: 0.41))
+                .frame(width: 8, height: 8)
+
+            Text(isResponding ? "Streaming response..." : "Terminal session ready")
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .foregroundStyle(primaryTextColor)
+
+            Spacer(minLength: 0)
+
+            Text("chat + terminal")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(secondaryTextColor)
         }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
     }
 
-    private var statusLine: some View {
+    private var terminalSurface: some View {
+        VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        shellIntro
+
+                        ForEach(consoleEntries) { entry in
+                            AgentConsoleRow(
+                                entry: entry,
+                                accentColor: accentColor,
+                                primaryTextColor: primaryTextColor,
+                                secondaryTextColor: secondaryTextColor
+                            )
+                            .id(entry.id)
+                        }
+
+                        if isResponding {
+                            AgentTypingIndicator(secondaryTextColor: secondaryTextColor)
+                                .id(typingIndicatorID)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+                    .padding(.bottom, 16)
+                }
+                .scrollIndicators(.visible)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(terminalFillColor)
+                .onAppear {
+                    scrollToBottom(with: proxy)
+                }
+                .onChange(of: consoleEntries.count) {
+                    scrollToBottom(with: proxy)
+                }
+                .onChange(of: isResponding) {
+                    scrollToBottom(with: proxy)
+                }
+            }
+
+            Rectangle()
+                .fill(dividerColor)
+                .frame(height: 1)
+
+            promptComposer
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(terminalFillColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(cardStrokeColor, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var shellIntro: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("kubbo@agent % interactive chat shell")
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(primaryTextColor)
 
-            Text("The panel itself is the terminal now. Messages and prompt render directly in the shell.")
+            Text("Kubbo Task layout on the outside, terminal flow on the inside.")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(tertiaryTextColor)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
-    private var promptBar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .center, spacing: 10) {
-                Text("kubbo@agent %")
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
-                    .foregroundStyle(accentColor)
+    private var promptComposer: some View {
+        HStack(spacing: 10) {
+            Text("kubbo@agent %")
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(accentColor)
 
-                TextField("Type a prompt or command...", text: $draftPrompt)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(primaryTextColor)
-                    .focused($isPromptFocused)
-                    .onSubmit(sendPrompt)
+            TextField("Type a prompt or command...", text: $draftPrompt)
+                .textFieldStyle(.plain)
+                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .foregroundStyle(primaryTextColor)
+                .focused($isPromptFocused)
+                .onSubmit(sendPrompt)
 
-                Button(action: sendPrompt) {
-                    HStack(spacing: 6) {
-                        if isResponding {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(primaryTextColor)
-                        } else {
-                            Image(systemName: "arrow.up.right")
-                                .font(.system(size: 12, weight: .bold))
-                        }
-
-                        Text(isResponding ? "run" : "send")
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            Button(action: sendPrompt) {
+                HStack(spacing: 6) {
+                    if isResponding {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(primaryTextColor)
+                    } else {
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 12, weight: .bold))
                     }
-                    .foregroundStyle(canSendPrompt || isResponding ? primaryTextColor : secondaryTextColor)
-                    .padding(.horizontal, 10)
-                    .frame(height: 28)
-                    .background(
-                        Capsule(style: .continuous)
-                            .fill(
-                                canSendPrompt
-                                    ? accentColor.opacity(isDarkTheme ? 0.88 : 0.76)
-                                    : dividerColor.opacity(isDarkTheme ? 0.70 : 0.85)
-                            )
-                    )
-                }
-                .buttonStyle(.plain)
-                .agentCursorOnHover(isEnabled: canSendPrompt)
-                .disabled(!canSendPrompt)
-            }
 
-            Text(isResponding ? "kubbo > processing prompt..." : "press enter to send")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(secondaryTextColor)
+                    Text(isResponding ? "run" : "send")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                }
+                .foregroundStyle(canSendPrompt || isResponding ? primaryTextColor : secondaryTextColor)
+                .padding(.horizontal, 10)
+                .frame(height: 30)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(
+                            canSendPrompt
+                                ? accentColor.opacity(isDarkTheme ? 0.88 : 0.78)
+                                : mutedCardFillColor
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .agentCursorOnHover(isEnabled: canSendPrompt)
+            .disabled(!canSendPrompt)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(promptFillColor)
+        .background(cardFillColor.opacity(isDarkTheme ? 0.52 : 0.70))
     }
 
     private func closeWindow() {
@@ -313,7 +353,7 @@ struct AgentPanelView: View {
             guard !Task.isCancelled else { return }
 
             let responseText = """
-            Prompt received. The shell layout is now applied to the full panel, so the next step is connecting real agent output directly into this transcript for: "\(trimmedPrompt)".
+            Prompt received. This version keeps the same overall structure as Kubbo Task, while the main content area behaves like a terminal transcript for: "\(trimmedPrompt)".
             """
 
             await MainActor.run {
@@ -367,10 +407,10 @@ private struct AgentConsoleEntry: Identifiable {
     let text: String
 
     static let previewEntries: [AgentConsoleEntry] = [
-        .init(role: .status, text: "Session booted in terminal mode."),
-        .init(role: .agent, text: "Ready. The shell is now the main panel, not a nested terminal component."),
+        .init(role: .status, text: "Session booted in task-style shell mode."),
+        .init(role: .agent, text: "Ready. The panel layout now matches Kubbo Task more closely, but the transcript still behaves like a terminal."),
         .init(role: .user, text: "Show the latest repository context."),
-        .init(role: .agent, text: "The transcript is prepared for that flow. Live repository-aware output can be streamed directly here.")
+        .init(role: .agent, text: "The shell area is prepared for that flow. Live repository-aware output can be streamed directly here.")
     ]
 }
 
@@ -400,7 +440,7 @@ private struct AgentConsoleRow: View {
             Text(entry.role.label)
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(labelColor)
-                .frame(width: 48, alignment: .leading)
+                .frame(width: 44, alignment: .leading)
 
             Text(verbatim: entry.text)
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -419,7 +459,7 @@ private struct AgentTypingIndicator: View {
             Text("kubbo")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(secondaryTextColor)
-                .frame(width: 48, alignment: .leading)
+                .frame(width: 44, alignment: .leading)
 
             Text("processing...")
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
@@ -461,9 +501,9 @@ private struct AgentHeaderIcon: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(symbolColor)
-            .frame(width: 30, height: 30)
+            .frame(width: 36, height: 36)
             .background(
                 Circle()
                     .fill(fillColor)
