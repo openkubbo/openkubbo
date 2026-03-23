@@ -54,7 +54,15 @@ struct OpenKubboApp: App {
             AgentPanelView()
                 .environmentObject(container.themeStore)
         }
-        .defaultSize(width: 360, height: 272)
+        .defaultSize(width: 675, height: 612)
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
+
+        WindowGroup("Agent", id: "agent-empty") {
+            AgentPanelView()
+                .environmentObject(container.themeStore)
+        }
+        .defaultSize(width: 675, height: 612)
         .windowResizability(.contentSize)
         .windowStyle(.hiddenTitleBar)
 

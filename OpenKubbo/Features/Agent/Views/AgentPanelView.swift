@@ -4,6 +4,7 @@ import SwiftUI
 struct AgentPanelView: View {
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(\.openWindow) private var openWindow
 
     @State private var hostWindow: NSWindow?
     @State private var isWindowPinned = true
@@ -152,6 +153,17 @@ struct AgentPanelView: View {
                 .buttonStyle(.plain)
                 .agentCursorOnHover()
                 .help(isWindowPinned ? "Unpin window" : "Pin window on top")
+
+                Button(action: openEmptyAgentWindow) {
+                    AgentHeaderIcon(
+                        symbol: "square.on.square",
+                        isDarkTheme: isDarkTheme,
+                        symbolTint: accentColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .agentCursorOnHover()
+                .help("Open new Kubbo Agent")
 
                 Button(action: closeWindow) {
                     AgentHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme)
@@ -337,6 +349,11 @@ struct AgentPanelView: View {
     private func applyWindowLevel(_ window: NSWindow?) {
         guard let window else { return }
         window.level = isWindowPinned ? .floating : .normal
+    }
+
+    private func openEmptyAgentWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        openWindow(id: "agent-empty")
     }
 
     private func sendPrompt() {
