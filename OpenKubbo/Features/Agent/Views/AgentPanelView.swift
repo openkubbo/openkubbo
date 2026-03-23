@@ -13,7 +13,7 @@ struct AgentPanelView: View {
     @State private var responseTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
 
-    private let panelWidth: CGFloat = 420
+    private let panelWidth: CGFloat = 655.2
     private let panelHeight: CGFloat = 560
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
@@ -109,7 +109,7 @@ struct AgentPanelView: View {
                     width: panelWidth + (windowEdgePaddingX * 2),
                     height: panelHeight + (windowEdgePaddingY * 2)
                 ),
-                minimumSize: CGSize(width: 400, height: 520),
+                minimumSize: CGSize(width: 624, height: 520),
                 windowIdentifier: "openkubbo.agent.window",
                 windowLevel: .floating
             ) { window in
