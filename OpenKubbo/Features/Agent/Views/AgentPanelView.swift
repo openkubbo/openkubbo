@@ -22,6 +22,7 @@ struct AgentPanelView: View {
     @State private var isResponding = false
     @State private var responseTask: Task<Void, Never>?
     @State private var undoDeleteDismissTask: Task<Void, Never>?
+    @State private var cliSessionIdentifiers: [AgentCLIProvider: String] = [:]
     @FocusState private var isPromptFocused: Bool
     @FocusState private var isIdeaPromptFocused: Bool
 
@@ -956,18 +957,25 @@ struct AgentPanelView: View {
             return
         }
 
+        let provider = activeCLIProvider
+        let sessionIdentifier = cliSessionIdentifiers[provider]
+
         responseTask?.cancel()
         isResponding = true
         responseTask = Task {
             do {
-                let responseText = try await cliService.respond(
+                let response = try await cliService.respond(
                     to: trimmedPrompt,
-                    using: activeCLIProvider
+                    using: provider,
+                    sessionIdentifier: sessionIdentifier
                 )
                 guard !Task.isCancelled else { return }
 
                 await MainActor.run {
-                    consoleEntries.append(.assistant(label: activeCLIProvider.displayName, text: responseText))
+                    if let responseSessionIdentifier = response.sessionIdentifier {
+                        cliSessionIdentifiers[provider] = responseSessionIdentifier
+                    }
+                    consoleEntries.append(.assistant(label: provider.displayName, text: response.text))
                     isResponding = false
                     responseTask = nil
                     isPromptFocused = true
@@ -1022,7 +1030,7 @@ struct AgentPanelView: View {
     }
 }
 
-private enum AgentCLIProvider {
+private enum AgentCLIProvider: Hashable {
     case codex
     case gemini
 
@@ -1134,7 +1142,7 @@ private enum AgentCLIServiceError: LocalizedError {
     }
 }
 
-private final class AgentCLIService {
+fileprivate final class AgentCLIService {
     private struct ResourceDescriptor {
         let path: String
         let bookmarkData: Data?
@@ -1147,6 +1155,28 @@ private final class AgentCLIService {
 
         let response: String?
         let error: ResponseError?
+    }
+
+    fileprivate struct AgentCLIResponse {
+        let text: String
+        let sessionIdentifier: String?
+    }
+
+    private struct CodexSessionMetaEnvelope: Decodable {
+        struct Payload: Decodable {
+            let id: String
+            let cwd: String?
+        }
+
+        let payload: Payload
+    }
+
+    private struct GeminiProjectRegistryData: Decodable {
+        let projects: [String: String]
+    }
+
+    private struct GeminiConversationRecord: Decodable {
+        let sessionId: String
     }
 
     private struct LaunchConfiguration {
@@ -1180,7 +1210,11 @@ private final class AgentCLIService {
         self.decoder = decoder
     }
 
-    func respond(to prompt: String, using provider: AgentCLIProvider) async throws -> String {
+    func respond(
+        to prompt: String,
+        using provider: AgentCLIProvider,
+        sessionIdentifier: String?
+    ) async throws -> AgentCLIResponse {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else {
             throw AgentCLIServiceError.commandFailed("Type a prompt or command first.")
@@ -1188,13 +1222,13 @@ private final class AgentCLIService {
 
         switch provider {
         case .codex:
-            return try await runCodex(prompt: trimmedPrompt)
+            return try await runCodex(prompt: trimmedPrompt, sessionIdentifier: sessionIdentifier)
         case .gemini:
-            return try await runGemini(prompt: trimmedPrompt)
+            return try await runGemini(prompt: trimmedPrompt, sessionIdentifier: sessionIdentifier)
         }
     }
 
-    private func runCodex(prompt: String) async throws -> String {
+    private func runCodex(prompt: String, sessionIdentifier: String?) async throws -> AgentCLIResponse {
         guard canUseLocalCLI else {
             throw AgentCLIServiceError.commandFailed(
                 "This sandboxed build cannot launch Codex CLI. Run the Debug build from Xcode to use your local Codex session."
@@ -1208,8 +1242,10 @@ private final class AgentCLIService {
             snapshot: snapshot
         )
         let workingDirectoryDescriptor = workingDirectoryDescriptor(snapshot: snapshot)
+        let workingDirectoryURL = workingDirectoryURL(from: workingDirectoryDescriptor)
         let outputURL = fileManager.temporaryDirectory
             .appendingPathComponent("agent-codex-\(UUID().uuidString.lowercased()).txt")
+        let startedAt = Date()
 
         defer {
             try? fileManager.removeItem(at: outputURL)
@@ -1221,7 +1257,8 @@ private final class AgentCLIService {
             arguments: codexArguments(
                 prompt: prompt,
                 model: normalizedCodexModelIdentifier(snapshot: snapshot),
-                outputURL: outputURL
+                outputURL: outputURL,
+                sessionIdentifier: sessionIdentifier
             )
         )
 
@@ -1231,7 +1268,7 @@ private final class AgentCLIService {
             try await runProcess(
                 executablePath: launchConfiguration.executablePath,
                 arguments: launchConfiguration.arguments,
-                currentDirectoryURL: workingDirectoryURL(from: workingDirectoryDescriptor),
+                currentDirectoryURL: workingDirectoryURL,
                 environment: codexExecutionEnvironment()
             )
         }
@@ -1242,21 +1279,27 @@ private final class AgentCLIService {
             )
         }
 
-        if let responseText = try? String(contentsOf: outputURL, encoding: .utf8)
-            .trimmingCharacters(in: .whitespacesAndNewlines),
-           !responseText.isEmpty {
-            return responseText
-        }
-
+        let responseText = (try? String(contentsOf: outputURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)) ?? ""
         let fallbackOutput = normalizedCommandOutput(stderr: result.stderr, stdout: result.stdout)
-        guard !fallbackOutput.isEmpty else {
+        let outputText = !responseText.isEmpty ? responseText : fallbackOutput
+
+        guard !outputText.isEmpty else {
             throw AgentCLIServiceError.commandFailed("Codex CLI returned an empty response.")
         }
 
-        return fallbackOutput
+        let resolvedSessionIdentifier = sessionIdentifier ??
+            discoverLatestCodexSessionIdentifier(
+                since: startedAt,
+                workingDirectoryPath: normalizeProjectPath(
+                    workingDirectoryURL?.path ?? fileManager.homeDirectoryForCurrentUser.path
+                )
+            )
+
+        return AgentCLIResponse(text: outputText, sessionIdentifier: resolvedSessionIdentifier)
     }
 
-    private func runGemini(prompt: String) async throws -> String {
+    private func runGemini(prompt: String, sessionIdentifier: String?) async throws -> AgentCLIResponse {
         guard canUseLocalCLI else {
             throw AgentCLIServiceError.commandFailed(
                 "This sandboxed build cannot launch Gemini CLI. Run the Debug build from Xcode to use your local Gemini session."
@@ -1270,13 +1313,17 @@ private final class AgentCLIService {
             snapshot: snapshot
         )
         let workingDirectoryDescriptor = workingDirectoryDescriptor(snapshot: snapshot)
+        let workingDirectoryURL = workingDirectoryURL(from: workingDirectoryDescriptor)
+        let startedAt = Date()
+        let geminiHomePath = geminiCLIHomePath()
 
         let launchConfiguration = try launchConfiguration(
             for: executableDescriptor,
             nodeExecutableDescriptor: nodeExecutableDescriptor,
             arguments: geminiArguments(
                 prompt: prompt,
-                model: normalizedGeminiModelIdentifier(snapshot: snapshot)
+                model: normalizedGeminiModelIdentifier(snapshot: snapshot),
+                sessionIdentifier: sessionIdentifier
             )
         )
 
@@ -1286,7 +1333,7 @@ private final class AgentCLIService {
             try await runProcess(
                 executablePath: launchConfiguration.executablePath,
                 arguments: launchConfiguration.arguments,
-                currentDirectoryURL: workingDirectoryURL(from: workingDirectoryDescriptor),
+                currentDirectoryURL: workingDirectoryURL,
                 environment: geminiExecutionEnvironment()
             )
         }
@@ -1318,7 +1365,16 @@ private final class AgentCLIService {
             throw AgentCLIServiceError.commandFailed("Gemini CLI returned an empty response.")
         }
 
-        return outputText
+        let resolvedSessionIdentifier = sessionIdentifier ??
+            discoverLatestGeminiSessionIdentifier(
+                since: startedAt,
+                projectRootPath: normalizeProjectPath(
+                    workingDirectoryURL?.path ?? fileManager.homeDirectoryForCurrentUser.path
+                ),
+                geminiCLIHomePath: geminiHomePath
+            )
+
+        return AgentCLIResponse(text: outputText, sessionIdentifier: resolvedSessionIdentifier)
     }
 
     private var canUseLocalCLI: Bool {
@@ -1407,33 +1463,58 @@ private final class AgentCLIService {
         return LaunchConfiguration(executablePath: executablePath, arguments: arguments)
     }
 
-    private func codexArguments(prompt: String, model: String?, outputURL: URL) -> [String] {
-        var arguments = [
-            "exec",
+    private func codexArguments(
+        prompt: String,
+        model: String?,
+        outputURL: URL,
+        sessionIdentifier: String?
+    ) -> [String] {
+        var arguments = ["exec"]
+
+        if sessionIdentifier != nil {
+            arguments.append("resume")
+        }
+
+        arguments.append(contentsOf: [
             "--skip-git-repo-check",
-            "--sandbox",
-            "read-only",
             "--output-last-message",
-            outputURL.path,
-            "--color",
-            "never"
-        ]
+            outputURL.path
+        ])
+
+        if sessionIdentifier == nil {
+            arguments.append(contentsOf: [
+                "--sandbox",
+                "read-only",
+                "--color",
+                "never"
+            ])
+        }
 
         if let model {
             arguments.append(contentsOf: ["--model", model])
+        }
+
+        if let sessionIdentifier {
+            arguments.append(sessionIdentifier)
         }
 
         arguments.append(prompt)
         return arguments
     }
 
-    private func geminiArguments(prompt: String, model: String?) -> [String] {
-        var arguments = [
+    private func geminiArguments(prompt: String, model: String?, sessionIdentifier: String?) -> [String] {
+        var arguments: [String] = []
+
+        if let sessionIdentifier {
+            arguments.append(contentsOf: ["--resume", sessionIdentifier])
+        }
+
+        arguments.append(contentsOf: [
             "-p",
             prompt,
             "--output-format",
             "json"
-        ]
+        ])
 
         if let model {
             arguments.append(contentsOf: ["--model", model])
@@ -1570,6 +1651,179 @@ private final class AgentCLIService {
         }
 
         return message.isEmpty ? "Gemini CLI failed." : message
+    }
+
+    private func codexSessionsRootURL() -> URL {
+        if let codexHomePath = ProcessInfo.processInfo.environment["CODEX_HOME"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !codexHomePath.isEmpty {
+            return URL(fileURLWithPath: codexHomePath, isDirectory: true)
+                .appendingPathComponent("sessions", isDirectory: true)
+        }
+
+        return fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex", isDirectory: true)
+            .appendingPathComponent("sessions", isDirectory: true)
+    }
+
+    private func codexSessionMeta(at fileURL: URL) -> CodexSessionMetaEnvelope? {
+        guard let fileContents = try? String(contentsOf: fileURL, encoding: .utf8),
+              let firstLine = fileContents.split(separator: "\n", maxSplits: 1).first
+        else {
+            return nil
+        }
+
+        return try? decoder.decode(CodexSessionMetaEnvelope.self, from: Data(firstLine.utf8))
+    }
+
+    private func discoverLatestCodexSessionIdentifier(since: Date, workingDirectoryPath: String) -> String? {
+        let sessionsRootURL = codexSessionsRootURL()
+        guard let enumerator = fileManager.enumerator(
+            at: sessionsRootURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        let lowerBound = since.addingTimeInterval(-2)
+        var candidateFiles: [(url: URL, modifiedAt: Date)] = []
+
+        for case let fileURL as URL in enumerator {
+            guard fileURL.pathExtension == "jsonl",
+                  let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
+                  resourceValues.isRegularFile == true
+            else {
+                continue
+            }
+
+            let modifiedAt = resourceValues.contentModificationDate ?? .distantPast
+            guard modifiedAt >= lowerBound else {
+                continue
+            }
+
+            candidateFiles.append((fileURL, modifiedAt))
+        }
+
+        for candidate in candidateFiles.sorted(by: { $0.modifiedAt > $1.modifiedAt }) {
+            guard let sessionMeta = codexSessionMeta(at: candidate.url),
+                  let sessionWorkingDirectory = normalizeProjectPath(sessionMeta.payload.cwd),
+                  sessionWorkingDirectory == workingDirectoryPath
+            else {
+                continue
+            }
+
+            return sessionMeta.payload.id
+        }
+
+        return nil
+    }
+
+    private func geminiCLIHomePath() -> String {
+        if let geminiHomePath = ProcessInfo.processInfo.environment["GEMINI_CLI_HOME"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !geminiHomePath.isEmpty {
+            return geminiHomePath
+        }
+
+        return fileManager.homeDirectoryForCurrentUser.path
+    }
+
+    private func geminiProjectIdentifier(
+        for projectRootPath: String,
+        geminiCLIHomePath: String
+    ) -> String? {
+        let registryURL = URL(fileURLWithPath: geminiCLIHomePath, isDirectory: true)
+            .appendingPathComponent(".gemini", isDirectory: true)
+            .appendingPathComponent("projects.json")
+
+        guard let registryData = try? Data(contentsOf: registryURL),
+              let registry = try? decoder.decode(GeminiProjectRegistryData.self, from: registryData)
+        else {
+            return nil
+        }
+
+        return registry.projects.first {
+            normalizeProjectPath($0.key) == projectRootPath
+        }?.value
+    }
+
+    private func discoverLatestGeminiSessionIdentifier(
+        since: Date,
+        projectRootPath: String,
+        geminiCLIHomePath: String
+    ) -> String? {
+        guard let projectIdentifier = geminiProjectIdentifier(
+            for: projectRootPath,
+            geminiCLIHomePath: geminiCLIHomePath
+        ) else {
+            return nil
+        }
+
+        let chatsDirectoryURL = URL(fileURLWithPath: geminiCLIHomePath, isDirectory: true)
+            .appendingPathComponent(".gemini", isDirectory: true)
+            .appendingPathComponent("tmp", isDirectory: true)
+            .appendingPathComponent(projectIdentifier, isDirectory: true)
+            .appendingPathComponent("chats", isDirectory: true)
+
+        guard let fileURLs = try? fileManager.contentsOfDirectory(
+            at: chatsDirectoryURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return nil
+        }
+
+        let lowerBound = since.addingTimeInterval(-2)
+        let candidateFiles = fileURLs.compactMap { fileURL -> (url: URL, modifiedAt: Date)? in
+            guard fileURL.pathExtension == "json",
+                  let resourceValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey]),
+                  resourceValues.isRegularFile == true
+            else {
+                return nil
+            }
+
+            let modifiedAt = resourceValues.contentModificationDate ?? .distantPast
+            guard modifiedAt >= lowerBound else {
+                return nil
+            }
+
+            return (fileURL, modifiedAt)
+        }
+
+        for candidate in candidateFiles.sorted(by: { $0.modifiedAt > $1.modifiedAt }) {
+            guard let data = try? Data(contentsOf: candidate.url),
+                  let conversationRecord = try? decoder.decode(GeminiConversationRecord.self, from: data),
+                  !conversationRecord.sessionId.isEmpty
+            else {
+                continue
+            }
+
+            return conversationRecord.sessionId
+        }
+
+        return nil
+    }
+
+    private func normalizeProjectPath(_ path: String?) -> String? {
+        guard let path else {
+            return nil
+        }
+
+        return normalizeProjectPath(path)
+    }
+
+    private func normalizeProjectPath(_ path: String) -> String {
+        var normalizedPath = URL(fileURLWithPath: path, isDirectory: true)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+
+        while normalizedPath.count > 1 && normalizedPath.hasSuffix("/") {
+            normalizedPath.removeLast()
+        }
+
+        return normalizedPath
     }
 
     private func withSecurityScopedAccess<T>(
