@@ -100,31 +100,13 @@ struct AgentPanelView: View {
         return snapshot
     }
 
-    private var smartTaskEngineLabel: String {
+    private var smartTaskProviderLabel: String {
         switch settingsSnapshot.taskGenerationProvider {
         case .openAI:
-            return "Codex"
+            return "codex"
         case .google:
-            return "Gemini"
+            return "gemini"
         }
-    }
-
-    private var smartTaskModelLabel: String {
-        let configuredModel: String
-
-        switch settingsSnapshot.taskGenerationProvider {
-        case .openAI:
-            configuredModel = settingsSnapshot.selectedModel
-        case .google:
-            configuredModel = settingsSnapshot.geminiSelectedModel
-        }
-
-        let trimmedModel = configuredModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedModel.isEmpty ? "Default model" : trimmedModel
-    }
-
-    private var smartTaskStatusLabel: String {
-        "\(smartTaskEngineLabel) / \(smartTaskModelLabel)"
     }
 
     private var taskCompletionText: String {
@@ -269,9 +251,30 @@ struct AgentPanelView: View {
 
             Spacer(minLength: 0)
 
-            Text("chat + terminal")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(secondaryTextColor)
+            HStack(spacing: 8) {
+                Text("AI")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(mutedCardFillColor)
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .stroke(cardStrokeColor, lineWidth: 1)
+                            )
+                    )
+
+                Circle()
+                    .fill(Color(red: 0.23, green: 0.73, blue: 0.41))
+                    .frame(width: 8, height: 8)
+
+                Text(smartTaskProviderLabel)
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(primaryTextColor)
+            }
+            .help("Smart task generation is currently using \(smartTaskProviderLabel).")
         }
         .padding(.horizontal, 12)
         .frame(height: 40)
@@ -429,8 +432,6 @@ struct AgentPanelView: View {
             }
             .frame(height: 36)
 
-            smartTaskStatusStrip
-
             if isIdeaComposerPresented {
                 smartTaskComposer
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -479,33 +480,6 @@ struct AgentPanelView: View {
             }
         }
         .animation(.easeInOut(duration: 0.18), value: isIdeaComposerPresented)
-    }
-
-    private var smartTaskStatusStrip: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text("Smart model")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(secondaryTextColor)
-
-            Spacer(minLength: 0)
-
-            Text(smartTaskStatusLabel)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                .foregroundStyle(primaryTextColor)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(mutedCardFillColor)
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(cardStrokeColor, lineWidth: 1)
-                        )
-                )
-                .help("Smart task generation is currently configured to use \(smartTaskEngineLabel) with \(smartTaskModelLabel).")
-        }
     }
 
     private var smartTaskComposer: some View {
