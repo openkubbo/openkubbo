@@ -359,27 +359,8 @@ struct AgentPanelView: View {
 
                 Spacer(minLength: 0)
 
-                HStack(spacing: 8) {
-                    AgentHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme, size: 32)
-
-                    AgentHeaderIcon(
-                        symbol: "pin.fill",
-                        isDarkTheme: isDarkTheme,
-                        isActive: true,
-                        accentColor: accentColor,
-                        size: 32
-                    )
-
-                    AgentHeaderIcon(
-                        symbol: "square.on.square",
-                        isDarkTheme: isDarkTheme,
-                        symbolTint: accentColor,
-                        size: 32
-                    )
-
-                    AgentHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme, size: 32)
-                }
-                .allowsHitTesting(false)
+                AgentHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme, size: 32)
+                    .allowsHitTesting(false)
             }
             .frame(height: 36)
 
