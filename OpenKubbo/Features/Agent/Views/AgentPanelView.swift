@@ -14,13 +14,16 @@ struct AgentPanelView: View {
     @State private var responseTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
 
-    private let panelWidth: CGFloat = 655.2
+    private let panelWidth: CGFloat = 920
     private let panelHeight: CGFloat = 560
     private let panelHorizontalInset: CGFloat = 2
     private let panelVerticalInset: CGFloat = 6
     private let windowEdgePaddingX: CGFloat = 10
     private let windowEdgePaddingY: CGFloat = 12
     private let typingIndicatorID = "agent.typing.indicator"
+    private let terminalColumnWidth: CGFloat = 620
+    private let taskPreviewColumnWidth: CGFloat = 248
+    private let contentColumnSpacing: CGFloat = 16
 
     private var isDarkTheme: Bool {
         themeStore.resolvedColorScheme(systemColorScheme: systemColorScheme) == .dark
@@ -88,7 +91,7 @@ struct AgentPanelView: View {
             VStack(spacing: 14) {
                 header
                 sessionStrip
-                terminalSurface
+                contentColumns
             }
             .padding(.horizontal, 18)
             .padding(.top, 20)
@@ -110,7 +113,7 @@ struct AgentPanelView: View {
                     width: panelWidth + (windowEdgePaddingX * 2),
                     height: panelHeight + (windowEdgePaddingY * 2)
                 ),
-                minimumSize: CGSize(width: 624, height: 520),
+                minimumSize: CGSize(width: 920, height: 520),
                 windowIdentifier: "openkubbo.agent.window",
                 windowLevel: .floating
             ) { window in
@@ -126,6 +129,17 @@ struct AgentPanelView: View {
         .onDisappear {
             cancelPendingResponse()
         }
+    }
+
+    private var contentColumns: some View {
+        HStack(alignment: .top, spacing: contentColumnSpacing) {
+            terminalSurface
+                .frame(width: terminalColumnWidth)
+
+            taskPreviewPanel
+                .frame(width: taskPreviewColumnWidth)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var header: some View {
@@ -336,6 +350,106 @@ struct AgentPanelView: View {
         .background(cardFillColor.opacity(isDarkTheme ? 0.52 : 0.70))
     }
 
+    private var taskPreviewPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Kubbo Task")
+                    .font(.system(size: 19, weight: .semibold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 8) {
+                    AgentHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme, size: 32)
+
+                    AgentHeaderIcon(
+                        symbol: "pin.fill",
+                        isDarkTheme: isDarkTheme,
+                        isActive: true,
+                        accentColor: accentColor,
+                        size: 32
+                    )
+
+                    AgentHeaderIcon(
+                        symbol: "square.on.square",
+                        isDarkTheme: isDarkTheme,
+                        symbolTint: accentColor,
+                        size: 32
+                    )
+
+                    AgentHeaderIcon(symbol: "xmark", isDarkTheme: isDarkTheme, size: 32)
+                }
+                .allowsHitTesting(false)
+            }
+            .frame(height: 36)
+
+            taskPreviewInput
+
+            Spacer(minLength: 0)
+
+            Rectangle()
+                .fill(cardStrokeColor)
+                .frame(height: 1)
+
+            HStack {
+                Text("0 pending")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+
+                Spacer(minLength: 0)
+
+                Text("0% completed")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+            }
+            .frame(height: 22)
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 18)
+        .padding(.bottom, 14)
+        .frame(maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(terminalFillColor)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(cardStrokeColor, lineWidth: 1)
+        )
+    }
+
+    private var taskPreviewInput: some View {
+        HStack(spacing: 8) {
+            Text("New simple task...")
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .foregroundStyle(secondaryTextColor.opacity(0.92))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "plus")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(primaryTextColor)
+                .frame(width: 40, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(terminalFillColor)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(cardStrokeColor, lineWidth: 1)
+                        )
+                )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(cardFillColor.opacity(isDarkTheme ? 0.72 : 0.94))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+
     private func closeWindow() {
         cancelPendingResponse()
         hostWindow?.close()
@@ -431,6 +545,19 @@ private struct AgentConsoleEntry: Identifiable {
     ]
 }
 
+private struct AgentTaskPreview: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String
+    let isDone: Bool
+
+    static let samples: [AgentTaskPreview] = [
+        .init(title: "Map repository context", subtitle: "Agent planning", isDone: false),
+        .init(title: "Draft shell commands", subtitle: "Visual preview", isDone: false),
+        .init(title: "Render task sidebar", subtitle: "Prototype", isDone: false)
+    ]
+}
+
 private struct AgentConsoleRow: View {
     let entry: AgentConsoleEntry
     let accentColor: Color
@@ -485,12 +612,56 @@ private struct AgentTypingIndicator: View {
     }
 }
 
+private struct AgentTaskPreviewCard: View {
+    let task: AgentTaskPreview
+    let isDarkTheme: Bool
+    let accentColor: Color
+    let cardFillColor: Color
+    let cardStrokeColor: Color
+    let primaryTextColor: Color
+    let secondaryTextColor: Color
+    let mutedCardFillColor: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(task.isDone ? accentColor : secondaryTextColor.opacity(0.65))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(task.title)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(task.isDone ? secondaryTextColor : primaryTextColor)
+                    .strikethrough(task.isDone, color: secondaryTextColor.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Text(task.subtitle)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(secondaryTextColor)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(task.isDone ? mutedCardFillColor : cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+    }
+}
+
 private struct AgentHeaderIcon: View {
     let symbol: String
     var isDarkTheme: Bool = false
     var isActive: Bool = false
     var accentColor: Color = Color(red: 0.39, green: 0.44, blue: 0.99)
     var symbolTint: Color?
+    var size: CGFloat = 36
 
     private var symbolColor: Color {
         if isActive {
@@ -520,7 +691,7 @@ private struct AgentHeaderIcon: View {
         Image(systemName: symbol)
             .font(.system(size: 15, weight: .semibold))
             .foregroundStyle(symbolColor)
-            .frame(width: 36, height: 36)
+            .frame(width: size, height: size)
             .background(
                 Circle()
                     .fill(fillColor)
