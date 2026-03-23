@@ -294,7 +294,7 @@ struct AgentPanelView: View {
                 .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(primaryTextColor)
 
-            Text("Kubbo Task layout on the outside, terminal flow on the inside.")
+            Text("Task layout on the outside, terminal flow on the inside.")
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(tertiaryTextColor)
                 .fixedSize(horizontal: false, vertical: true)
@@ -353,7 +353,7 @@ struct AgentPanelView: View {
     private var taskPreviewPanel: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center, spacing: 8) {
-                Text("Kubbo Task")
+                Text("Task")
                     .font(.system(size: 19, weight: .semibold, design: .rounded))
                     .foregroundStyle(primaryTextColor)
 
@@ -465,7 +465,7 @@ struct AgentPanelView: View {
             guard !Task.isCancelled else { return }
 
             let responseText = """
-            Prompt received. This version keeps the same overall structure as Kubbo Task, while the main content area behaves like a terminal transcript for: "\(trimmedPrompt)".
+            Prompt received. This version keeps the same overall structure as Task, while the main content area behaves like a terminal transcript for: "\(trimmedPrompt)".
             """
 
             await MainActor.run {
@@ -520,7 +520,7 @@ private struct AgentConsoleEntry: Identifiable {
 
     static let previewEntries: [AgentConsoleEntry] = [
         .init(role: .status, text: "Session booted in task-style shell mode."),
-        .init(role: .agent, text: "Ready. The panel layout now matches Kubbo Task more closely, but the transcript still behaves like a terminal."),
+        .init(role: .agent, text: "Ready. The panel layout now matches Task more closely, but the transcript still behaves like a terminal."),
         .init(role: .user, text: "Show the latest repository context."),
         .init(role: .agent, text: "The shell area is prepared for that flow. Live repository-aware output can be streamed directly here.")
     ]
