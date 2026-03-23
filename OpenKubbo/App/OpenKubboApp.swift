@@ -51,7 +51,7 @@ struct OpenKubboApp: App {
         .windowStyle(.hiddenTitleBar)
 
         Window("Agent", id: "agent") {
-            AgentPanelView()
+            AgentSceneView(makeViewModel: container.makeTaskViewModel)
                 .environmentObject(container.themeStore)
         }
         .defaultSize(width: 940, height: 584)
@@ -59,7 +59,7 @@ struct OpenKubboApp: App {
         .windowStyle(.hiddenTitleBar)
 
         WindowGroup("Agent", id: "agent-empty") {
-            AgentPanelView()
+            AgentSceneView(makeViewModel: container.makeTaskViewModel)
                 .environmentObject(container.themeStore)
         }
         .defaultSize(width: 940, height: 584)
@@ -125,5 +125,17 @@ private struct TaskSceneView: View {
 
     var body: some View {
         TaskPanelView(viewModel: viewModel)
+    }
+}
+
+private struct AgentSceneView: View {
+    @StateObject private var viewModel: TaskViewModel
+
+    init(makeViewModel: @escaping () -> TaskViewModel) {
+        _viewModel = StateObject(wrappedValue: makeViewModel())
+    }
+
+    var body: some View {
+        AgentPanelView(taskViewModel: viewModel)
     }
 }

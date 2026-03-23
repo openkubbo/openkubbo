@@ -2,6 +2,8 @@ import AppKit
 import SwiftUI
 
 struct AgentPanelView: View {
+    @ObservedObject var taskViewModel: TaskViewModel
+
     @EnvironmentObject private var themeStore: AppThemeStore
     @Environment(\.colorScheme) private var systemColorScheme
     @Environment(\.openWindow) private var openWindow
@@ -74,6 +76,10 @@ struct AgentPanelView: View {
 
     private var canSendPrompt: Bool {
         !draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isResponding
+    }
+
+    private var taskCompletionText: String {
+        "\(Int((taskViewModel.completionRatio * 100).rounded()))% completed"
     }
 
     var body: some View {
@@ -365,20 +371,20 @@ struct AgentPanelView: View {
 
             taskPreviewInput
 
-            Spacer(minLength: 0)
+            taskPreviewList
 
             Rectangle()
                 .fill(cardStrokeColor)
                 .frame(height: 1)
 
             HStack {
-                Text("0 pending")
+                Text("\(taskViewModel.pendingCount) pending")
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(secondaryTextColor)
 
                 Spacer(minLength: 0)
 
-                Text("0% completed")
+                Text(taskCompletionText)
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(secondaryTextColor)
             }
@@ -400,23 +406,29 @@ struct AgentPanelView: View {
 
     private var taskPreviewInput: some View {
         HStack(spacing: 8) {
-            Text("New simple task...")
+            TextField("New simple task...", text: $taskViewModel.draftTaskTitle)
                 .font(.system(size: 15, weight: .medium, design: .rounded))
-                .foregroundStyle(secondaryTextColor.opacity(0.92))
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: "plus")
-                .font(.system(size: 16, weight: .semibold))
+                .textFieldStyle(.plain)
                 .foregroundStyle(primaryTextColor)
-                .frame(width: 40, height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(terminalFillColor)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(cardStrokeColor, lineWidth: 1)
-                        )
-                )
+                .onSubmit(addSidebarTask)
+
+            Button(action: addSidebarTask) {
+                Image(systemName: "plus")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(primaryTextColor)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(terminalFillColor)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(cardStrokeColor, lineWidth: 1)
+                            )
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!taskViewModel.canAddTask)
+            .opacity(taskViewModel.canAddTask ? 1 : 0.55)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -428,6 +440,19 @@ struct AgentPanelView: View {
                         .stroke(cardStrokeColor, lineWidth: 1)
                 )
         )
+    }
+
+    private var taskPreviewList: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                ForEach(taskViewModel.tasks) { task in
+                    sidebarTaskRow(task)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .scrollIndicators(.visible)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func closeWindow() {
@@ -448,6 +473,63 @@ struct AgentPanelView: View {
     private func openEmptyAgentWindow() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "agent-empty")
+    }
+
+    private func addSidebarTask() {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            taskViewModel.addTask()
+        }
+    }
+
+    private func toggleSidebarTask(_ taskID: UUID) {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            taskViewModel.toggleTaskCompletion(for: taskID)
+        }
+    }
+
+    private func deleteSidebarTask(_ taskID: UUID) {
+        withAnimation(.easeInOut(duration: 0.16)) {
+            taskViewModel.deleteTask(taskID)
+        }
+    }
+
+    private func sidebarTaskRow(_ task: TaskItem) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button {
+                toggleSidebarTask(task.id)
+            } label: {
+                Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(task.isDone ? accentColor : secondaryTextColor.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+
+            Text(task.title)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(task.isDone ? secondaryTextColor : primaryTextColor)
+                .strikethrough(task.isDone, color: secondaryTextColor.opacity(0.9))
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button {
+                deleteSidebarTask(task.id)
+            } label: {
+                AgentTaskRowActionIcon(isDarkTheme: isDarkTheme, secondaryTextColor: secondaryTextColor)
+            }
+            .buttonStyle(.plain)
+            .agentCursorOnHover()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(task.isDone ? mutedCardFillColor : cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
     }
 
     private func sendPrompt() {
@@ -525,19 +607,6 @@ private struct AgentConsoleEntry: Identifiable {
     ]
 }
 
-private struct AgentTaskPreview: Identifiable {
-    let id = UUID()
-    let title: String
-    let subtitle: String
-    let isDone: Bool
-
-    static let samples: [AgentTaskPreview] = [
-        .init(title: "Map repository context", subtitle: "Agent planning", isDone: false),
-        .init(title: "Draft shell commands", subtitle: "Visual preview", isDone: false),
-        .init(title: "Render task sidebar", subtitle: "Prototype", isDone: false)
-    ]
-}
-
 private struct AgentConsoleRow: View {
     let entry: AgentConsoleEntry
     let accentColor: Color
@@ -592,46 +661,19 @@ private struct AgentTypingIndicator: View {
     }
 }
 
-private struct AgentTaskPreviewCard: View {
-    let task: AgentTaskPreview
+private struct AgentTaskRowActionIcon: View {
     let isDarkTheme: Bool
-    let accentColor: Color
-    let cardFillColor: Color
-    let cardStrokeColor: Color
-    let primaryTextColor: Color
     let secondaryTextColor: Color
-    let mutedCardFillColor: Color
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(task.isDone ? accentColor : secondaryTextColor.opacity(0.65))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(task.title)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(task.isDone ? secondaryTextColor : primaryTextColor)
-                    .strikethrough(task.isDone, color: secondaryTextColor.opacity(0.9))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Text(task.subtitle)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(secondaryTextColor)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(task.isDone ? mutedCardFillColor : cardFillColor)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(cardStrokeColor, lineWidth: 1)
-                )
-        )
+        Image(systemName: "xmark")
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(secondaryTextColor)
+            .frame(width: 24, height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.black.opacity(0.04))
+            )
     }
 }
 
