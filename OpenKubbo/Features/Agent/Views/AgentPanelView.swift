@@ -12,6 +12,8 @@ struct AgentPanelView: View {
     @State private var isWindowPinned = true
     @State private var draftPrompt = ""
     @State private var consoleEntries = AgentConsoleEntry.previewEntries
+    @State private var isIdeaComposerPresented = false
+    @State private var ideaPrompt = ""
     @State private var editingTaskID: UUID?
     @State private var editingTaskTitle = ""
     @State private var pendingRemovedTask: TaskViewModel.RemovedTask?
@@ -19,6 +21,7 @@ struct AgentPanelView: View {
     @State private var responseTask: Task<Void, Never>?
     @State private var undoDeleteDismissTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
+    @FocusState private var isIdeaPromptFocused: Bool
 
     private let panelWidth: CGFloat = 920
     private let panelHeight: CGFloat = 560
@@ -80,6 +83,10 @@ struct AgentPanelView: View {
 
     private var canSendPrompt: Bool {
         !draftPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isResponding
+    }
+
+    private var canGenerateIdeaCards: Bool {
+        !ideaPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private var taskCompletionText: String {
@@ -369,31 +376,47 @@ struct AgentPanelView: View {
 
                 Spacer(minLength: 0)
 
-                AgentHeaderIcon(symbol: "lightbulb", isDarkTheme: isDarkTheme, size: 32)
-                    .allowsHitTesting(false)
+                Button(action: toggleIdeaComposer) {
+                    AgentHeaderIcon(
+                        symbol: "lightbulb",
+                        isDarkTheme: isDarkTheme,
+                        isActive: isIdeaComposerPresented,
+                        accentColor: accentColor,
+                        size: 32
+                    )
+                }
+                .buttonStyle(.plain)
+                .agentCursorOnHover()
+                .help(isIdeaComposerPresented ? "Close smart task composer" : "Open smart task composer")
             }
             .frame(height: 36)
 
-            taskPreviewInput
+            if isIdeaComposerPresented {
+                smartTaskComposer
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                taskPreviewInput
+                    .transition(.move(edge: .top).combined(with: .opacity))
 
-            taskPreviewList
+                taskPreviewList
 
-            Rectangle()
-                .fill(cardStrokeColor)
-                .frame(height: 1)
+                Rectangle()
+                    .fill(cardStrokeColor)
+                    .frame(height: 1)
 
-            HStack {
-                Text("\(taskViewModel.pendingCount) pending")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(secondaryTextColor)
+                HStack {
+                    Text("\(taskViewModel.pendingCount) pending")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                Text(taskCompletionText)
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(secondaryTextColor)
+                    Text(taskCompletionText)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor)
+                }
+                .frame(height: 22)
             }
-            .frame(height: 22)
         }
         .padding(.horizontal, 14)
         .padding(.top, 18)
@@ -415,6 +438,103 @@ struct AgentPanelView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: isIdeaComposerPresented)
+    }
+
+    private var smartTaskComposer: some View {
+        let ideaPromptInset: CGFloat = 18
+
+        return VStack(alignment: .leading, spacing: 14) {
+            Text("New Idea")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(mutedCardFillColor)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(cardStrokeColor, lineWidth: 1)
+                        )
+                )
+
+            HStack(alignment: .center, spacing: 12) {
+                Text("Describe your idea")
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(primaryTextColor)
+
+                Spacer(minLength: 0)
+
+                Button(action: closeIdeaComposer) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(secondaryTextColor)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .agentCursorOnHover()
+                .help("Close smart task composer")
+            }
+
+            ZStack(alignment: .topLeading) {
+                if !canGenerateIdeaCards {
+                    Text("Ex: Prepare the launch plan for the new onboarding flow...")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(secondaryTextColor.opacity(0.58))
+                        .padding(.top, ideaPromptInset)
+                        .padding(.horizontal, ideaPromptInset)
+                        .allowsHitTesting(false)
+                }
+
+                TextEditor(text: $ideaPrompt)
+                    .scrollContentBackground(.hidden)
+                    .focused($isIdeaPromptFocused)
+                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                    .foregroundColor(primaryTextColor)
+                    .background(AgentIdeaPromptScrollViewConfigurator(text: ideaPrompt))
+                    .padding(.horizontal, ideaPromptInset)
+                    .padding(.vertical, ideaPromptInset)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(cardFillColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .stroke(isIdeaPromptFocused ? accentColor.opacity(0.68) : cardStrokeColor, lineWidth: 1)
+                    )
+            )
+
+            Button(action: previewGenerateIdeaCards) {
+                HStack(spacing: 10) {
+                    Image(systemName: "wand.and.stars")
+                        .font(.system(size: 16, weight: .semibold))
+
+                    Text("Generate Smart Cards")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(
+                    canGenerateIdeaCards
+                        ? primaryTextColor
+                        : secondaryTextColor.opacity(0.88)
+                )
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .background(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(
+                            canGenerateIdeaCards
+                                ? accentColor.opacity(isDarkTheme ? 0.92 : 0.82)
+                                : accentColor.opacity(isDarkTheme ? 0.66 : 0.22)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .agentCursorOnHover(isEnabled: canGenerateIdeaCards)
+            .disabled(!canGenerateIdeaCards)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var taskPreviewInput: some View {
@@ -529,6 +649,31 @@ struct AgentPanelView: View {
     private func openEmptyAgentWindow() {
         NSApp.activate(ignoringOtherApps: true)
         openWindow(id: "agent-empty")
+    }
+
+    private func toggleIdeaComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isIdeaComposerPresented.toggle()
+        }
+
+        if isIdeaComposerPresented {
+            DispatchQueue.main.async {
+                isIdeaPromptFocused = true
+            }
+        } else {
+            isIdeaPromptFocused = false
+        }
+    }
+
+    private func closeIdeaComposer() {
+        withAnimation(.easeInOut(duration: 0.18)) {
+            isIdeaComposerPresented = false
+        }
+        isIdeaPromptFocused = false
+    }
+
+    private func previewGenerateIdeaCards() {
+        guard canGenerateIdeaCards else { return }
     }
 
     private func addSidebarTask() {
@@ -885,6 +1030,72 @@ private struct AgentHeaderIcon: View {
                             .stroke(strokeColor, lineWidth: 1)
                     )
             )
+    }
+}
+
+private struct AgentIdeaPromptScrollViewConfigurator: NSViewRepresentable {
+    let text: String
+
+    func makeNSView(context: Context) -> NSView {
+        NSView(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            guard let scrollView = findTextEditorScrollView(from: nsView) else {
+                return
+            }
+
+            scrollView.hasHorizontalScroller = false
+            scrollView.autohidesScrollers = true
+            scrollView.scrollerStyle = .overlay
+
+            guard let textView = scrollView.documentView as? NSTextView,
+                  let layoutManager = textView.layoutManager,
+                  let textContainer = textView.textContainer
+            else {
+                scrollView.hasVerticalScroller = false
+                return
+            }
+
+            textView.textContainerInset = .zero
+            textContainer.lineFragmentPadding = 0
+            layoutManager.ensureLayout(for: textContainer)
+
+            let usedHeight = layoutManager.usedRect(for: textContainer).height + (textView.textContainerInset.height * 2)
+            let visibleHeight = scrollView.contentSize.height
+            let shouldShowScroller = !text.isEmpty && usedHeight > visibleHeight + 1
+
+            scrollView.hasVerticalScroller = shouldShowScroller
+        }
+    }
+
+    private func findTextEditorScrollView(from view: NSView) -> NSScrollView? {
+        var currentView: NSView? = view
+
+        while let unwrappedCurrentView = currentView {
+            if let match = findTextEditorScrollView(in: unwrappedCurrentView) {
+                return match
+            }
+            currentView = unwrappedCurrentView.superview
+        }
+
+        return nil
+    }
+
+    private func findTextEditorScrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView,
+           scrollView.documentView is NSTextView {
+            return scrollView
+        }
+
+        for subview in view.subviews {
+            if let match = findTextEditorScrollView(in: subview) {
+                return match
+            }
+        }
+
+        return nil
     }
 }
 
