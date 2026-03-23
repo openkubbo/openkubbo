@@ -12,8 +12,12 @@ struct AgentPanelView: View {
     @State private var isWindowPinned = true
     @State private var draftPrompt = ""
     @State private var consoleEntries = AgentConsoleEntry.previewEntries
+    @State private var editingTaskID: UUID?
+    @State private var editingTaskTitle = ""
+    @State private var pendingRemovedTask: TaskViewModel.RemovedTask?
     @State private var isResponding = false
     @State private var responseTask: Task<Void, Never>?
+    @State private var undoDeleteDismissTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
 
     private let panelWidth: CGFloat = 920
@@ -133,6 +137,7 @@ struct AgentPanelView: View {
         }
         .onDisappear {
             cancelPendingResponse()
+            cancelUndoDeleteTimer()
         }
     }
 
@@ -402,6 +407,14 @@ struct AgentPanelView: View {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .strokeBorder(cardStrokeColor, lineWidth: 1)
         )
+        .overlay(alignment: .bottom) {
+            if pendingRemovedTask != nil {
+                undoDeleteToast
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 54)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
     }
 
     private var taskPreviewInput: some View {
@@ -455,6 +468,49 @@ struct AgentPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var undoDeleteToast: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "trash")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(secondaryTextColor)
+
+            Text("Task deleted. Undo?")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(primaryTextColor)
+                .lineLimit(1)
+
+            Spacer(minLength: 6)
+
+            Button("Undo") {
+                undoDeletedTask()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .bold, design: .rounded))
+            .foregroundStyle(accentColor)
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(accentColor.opacity(isDarkTheme ? 0.20 : 0.14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(accentColor.opacity(0.42), lineWidth: 1)
+                    )
+            )
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(cardFillColor)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(cardStrokeColor, lineWidth: 1)
+                )
+        )
+        .shadow(color: .black.opacity(isDarkTheme ? 0.24 : 0.10), radius: 8, x: 0, y: 4)
+    }
+
     private func closeWindow() {
         cancelPendingResponse()
         hostWindow?.close()
@@ -487,14 +543,74 @@ struct AgentPanelView: View {
         }
     }
 
+    private func beginSidebarTaskEdition(_ task: TaskItem) {
+        editingTaskID = task.id
+        editingTaskTitle = task.title
+    }
+
+    private func saveSidebarTaskEdition(_ taskID: UUID) {
+        taskViewModel.updateTaskTitle(taskID, title: editingTaskTitle)
+        cancelSidebarTaskEdition()
+    }
+
+    private func cancelSidebarTaskEdition() {
+        editingTaskID = nil
+        editingTaskTitle = ""
+    }
+
     private func deleteSidebarTask(_ taskID: UUID) {
+        var removedTask: TaskViewModel.RemovedTask?
         withAnimation(.easeInOut(duration: 0.16)) {
-            taskViewModel.deleteTask(taskID)
+            removedTask = taskViewModel.deleteTaskAndReturn(taskID)
+            pendingRemovedTask = removedTask
+        }
+
+        guard removedTask != nil else {
+            return
+        }
+
+        if editingTaskID == taskID {
+            cancelSidebarTaskEdition()
+        }
+
+        scheduleUndoDeleteTimeout()
+    }
+
+    private func undoDeletedTask() {
+        guard let pendingRemovedTask else { return }
+
+        withAnimation(.easeInOut(duration: 0.16)) {
+            taskViewModel.restoreTask(pendingRemovedTask.task, at: pendingRemovedTask.index)
+            self.pendingRemovedTask = nil
+        }
+
+        cancelUndoDeleteTimer()
+    }
+
+    private func scheduleUndoDeleteTimeout() {
+        cancelUndoDeleteTimer()
+        undoDeleteDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                withAnimation(.easeInOut(duration: 0.16)) {
+                    pendingRemovedTask = nil
+                }
+                undoDeleteDismissTask = nil
+            }
         }
     }
 
+    private func cancelUndoDeleteTimer() {
+        undoDeleteDismissTask?.cancel()
+        undoDeleteDismissTask = nil
+    }
+
     private func sidebarTaskRow(_ task: TaskItem) -> some View {
-        HStack(alignment: .top, spacing: 10) {
+        let isEditing = editingTaskID == task.id
+
+        return HStack(alignment: .top, spacing: 10) {
             Button {
                 toggleSidebarTask(task.id)
             } label: {
@@ -503,21 +619,63 @@ struct AgentPanelView: View {
                     .foregroundStyle(task.isDone ? accentColor : secondaryTextColor.opacity(0.65))
             }
             .buttonStyle(.plain)
+            .disabled(isEditing)
 
-            Text(task.title)
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .foregroundStyle(task.isDone ? secondaryTextColor : primaryTextColor)
-                .strikethrough(task.isDone, color: secondaryTextColor.opacity(0.9))
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Button {
-                deleteSidebarTask(task.id)
-            } label: {
-                AgentTaskRowActionIcon(isDarkTheme: isDarkTheme, secondaryTextColor: secondaryTextColor)
+            Group {
+                if isEditing {
+                    TextField("Edit task", text: $editingTaskTitle)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(primaryTextColor)
+                        .submitLabel(.done)
+                        .onSubmit {
+                            saveSidebarTaskEdition(task.id)
+                        }
+                } else {
+                    Text(task.title)
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .foregroundStyle(task.isDone ? secondaryTextColor : primaryTextColor)
+                        .strikethrough(task.isDone, color: secondaryTextColor.opacity(0.9))
+                        .multilineTextAlignment(.leading)
+                }
             }
-            .buttonStyle(.plain)
-            .agentCursorOnHover()
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 6) {
+                Button {
+                    if isEditing {
+                        saveSidebarTaskEdition(task.id)
+                    } else {
+                        beginSidebarTaskEdition(task)
+                    }
+                } label: {
+                    AgentTaskRowActionIcon(
+                        symbol: isEditing ? "checkmark" : "pencil",
+                        isDarkTheme: isDarkTheme,
+                        secondaryTextColor: secondaryTextColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .agentCursorOnHover()
+                .help(isEditing ? "Save changes" : "Edit task")
+
+                Button {
+                    if isEditing {
+                        cancelSidebarTaskEdition()
+                    } else {
+                        deleteSidebarTask(task.id)
+                    }
+                } label: {
+                    AgentTaskRowActionIcon(
+                        symbol: isEditing ? "xmark" : "trash",
+                        isDarkTheme: isDarkTheme,
+                        secondaryTextColor: secondaryTextColor
+                    )
+                }
+                .buttonStyle(.plain)
+                .agentCursorOnHover()
+                .help(isEditing ? "Cancel editing" : "Delete task")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 12)
@@ -662,17 +820,22 @@ private struct AgentTypingIndicator: View {
 }
 
 private struct AgentTaskRowActionIcon: View {
+    let symbol: String
     let isDarkTheme: Bool
     let secondaryTextColor: Color
 
     var body: some View {
-        Image(systemName: "xmark")
-            .font(.system(size: 10, weight: .bold))
+        Image(systemName: symbol)
+            .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(secondaryTextColor)
             .frame(width: 24, height: 24)
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.black.opacity(0.04))
+                    .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.black.opacity(0.03))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(isDarkTheme ? Color.white.opacity(0.14) : Color.black.opacity(0.10), lineWidth: 1)
+                    )
             )
     }
 }
