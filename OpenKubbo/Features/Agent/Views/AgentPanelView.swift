@@ -175,8 +175,7 @@ struct AgentPanelView: View {
             isPromptFocused = true
         }
         .onDisappear {
-            cancelPendingResponse()
-            cancelUndoDeleteTimer()
+            resetAgentSession()
         }
     }
 
@@ -729,8 +728,24 @@ struct AgentPanelView: View {
     }
 
     private func closeWindow() {
-        cancelPendingResponse()
+        resetAgentSession()
         hostWindow?.close()
+    }
+
+    private func resetAgentSession() {
+        cancelPendingResponse()
+        cancelUndoDeleteTimer()
+        draftPrompt = ""
+        consoleEntries = AgentConsoleEntry.previewEntries
+        cliOverride = nil
+        cliSessionIdentifiers = [:]
+        isIdeaComposerPresented = false
+        ideaPrompt = ""
+        editingTaskID = nil
+        editingTaskTitle = ""
+        pendingRemovedTask = nil
+        isPromptFocused = false
+        isIdeaPromptFocused = false
     }
 
     private func toggleWindowPin() {
