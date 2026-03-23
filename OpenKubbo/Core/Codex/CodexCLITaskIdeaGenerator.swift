@@ -635,15 +635,10 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
 
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
+            let stdinPipe = Pipe()
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe
-
-            var stdinPipe: Pipe?
-            if standardInputData != nil {
-                let pipe = Pipe()
-                process.standardInput = pipe
-                stdinPipe = pipe
-            }
+            process.standardInput = stdinPipe
 
             process.terminationHandler = { process in
                 let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
@@ -656,12 +651,12 @@ final class CodexCLITaskIdeaGenerator: TaskIdeaGenerating {
             do {
                 try process.run()
 
-                if let standardInputData,
-                   let stdinPipe {
+                if let standardInputData {
                     stdinPipe.fileHandleForWriting.write(standardInputData)
-                    stdinPipe.fileHandleForWriting.closeFile()
                 }
+                stdinPipe.fileHandleForWriting.closeFile()
             } catch {
+                try? stdinPipe.fileHandleForWriting.close()
                 continuation.resume(
                     throwing: CodexTaskIdeaError.commandFailed(
                         error.localizedDescription.isEmpty

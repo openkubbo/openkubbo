@@ -13,6 +13,7 @@ struct AgentPanelView: View {
     @State private var isWindowPinned = true
     @State private var draftPrompt = ""
     @State private var consoleEntries = AgentConsoleEntry.previewEntries
+    @State private var cliOverride: AgentCLIProvider?
     @State private var isIdeaComposerPresented = false
     @State private var ideaPrompt = ""
     @State private var editingTaskID: UUID?
@@ -23,6 +24,8 @@ struct AgentPanelView: View {
     @State private var undoDeleteDismissTask: Task<Void, Never>?
     @FocusState private var isPromptFocused: Bool
     @FocusState private var isIdeaPromptFocused: Bool
+
+    private let cliService = AgentCLIService()
 
     private let panelWidth: CGFloat = 920
     private let panelHeight: CGFloat = 560
@@ -100,13 +103,21 @@ struct AgentPanelView: View {
         return snapshot
     }
 
-    private var smartTaskProviderLabel: String {
+    private var configuredCLIProvider: AgentCLIProvider {
         switch settingsSnapshot.taskGenerationProvider {
         case .openAI:
-            return "codex"
+            return .codex
         case .google:
-            return "gemini"
+            return .gemini
         }
+    }
+
+    private var activeCLIProvider: AgentCLIProvider {
+        cliOverride ?? configuredCLIProvider
+    }
+
+    private var smartTaskProviderLabel: String {
+        activeCLIProvider.displayName
     }
 
     private var taskCompletionText: String {
@@ -294,6 +305,7 @@ struct AgentPanelView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
                         shellIntro
+                        terminalProviderStrip
 
                         ForEach(consoleEntries) { entry in
                             AgentConsoleRow(
@@ -306,7 +318,10 @@ struct AgentPanelView: View {
                         }
 
                         if isResponding {
-                            AgentTypingIndicator(secondaryTextColor: secondaryTextColor)
+                            AgentTypingIndicator(
+                                label: activeCLIProvider.displayName,
+                                secondaryTextColor: secondaryTextColor
+                            )
                                 .id(typingIndicatorID)
                         }
                     }
@@ -358,6 +373,35 @@ struct AgentPanelView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.bottom, 2)
+    }
+
+    private var terminalProviderStrip: some View {
+        HStack(spacing: 8) {
+            Text("cli")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(primaryTextColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(mutedCardFillColor)
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(cardStrokeColor, lineWidth: 1)
+                        )
+                )
+
+            Circle()
+                .fill(Color(red: 0.23, green: 0.73, blue: 0.41))
+                .frame(width: 8, height: 8)
+
+            Text("\(smartTaskProviderLabel) attached")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(primaryTextColor)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.bottom, 4)
     }
 
     private var promptComposer: some View {
@@ -905,24 +949,57 @@ struct AgentPanelView: View {
         guard !trimmedPrompt.isEmpty, !isResponding else { return }
 
         draftPrompt = ""
-        consoleEntries.append(.init(role: .user, text: trimmedPrompt))
-        isResponding = true
+        consoleEntries.append(.user(trimmedPrompt))
+
+        if handleProviderCommand(trimmedPrompt) {
+            isPromptFocused = true
+            return
+        }
 
         responseTask?.cancel()
+        isResponding = true
         responseTask = Task {
-            try? await Task.sleep(nanoseconds: 700_000_000)
-            guard !Task.isCancelled else { return }
+            do {
+                let responseText = try await cliService.respond(
+                    to: trimmedPrompt,
+                    using: activeCLIProvider
+                )
+                guard !Task.isCancelled else { return }
 
-            let responseText = """
-            Prompt received. This version keeps the same overall structure as Task, while the main content area behaves like a terminal transcript for: "\(trimmedPrompt)".
-            """
+                await MainActor.run {
+                    consoleEntries.append(.assistant(label: activeCLIProvider.displayName, text: responseText))
+                    isResponding = false
+                    responseTask = nil
+                    isPromptFocused = true
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
 
-            await MainActor.run {
-                consoleEntries.append(.init(role: .agent, text: responseText))
-                isResponding = false
-                responseTask = nil
-                isPromptFocused = true
+                await MainActor.run {
+                    consoleEntries.append(.status(error.localizedDescription))
+                    isResponding = false
+                    responseTask = nil
+                    isPromptFocused = true
+                }
             }
+        }
+    }
+
+    private func handleProviderCommand(_ prompt: String) -> Bool {
+        switch prompt.lowercased() {
+        case "/codex":
+            cliOverride = .codex
+            consoleEntries.append(.status("Active CLI switched to codex."))
+            return true
+        case "/gemini":
+            cliOverride = .gemini
+            consoleEntries.append(.status("Active CLI switched to gemini."))
+            return true
+        case "/claude":
+            consoleEntries.append(.status("Claude CLI is not available in Kubbo Agent yet."))
+            return true
+        default:
+            return false
         }
     }
 
@@ -945,33 +1022,49 @@ struct AgentPanelView: View {
     }
 }
 
-private enum AgentConsoleRole {
-    case status
-    case user
-    case agent
+private enum AgentCLIProvider {
+    case codex
+    case gemini
 
-    var label: String {
+    var displayName: String {
         switch self {
-        case .status:
-            return "sys"
-        case .user:
-            return "you"
-        case .agent:
-            return "kubbo"
+        case .codex:
+            return "codex"
+        case .gemini:
+            return "gemini"
         }
     }
 }
 
+private enum AgentConsoleRoleStyle {
+    case status
+    case user
+    case assistant
+}
+
 private struct AgentConsoleEntry: Identifiable {
     let id = UUID()
-    let role: AgentConsoleRole
+    let style: AgentConsoleRoleStyle
+    let label: String
     let text: String
 
+    static func status(_ text: String) -> Self {
+        .init(style: .status, label: "sys", text: text)
+    }
+
+    static func user(_ text: String) -> Self {
+        .init(style: .user, label: "you", text: text)
+    }
+
+    static func assistant(label: String, text: String) -> Self {
+        .init(style: .assistant, label: label, text: text)
+    }
+
     static let previewEntries: [AgentConsoleEntry] = [
-        .init(role: .status, text: "Session booted in task-style shell mode."),
-        .init(role: .agent, text: "Ready. The panel layout now matches Task more closely, but the transcript still behaves like a terminal."),
-        .init(role: .user, text: "Show the latest repository context."),
-        .init(role: .agent, text: "The shell area is prepared for that flow. Live repository-aware output can be streamed directly here.")
+        .status("Session booted in task-style shell mode."),
+        .assistant(label: "kubbo", text: "Ready. The panel layout now matches Task more closely, but the transcript still behaves like a terminal."),
+        .user("Show the latest repository context."),
+        .assistant(label: "kubbo", text: "The shell area is prepared for that flow. Live repository-aware output can be streamed directly here.")
     ]
 }
 
@@ -982,23 +1075,23 @@ private struct AgentConsoleRow: View {
     let secondaryTextColor: Color
 
     private var labelColor: Color {
-        switch entry.role {
+        switch entry.style {
         case .status:
             return secondaryTextColor
         case .user:
             return accentColor
-        case .agent:
+        case .assistant:
             return primaryTextColor
         }
     }
 
     private var messageColor: Color {
-        entry.role == .status ? secondaryTextColor : primaryTextColor
+        entry.style == .status ? secondaryTextColor : primaryTextColor
     }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(entry.role.label)
+            Text(entry.label)
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(labelColor)
                 .frame(width: 44, alignment: .leading)
@@ -1013,11 +1106,12 @@ private struct AgentConsoleRow: View {
 }
 
 private struct AgentTypingIndicator: View {
+    let label: String
     let secondaryTextColor: Color
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
-            Text("kubbo")
+            Text(label)
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(secondaryTextColor)
                 .frame(width: 44, alignment: .leading)
@@ -1025,6 +1119,533 @@ private struct AgentTypingIndicator: View {
             Text("processing...")
                 .font(.system(size: 13, weight: .medium, design: .monospaced))
                 .foregroundStyle(secondaryTextColor)
+        }
+    }
+}
+
+private enum AgentCLIServiceError: LocalizedError {
+    case commandFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .commandFailed(let message):
+            return message
+        }
+    }
+}
+
+private final class AgentCLIService {
+    private struct ResourceDescriptor {
+        let path: String
+        let bookmarkData: Data?
+    }
+
+    private struct HeadlessResponse: Decodable {
+        struct ResponseError: Decodable {
+            let message: String?
+        }
+
+        let response: String?
+        let error: ResponseError?
+    }
+
+    private struct LaunchConfiguration {
+        let executablePath: String
+        let arguments: [String]
+    }
+
+    private let settingsRepository: SettingsRepository
+    private let geminiAPIKeyStore: GeminiAPIKeyStoring
+    private let codexExecutableResolver: CodexCLIExecutableResolving
+    private let geminiExecutableResolver: GeminiCLIExecutableResolving
+    private let nodeExecutableResolver: NodeRuntimeExecutableResolving
+    private let fileManager: FileManager
+    private let decoder: JSONDecoder
+
+    init(
+        settingsRepository: SettingsRepository = UserDefaultsSettingsRepository(),
+        geminiAPIKeyStore: GeminiAPIKeyStoring = KeychainGeminiAPIKeyStore(),
+        codexExecutableResolver: CodexCLIExecutableResolving = DefaultCodexCLIExecutableResolver(),
+        geminiExecutableResolver: GeminiCLIExecutableResolving = DefaultGeminiCLIExecutableResolver(),
+        nodeExecutableResolver: NodeRuntimeExecutableResolving = DefaultNodeRuntimeExecutableResolver(),
+        fileManager: FileManager = .default,
+        decoder: JSONDecoder = JSONDecoder()
+    ) {
+        self.settingsRepository = settingsRepository
+        self.geminiAPIKeyStore = geminiAPIKeyStore
+        self.codexExecutableResolver = codexExecutableResolver
+        self.geminiExecutableResolver = geminiExecutableResolver
+        self.nodeExecutableResolver = nodeExecutableResolver
+        self.fileManager = fileManager
+        self.decoder = decoder
+    }
+
+    func respond(to prompt: String, using provider: AgentCLIProvider) async throws -> String {
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else {
+            throw AgentCLIServiceError.commandFailed("Type a prompt or command first.")
+        }
+
+        switch provider {
+        case .codex:
+            return try await runCodex(prompt: trimmedPrompt)
+        case .gemini:
+            return try await runGemini(prompt: trimmedPrompt)
+        }
+    }
+
+    private func runCodex(prompt: String) async throws -> String {
+        guard canUseLocalCLI else {
+            throw AgentCLIServiceError.commandFailed(
+                "This sandboxed build cannot launch Codex CLI. Run the Debug build from Xcode to use your local Codex session."
+            )
+        }
+
+        let snapshot = settingsRepository.load()
+        let executableDescriptor = try resolvedCodexExecutableDescriptor(snapshot: snapshot)
+        let nodeExecutableDescriptor = try resolvedNodeExecutableDescriptor(
+            for: executableDescriptor,
+            snapshot: snapshot
+        )
+        let workingDirectoryDescriptor = workingDirectoryDescriptor(snapshot: snapshot)
+        let outputURL = fileManager.temporaryDirectory
+            .appendingPathComponent("agent-codex-\(UUID().uuidString.lowercased()).txt")
+
+        defer {
+            try? fileManager.removeItem(at: outputURL)
+        }
+
+        let launchConfiguration = try launchConfiguration(
+            for: executableDescriptor,
+            nodeExecutableDescriptor: nodeExecutableDescriptor,
+            arguments: codexArguments(
+                prompt: prompt,
+                model: normalizedCodexModelIdentifier(snapshot: snapshot),
+                outputURL: outputURL
+            )
+        )
+
+        let result = try await withSecurityScopedAccess(
+            descriptors: [executableDescriptor, nodeExecutableDescriptor, workingDirectoryDescriptor].compactMap { $0 }
+        ) {
+            try await runProcess(
+                executablePath: launchConfiguration.executablePath,
+                arguments: launchConfiguration.arguments,
+                currentDirectoryURL: workingDirectoryURL(from: workingDirectoryDescriptor),
+                environment: codexExecutionEnvironment()
+            )
+        }
+
+        guard result.exitCode == 0 else {
+            throw AgentCLIServiceError.commandFailed(
+                normalizedCodexCLIError(stderr: result.stderr, stdout: result.stdout)
+            )
+        }
+
+        if let responseText = try? String(contentsOf: outputURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !responseText.isEmpty {
+            return responseText
+        }
+
+        let fallbackOutput = normalizedCommandOutput(stderr: result.stderr, stdout: result.stdout)
+        guard !fallbackOutput.isEmpty else {
+            throw AgentCLIServiceError.commandFailed("Codex CLI returned an empty response.")
+        }
+
+        return fallbackOutput
+    }
+
+    private func runGemini(prompt: String) async throws -> String {
+        guard canUseLocalCLI else {
+            throw AgentCLIServiceError.commandFailed(
+                "This sandboxed build cannot launch Gemini CLI. Run the Debug build from Xcode to use your local Gemini session."
+            )
+        }
+
+        let snapshot = settingsRepository.load()
+        let executableDescriptor = try resolvedGeminiExecutableDescriptor(snapshot: snapshot)
+        let nodeExecutableDescriptor = try resolvedNodeExecutableDescriptor(
+            for: executableDescriptor,
+            snapshot: snapshot
+        )
+        let workingDirectoryDescriptor = workingDirectoryDescriptor(snapshot: snapshot)
+
+        let launchConfiguration = try launchConfiguration(
+            for: executableDescriptor,
+            nodeExecutableDescriptor: nodeExecutableDescriptor,
+            arguments: geminiArguments(
+                prompt: prompt,
+                model: normalizedGeminiModelIdentifier(snapshot: snapshot)
+            )
+        )
+
+        let result = try await withSecurityScopedAccess(
+            descriptors: [executableDescriptor, nodeExecutableDescriptor, workingDirectoryDescriptor].compactMap { $0 }
+        ) {
+            try await runProcess(
+                executablePath: launchConfiguration.executablePath,
+                arguments: launchConfiguration.arguments,
+                currentDirectoryURL: workingDirectoryURL(from: workingDirectoryDescriptor),
+                environment: geminiExecutionEnvironment()
+            )
+        }
+
+        guard result.exitCode == 0 else {
+            throw AgentCLIServiceError.commandFailed(
+                normalizedGeminiCLIError(stderr: result.stderr, stdout: result.stdout)
+            )
+        }
+
+        guard let responseData = result.stdout.data(using: .utf8) else {
+            throw AgentCLIServiceError.commandFailed("Gemini CLI returned an invalid response.")
+        }
+
+        let payload: HeadlessResponse
+        do {
+            payload = try decoder.decode(HeadlessResponse.self, from: responseData)
+        } catch {
+            throw AgentCLIServiceError.commandFailed("Gemini CLI returned an invalid response.")
+        }
+
+        if let errorMessage = payload.error?.message?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !errorMessage.isEmpty {
+            throw AgentCLIServiceError.commandFailed(errorMessage)
+        }
+
+        let outputText = payload.response?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !outputText.isEmpty else {
+            throw AgentCLIServiceError.commandFailed("Gemini CLI returned an empty response.")
+        }
+
+        return outputText
+    }
+
+    private var canUseLocalCLI: Bool {
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] == nil
+    }
+
+    private func resolvedCodexExecutableDescriptor(snapshot: SettingsSnapshot) throws -> ResourceDescriptor {
+        if let manualPath = snapshot.codexExecutablePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !manualPath.isEmpty {
+            return ResourceDescriptor(path: manualPath, bookmarkData: snapshot.codexExecutableBookmarkData)
+        }
+
+        guard let detectedPath = codexExecutableResolver.resolveExecutablePath() else {
+            throw AgentCLIServiceError.commandFailed("Codex CLI was not found. Install `codex` first.")
+        }
+
+        return ResourceDescriptor(path: detectedPath, bookmarkData: nil)
+    }
+
+    private func resolvedGeminiExecutableDescriptor(snapshot: SettingsSnapshot) throws -> ResourceDescriptor {
+        if let manualPath = snapshot.geminiExecutablePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !manualPath.isEmpty {
+            return ResourceDescriptor(path: manualPath, bookmarkData: snapshot.geminiExecutableBookmarkData)
+        }
+
+        guard let detectedPath = geminiExecutableResolver.resolveExecutablePath() else {
+            throw AgentCLIServiceError.commandFailed("Gemini CLI was not found. Install `gemini` first.")
+        }
+
+        return ResourceDescriptor(path: detectedPath, bookmarkData: nil)
+    }
+
+    private func resolvedNodeExecutableDescriptor(
+        for executableDescriptor: ResourceDescriptor,
+        snapshot: SettingsSnapshot
+    ) throws -> ResourceDescriptor? {
+        guard requiresNodeRuntime(for: executableDescriptor) else {
+            return nil
+        }
+
+        if let manualPath = snapshot.nodeExecutablePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !manualPath.isEmpty {
+            return ResourceDescriptor(path: manualPath, bookmarkData: snapshot.nodeExecutableBookmarkData)
+        }
+
+        guard let detectedPath = nodeExecutableResolver.resolveNodeExecutablePath() else {
+            throw AgentCLIServiceError.commandFailed(
+                "Node.js runtime was not found. In Settings > API Keys, choose `/usr/local/bin/node`."
+            )
+        }
+
+        return ResourceDescriptor(path: detectedPath, bookmarkData: nil)
+    }
+
+    private func workingDirectoryDescriptor(snapshot: SettingsSnapshot) -> ResourceDescriptor? {
+        if let rootPath = snapshot.localRepositoriesRootPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !rootPath.isEmpty {
+            return ResourceDescriptor(path: rootPath, bookmarkData: snapshot.localRepositoriesRootBookmarkData)
+        }
+
+        return nil
+    }
+
+    private func workingDirectoryURL(from descriptor: ResourceDescriptor?) -> URL? {
+        if let descriptor {
+            return URL(fileURLWithPath: descriptor.path, isDirectory: true)
+        }
+
+        return fileManager.homeDirectoryForCurrentUser
+    }
+
+    private func launchConfiguration(
+        for executableDescriptor: ResourceDescriptor,
+        nodeExecutableDescriptor: ResourceDescriptor?,
+        arguments: [String]
+    ) throws -> LaunchConfiguration {
+        let executablePath = preferredLaunchPath(for: executableDescriptor)
+
+        if let nodeExecutableDescriptor {
+            return LaunchConfiguration(
+                executablePath: preferredLaunchPath(for: nodeExecutableDescriptor),
+                arguments: [executablePath] + arguments
+            )
+        }
+
+        return LaunchConfiguration(executablePath: executablePath, arguments: arguments)
+    }
+
+    private func codexArguments(prompt: String, model: String?, outputURL: URL) -> [String] {
+        var arguments = [
+            "exec",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "--output-last-message",
+            outputURL.path,
+            "--color",
+            "never"
+        ]
+
+        if let model {
+            arguments.append(contentsOf: ["--model", model])
+        }
+
+        arguments.append(prompt)
+        return arguments
+    }
+
+    private func geminiArguments(prompt: String, model: String?) -> [String] {
+        var arguments = [
+            "-p",
+            prompt,
+            "--output-format",
+            "json"
+        ]
+
+        if let model {
+            arguments.append(contentsOf: ["--model", model])
+        }
+
+        return arguments
+    }
+
+    private func codexExecutionEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = effectiveExecutionPATH
+        return environment
+    }
+
+    private func geminiExecutionEnvironment() -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["PATH"] = effectiveExecutionPATH
+
+        let normalizedAPIKey = geminiAPIKeyStore.apiKey()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !normalizedAPIKey.isEmpty {
+            environment["GEMINI_API_KEY"] = normalizedAPIKey
+        }
+
+        return environment
+    }
+
+    private var effectiveExecutionPATH: String {
+        let fallbackPath = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+        if let inheritedPath = ProcessInfo.processInfo.environment["PATH"],
+           !inheritedPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "\(fallbackPath):\(inheritedPath)"
+        }
+
+        return fallbackPath
+    }
+
+    private func normalizedCodexModelIdentifier(snapshot: SettingsSnapshot) -> String? {
+        let rawValue = snapshot.selectedModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawValue.isEmpty else {
+            return nil
+        }
+
+        switch rawValue {
+        case "Gemini 1.5 Pro", "Claude 3.7 Sonnet":
+            return nil
+        default:
+            return rawValue
+        }
+    }
+
+    private func normalizedGeminiModelIdentifier(snapshot: SettingsSnapshot) -> String? {
+        let rawValue = snapshot.geminiSelectedModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        return rawValue.isEmpty ? nil : rawValue
+    }
+
+    private func preferredLaunchPath(for descriptor: ResourceDescriptor) -> String {
+        guard descriptor.bookmarkData == nil else {
+            return descriptor.path
+        }
+
+        let resolvedPath = URL(fileURLWithPath: descriptor.path).resolvingSymlinksInPath().path
+        return resolvedPath.isEmpty ? descriptor.path : resolvedPath
+    }
+
+    private func requiresNodeRuntime(for descriptor: ResourceDescriptor) -> Bool {
+        let launchPath = preferredLaunchPath(for: descriptor)
+        if launchPath.lowercased().hasSuffix(".js") {
+            return true
+        }
+
+        guard fileManager.fileExists(atPath: launchPath),
+              let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: launchPath)) else {
+            return false
+        }
+        defer {
+            try? handle.close()
+        }
+
+        guard let data = try? handle.read(upToCount: 160),
+              let shebang = String(data: data, encoding: .utf8)?
+                .split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
+                .first
+                .map(String.init) else {
+            return false
+        }
+
+        return shebang.hasPrefix("#!") && shebang.contains("node")
+    }
+
+    private func normalizedCommandOutput(stderr: String, stdout: String) -> String {
+        let trimmedError = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedError.isEmpty {
+            return trimmedError
+        }
+
+        return stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func normalizedCodexCLIError(stderr: String, stdout: String) -> String {
+        let message = normalizedCommandOutput(stderr: stderr, stdout: stdout)
+        let normalizedMessage = message.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+
+        if normalizedMessage.contains("login required") ||
+            normalizedMessage.contains("please login") ||
+            normalizedMessage.contains("please log in") ||
+            normalizedMessage.contains("not logged in") ||
+            normalizedMessage.contains("not authenticated") ||
+            normalizedMessage.contains("auth") {
+            return "Codex CLI is installed, but your local session is not authenticated. In Terminal, run `codex login` and choose ChatGPT."
+        }
+
+        return message.isEmpty ? "Codex CLI failed." : message
+    }
+
+    private func normalizedGeminiCLIError(stderr: String, stdout: String) -> String {
+        let message = normalizedCommandOutput(stderr: stderr, stdout: stdout)
+        let normalizedMessage = message.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+
+        if normalizedMessage.contains("login") ||
+            normalizedMessage.contains("log in") ||
+            normalizedMessage.contains("sign in") ||
+            normalizedMessage.contains("not authenticated") ||
+            normalizedMessage.contains("authentication") ||
+            normalizedMessage.contains("credentials") ||
+            normalizedMessage.contains("api key") {
+            return "Gemini CLI is installed, but your local session is not authenticated. In Terminal, run `gemini` and choose Sign in with Google, or save a Gemini API key in Settings > API Keys."
+        }
+
+        return message.isEmpty ? "Gemini CLI failed." : message
+    }
+
+    private func withSecurityScopedAccess<T>(
+        descriptors: [ResourceDescriptor],
+        operation: () async throws -> T
+    ) async throws -> T {
+        let bookmarkPayloads = descriptors.compactMap(\.bookmarkData)
+        guard !bookmarkPayloads.isEmpty else {
+            return try await operation()
+        }
+
+        var scopedURLs: [URL] = []
+        for bookmarkData in bookmarkPayloads {
+            var isStale = false
+            let url = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: [.withSecurityScope],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+
+            if url.startAccessingSecurityScopedResource() {
+                scopedURLs.append(url)
+            }
+        }
+
+        defer {
+            for url in scopedURLs {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        return try await operation()
+    }
+
+    private func runProcess(
+        executablePath: String,
+        arguments: [String],
+        currentDirectoryURL: URL?,
+        environment: [String: String]
+    ) async throws -> (exitCode: Int32, stdout: String, stderr: String) {
+        try await withCheckedThrowingContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: executablePath)
+            process.arguments = arguments
+            process.currentDirectoryURL = currentDirectoryURL
+            process.environment = environment
+
+            let stdoutPipe = Pipe()
+            let stderrPipe = Pipe()
+            let stdinPipe = Pipe()
+            process.standardOutput = stdoutPipe
+            process.standardError = stderrPipe
+            process.standardInput = stdinPipe
+
+            process.terminationHandler = { process in
+                let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+                let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+                let stdout = String(data: stdoutData, encoding: .utf8) ?? ""
+                let stderr = String(data: stderrData, encoding: .utf8) ?? ""
+                continuation.resume(returning: (process.terminationStatus, stdout, stderr))
+            }
+
+            do {
+                try process.run()
+                stdinPipe.fileHandleForWriting.closeFile()
+            } catch {
+                try? stdinPipe.fileHandleForWriting.close()
+                continuation.resume(
+                    throwing: AgentCLIServiceError.commandFailed(
+                        error.localizedDescription.isEmpty
+                            ? "Failed to execute CLI."
+                            : error.localizedDescription
+                    )
+                )
+            }
         }
     }
 }
