@@ -21,8 +21,7 @@ struct AgentPanelView: View {
     private let windowEdgePaddingX: CGFloat = 10
     private let windowEdgePaddingY: CGFloat = 12
     private let typingIndicatorID = "agent.typing.indicator"
-    private let terminalColumnWidth: CGFloat = 620
-    private let taskPreviewColumnWidth: CGFloat = 248
+    private let terminalColumnWidth: CGFloat = 558
     private let contentColumnSpacing: CGFloat = 16
 
     private var isDarkTheme: Bool {
@@ -137,7 +136,7 @@ struct AgentPanelView: View {
                 .frame(width: terminalColumnWidth)
 
             taskPreviewPanel
-                .frame(width: taskPreviewColumnWidth)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
