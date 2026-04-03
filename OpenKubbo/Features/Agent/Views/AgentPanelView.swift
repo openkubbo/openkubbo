@@ -146,6 +146,17 @@ struct AgentPanelView: View {
         }
     }
 
+    private func personaRoleLabel(for persona: AgentSessionPersona) -> String {
+        switch persona {
+        case .tars:
+            return "implementer"
+        case .kipp:
+            return "optimizer"
+        case .case:
+            return "reviewer"
+        }
+    }
+
     private func personaFillColor(for persona: AgentSessionPersona) -> Color {
         if selectedSessionPersona == persona {
             return personaColor(for: persona).opacity(isDarkTheme ? 0.90 : 0.22)
@@ -171,19 +182,25 @@ struct AgentPanelView: View {
     }
 
     private var selectedPersonaTag: some View {
-        Text(selectedSessionPersona.rawValue)
-            .font(.system(size: 10, weight: .bold, design: .rounded))
-            .foregroundStyle(personaForegroundColor(for: selectedSessionPersona))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(personaColor(for: selectedSessionPersona))
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(personaColor(for: selectedSessionPersona).opacity(isDarkTheme ? 0.98 : 0.52), lineWidth: 1)
-                    )
-            )
+        HStack(spacing: 8) {
+            Text(selectedSessionPersona.rawValue)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(personaForegroundColor(for: selectedSessionPersona))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(personaColor(for: selectedSessionPersona))
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(personaColor(for: selectedSessionPersona).opacity(isDarkTheme ? 0.98 : 0.52), lineWidth: 1)
+                        )
+                )
+
+            Text(personaRoleLabel(for: selectedSessionPersona))
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(secondaryTextColor)
+        }
     }
 
     var body: some View {
