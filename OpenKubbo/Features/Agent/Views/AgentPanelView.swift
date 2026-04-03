@@ -23,6 +23,7 @@ struct AgentPanelView: View {
     @State private var responseTask: Task<Void, Never>?
     @State private var undoDeleteDismissTask: Task<Void, Never>?
     @State private var cliSessionIdentifiers: [AgentCLIProvider: String] = [:]
+    @State private var selectedSessionPersona: AgentSessionPersona = .tars
     @FocusState private var isPromptFocused: Bool
     @FocusState private var isIdeaPromptFocused: Bool
 
@@ -123,6 +124,30 @@ struct AgentPanelView: View {
 
     private var taskCompletionText: String {
         "\(Int((taskViewModel.completionRatio * 100).rounded()))% completed"
+    }
+
+    private func personaFillColor(for persona: AgentSessionPersona) -> Color {
+        if selectedSessionPersona == persona {
+            return accentColor.opacity(isDarkTheme ? 0.88 : 0.18)
+        }
+
+        return mutedCardFillColor
+    }
+
+    private func personaStrokeColor(for persona: AgentSessionPersona) -> Color {
+        if selectedSessionPersona == persona {
+            return accentColor.opacity(isDarkTheme ? 0.82 : 0.42)
+        }
+
+        return cardStrokeColor
+    }
+
+    private func personaTextColor(for persona: AgentSessionPersona) -> Color {
+        if selectedSessionPersona == persona {
+            return isDarkTheme ? .white : accentColor.opacity(0.92)
+        }
+
+        return secondaryTextColor
     }
 
     var body: some View {
@@ -251,6 +276,30 @@ struct AgentPanelView: View {
                                 .stroke(cardStrokeColor, lineWidth: 1)
                         )
                 )
+
+            HStack(spacing: 6) {
+                ForEach(AgentSessionPersona.allCases, id: \.self) { persona in
+                    Button {
+                        selectedSessionPersona = persona
+                    } label: {
+                        Text(persona.rawValue)
+                            .font(.system(size: 10, weight: .bold, design: .rounded))
+                            .foregroundStyle(personaTextColor(for: persona))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(personaFillColor(for: persona))
+                                    .overlay(
+                                        Capsule(style: .continuous)
+                                            .stroke(personaStrokeColor(for: persona), lineWidth: 1)
+                                    )
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .agentCursorOnHover()
+                }
+            }
 
             Circle()
                 .fill(isResponding ? accentColor : Color(red: 0.23, green: 0.73, blue: 0.41))
@@ -1057,6 +1106,12 @@ private enum AgentCLIProvider: Hashable {
             return "gemini"
         }
     }
+}
+
+private enum AgentSessionPersona: String, CaseIterable, Hashable {
+    case tars = "TARS"
+    case kipp = "KIPP"
+    case `case` = "CASE"
 }
 
 private enum AgentConsoleRoleStyle {
