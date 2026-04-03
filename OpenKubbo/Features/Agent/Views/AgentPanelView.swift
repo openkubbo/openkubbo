@@ -131,7 +131,7 @@ struct AgentPanelView: View {
             return accentColor.opacity(isDarkTheme ? 0.88 : 0.18)
         }
 
-        return mutedCardFillColor
+        return .clear
     }
 
     private func personaStrokeColor(for persona: AgentSessionPersona) -> Color {
@@ -139,7 +139,7 @@ struct AgentPanelView: View {
             return accentColor.opacity(isDarkTheme ? 0.82 : 0.42)
         }
 
-        return cardStrokeColor
+        return .clear
     }
 
     private func personaTextColor(for persona: AgentSessionPersona) -> Color {
@@ -277,29 +277,45 @@ struct AgentPanelView: View {
                         )
                 )
 
-            HStack(spacing: 6) {
-                ForEach(AgentSessionPersona.allCases, id: \.self) { persona in
+            HStack(spacing: 0) {
+                ForEach(Array(AgentSessionPersona.allCases.enumerated()), id: \.element) { index, persona in
                     Button {
                         selectedSessionPersona = persona
                     } label: {
                         Text(persona.rawValue)
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundStyle(personaTextColor(for: persona))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
+                            .frame(minWidth: 46)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
                             .background(
-                                Capsule(style: .continuous)
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .fill(personaFillColor(for: persona))
                                     .overlay(
-                                        Capsule(style: .continuous)
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                                             .stroke(personaStrokeColor(for: persona), lineWidth: 1)
                                     )
                             )
                     }
                     .buttonStyle(.plain)
                     .agentCursorOnHover()
+
+                    if index < AgentSessionPersona.allCases.count - 1 {
+                        Rectangle()
+                            .fill(dividerColor)
+                            .frame(width: 1, height: 16)
+                    }
                 }
             }
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(mutedCardFillColor)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(cardStrokeColor, lineWidth: 1)
+                    )
+            )
 
             Circle()
                 .fill(isResponding ? accentColor : Color(red: 0.23, green: 0.73, blue: 0.41))
