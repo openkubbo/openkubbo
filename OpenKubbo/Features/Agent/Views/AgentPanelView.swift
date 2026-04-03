@@ -152,13 +152,8 @@ struct AgentPanelView: View {
         personaColor(for: persona).opacity(isDarkTheme ? 0.26 : 0.18)
     }
 
-    private func personaForegroundColor(for persona: AgentSessionPersona) -> Color {
-        switch persona {
-        case .kipp:
-            return Color.black.opacity(0.84)
-        case .tars, .case:
-            return .white
-        }
+    private func personaSoftStrokeColor(for persona: AgentSessionPersona) -> Color {
+        personaColor(for: persona).opacity(isDarkTheme ? 0.34 : 0.22)
     }
 
     private func personaRoleLabel(for persona: AgentSessionPersona) -> String {
@@ -174,7 +169,7 @@ struct AgentPanelView: View {
 
     private func personaFillColor(for persona: AgentSessionPersona) -> Color {
         if selectedSessionPersona == persona {
-            return personaColor(for: persona).opacity(isDarkTheme ? 0.90 : 0.22)
+            return personaSoftFillColor(for: persona)
         }
 
         return .clear
@@ -182,7 +177,7 @@ struct AgentPanelView: View {
 
     private func personaStrokeColor(for persona: AgentSessionPersona) -> Color {
         if selectedSessionPersona == persona {
-            return personaColor(for: persona).opacity(isDarkTheme ? 0.96 : 0.44)
+            return personaSoftStrokeColor(for: persona)
         }
 
         return .clear
@@ -190,7 +185,7 @@ struct AgentPanelView: View {
 
     private func personaTextColor(for persona: AgentSessionPersona) -> Color {
         if selectedSessionPersona == persona {
-            return personaForegroundColor(for: persona)
+            return personaInkColor(for: persona)
         }
 
         return secondaryTextColor
