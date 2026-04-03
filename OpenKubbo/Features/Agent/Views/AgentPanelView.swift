@@ -137,6 +137,21 @@ struct AgentPanelView: View {
         }
     }
 
+    private func personaInkColor(for persona: AgentSessionPersona) -> Color {
+        switch persona {
+        case .tars:
+            return isDarkTheme ? Color(red: 0.63, green: 0.77, blue: 1.00) : Color(red: 0.12, green: 0.33, blue: 0.76)
+        case .kipp:
+            return isDarkTheme ? Color(red: 1.00, green: 0.88, blue: 0.44) : Color(red: 0.57, green: 0.42, blue: 0.02)
+        case .case:
+            return isDarkTheme ? Color(red: 0.56, green: 0.90, blue: 0.65) : Color(red: 0.10, green: 0.47, blue: 0.24)
+        }
+    }
+
+    private func personaSoftFillColor(for persona: AgentSessionPersona) -> Color {
+        personaColor(for: persona).opacity(isDarkTheme ? 0.26 : 0.18)
+    }
+
     private func personaForegroundColor(for persona: AgentSessionPersona) -> Color {
         switch persona {
         case .kipp:
@@ -183,24 +198,28 @@ struct AgentPanelView: View {
 
     private var selectedPersonaTag: some View {
         HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(personaSoftFillColor(for: selectedSessionPersona))
+                .frame(width: 12, height: 12)
+
             Text(selectedSessionPersona.rawValue)
                 .font(.system(size: 10, weight: .bold, design: .rounded))
-                .foregroundStyle(personaForegroundColor(for: selectedSessionPersona))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(personaColor(for: selectedSessionPersona))
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(personaColor(for: selectedSessionPersona).opacity(isDarkTheme ? 0.98 : 0.52), lineWidth: 1)
-                        )
-                )
+                .foregroundStyle(personaInkColor(for: selectedSessionPersona))
 
             Text(personaRoleLabel(for: selectedSessionPersona))
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(secondaryTextColor)
+                .foregroundStyle(personaInkColor(for: selectedSessionPersona).opacity(isDarkTheme ? 0.90 : 0.80))
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            Capsule(style: .continuous)
+                .fill(mutedCardFillColor)
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(personaColor(for: selectedSessionPersona).opacity(isDarkTheme ? 0.22 : 0.14), lineWidth: 1)
+                )
+        )
     }
 
     var body: some View {
@@ -271,10 +290,15 @@ struct AgentPanelView: View {
     private var header: some View {
         HStack(alignment: .center) {
             HStack(spacing: 8) {
-                Text("Kubbo Agent")
-                    .font(.system(size: 19, weight: .semibold, design: .rounded))
-                    .foregroundStyle(primaryTextColor)
-                    .frame(height: 36, alignment: .center)
+                HStack(spacing: 0) {
+                    Text("Kubbo ")
+                        .foregroundStyle(primaryTextColor)
+
+                    Text("Agent")
+                        .foregroundStyle(personaInkColor(for: selectedSessionPersona))
+                }
+                .font(.system(size: 19, weight: .semibold, design: .rounded))
+                .frame(height: 36, alignment: .center)
 
                 selectedPersonaTag
 
