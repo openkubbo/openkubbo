@@ -75,10 +75,6 @@ struct AgentPanelView: View {
         isDarkTheme ? .white.opacity(0.60) : .black.opacity(0.48)
     }
 
-    private var tertiaryTextColor: Color {
-        isDarkTheme ? .white.opacity(0.42) : .black.opacity(0.34)
-    }
-
     private var mutedCardFillColor: Color {
         isDarkTheme ? .white.opacity(0.06) : .black.opacity(0.04)
     }
@@ -337,20 +333,6 @@ struct AgentPanelView: View {
 
     private var sessionStrip: some View {
         HStack(spacing: 10) {
-            Text("Shell")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(primaryTextColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(mutedCardFillColor)
-                        .overlay(
-                            Capsule(style: .continuous)
-                                .stroke(cardStrokeColor, lineWidth: 1)
-                        )
-                )
-
             HStack(spacing: 0) {
                 ForEach(Array(AgentSessionPersona.allCases.enumerated()), id: \.element) { index, persona in
                     Button {
@@ -395,8 +377,8 @@ struct AgentPanelView: View {
                 .fill(isResponding ? accentColor : Color(red: 0.23, green: 0.73, blue: 0.41))
                 .frame(width: 8, height: 8)
 
-            Text(isResponding ? "Streaming response..." : "Terminal session ready")
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            Text(isResponding ? "Thinking..." : "Conversation ready")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(primaryTextColor)
 
             Spacer(minLength: 0)
@@ -443,7 +425,6 @@ struct AgentPanelView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        shellIntro
                         terminalProviderStrip
 
                         ForEach(consoleEntries) { entry in
@@ -500,24 +481,10 @@ struct AgentPanelView: View {
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    private var shellIntro: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("kubbo@agent % interactive chat shell")
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundStyle(primaryTextColor)
-
-            Text("Task layout on the outside, terminal flow on the inside.")
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(tertiaryTextColor)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(.bottom, 2)
-    }
-
     private var terminalProviderStrip: some View {
         HStack(spacing: 8) {
-            Text("cli")
-                .font(.system(size: 10, weight: .bold, design: .monospaced))
+            Text("Provider")
+                .font(.system(size: 10, weight: .bold, design: .rounded))
                 .foregroundStyle(primaryTextColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -534,8 +501,8 @@ struct AgentPanelView: View {
                 .fill(Color(red: 0.23, green: 0.73, blue: 0.41))
                 .frame(width: 8, height: 8)
 
-            Text("\(smartTaskProviderLabel) attached")
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            Text("\(smartTaskProviderLabel.capitalized) active")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(primaryTextColor)
 
             Spacer(minLength: 0)
@@ -545,13 +512,13 @@ struct AgentPanelView: View {
 
     private var promptComposer: some View {
         HStack(spacing: 10) {
-            Text("kubbo@agent %")
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+            Image(systemName: "sparkles")
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(accentColor)
 
-            TextField("Type a prompt or command...", text: $draftPrompt)
+            TextField("Ask Kubbo Agent anything...", text: $draftPrompt)
                 .textFieldStyle(.plain)
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .font(.system(size: 14, weight: .medium, design: .rounded))
                 .foregroundStyle(primaryTextColor)
                 .focused($isPromptFocused)
                 .onSubmit(sendPrompt)
@@ -567,8 +534,8 @@ struct AgentPanelView: View {
                             .font(.system(size: 12, weight: .bold))
                     }
 
-                    Text(isResponding ? "run" : "send")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    Text(isResponding ? "Thinking" : "Send")
+                        .font(.system(size: 11, weight: .bold, design: .rounded))
                 }
                 .foregroundStyle(canSendPrompt || isResponding ? primaryTextColor : secondaryTextColor)
                 .padding(.horizontal, 10)
@@ -1151,14 +1118,14 @@ struct AgentPanelView: View {
         switch prompt.lowercased() {
         case "/codex":
             cliOverride = .codex
-            consoleEntries.append(.status("Active CLI switched to codex."))
+            consoleEntries.append(.status("Provider switched to Codex."))
             return true
         case "/gemini":
             cliOverride = .gemini
-            consoleEntries.append(.status("Active CLI switched to gemini."))
+            consoleEntries.append(.status("Provider switched to Gemini."))
             return true
         case "/claude":
-            consoleEntries.append(.status("Claude CLI is not available in Kubbo Agent yet."))
+            consoleEntries.append(.status("Claude is not available in Kubbo Agent yet."))
             return true
         default:
             return false
@@ -1217,7 +1184,7 @@ private struct AgentConsoleEntry: Identifiable {
     let text: String
 
     static func status(_ text: String) -> Self {
-        .init(style: .status, label: "sys", text: text)
+        .init(style: .status, label: "info", text: text)
     }
 
     static func user(_ text: String) -> Self {
@@ -1229,10 +1196,8 @@ private struct AgentConsoleEntry: Identifiable {
     }
 
     static let previewEntries: [AgentConsoleEntry] = [
-        .status("Session booted in task-style shell mode."),
-        .assistant(label: "kubbo", text: "Ready. The panel layout now matches Task more closely, but the transcript still behaves like a terminal."),
-        .user("Show the latest repository context."),
-        .assistant(label: "kubbo", text: "The shell area is prepared for that flow. Live repository-aware output can be streamed directly here.")
+        .status("Session ready."),
+        .assistant(label: "kubbo", text: "Ask for repository context, planning help, or a task breakdown. I will keep the task panel close while we work.")
     ]
 }
 
@@ -1260,7 +1225,7 @@ private struct AgentConsoleRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Text(entry.label)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(labelColor)
                 .frame(width: 44, alignment: .leading)
 
@@ -1280,12 +1245,12 @@ private struct AgentTypingIndicator: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Text(label)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(secondaryTextColor)
                 .frame(width: 44, alignment: .leading)
 
-            Text("processing...")
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
+            Text("thinking...")
+                .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(secondaryTextColor)
         }
     }
@@ -1377,7 +1342,7 @@ fileprivate final class AgentCLIService {
     ) async throws -> AgentCLIResponse {
         let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPrompt.isEmpty else {
-            throw AgentCLIServiceError.commandFailed("Type a prompt or command first.")
+            throw AgentCLIServiceError.commandFailed("Type a message first.")
         }
 
         switch provider {
