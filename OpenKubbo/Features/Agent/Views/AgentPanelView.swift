@@ -187,6 +187,19 @@ struct AgentPanelView: View {
         return secondaryTextColor
     }
 
+    private func shouldShowPersonaDivider(after persona: AgentSessionPersona) -> Bool {
+        let personas = AgentSessionPersona.allCases
+
+        guard let index = personas.firstIndex(of: persona),
+              index < personas.count - 1
+        else {
+            return false
+        }
+
+        let nextPersona = personas[index + 1]
+        return selectedSessionPersona != persona && selectedSessionPersona != nextPersona
+    }
+
     private var selectedPersonaTag: some View {
         HStack(spacing: 8) {
             RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -342,8 +355,8 @@ struct AgentPanelView: View {
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundStyle(personaTextColor(for: persona))
                             .frame(minWidth: 46)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 6)
+                            .frame(maxHeight: .infinity)
+                            .padding(.horizontal, 10)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .fill(personaFillColor(for: persona))
@@ -355,15 +368,21 @@ struct AgentPanelView: View {
                     }
                     .buttonStyle(.plain)
                     .agentCursorOnHover()
+                    .frame(height: 28)
 
                     if index < AgentSessionPersona.allCases.count - 1 {
                         Rectangle()
                             .fill(dividerColor)
-                            .frame(width: 1, height: 16)
+                            .frame(width: 1, height: 14)
+                            .padding(.horizontal, 2)
+                            .opacity(shouldShowPersonaDivider(after: persona) ? 1 : 0)
                     }
                 }
             }
-            .padding(4)
+            .padding(.vertical, 3)
+            .padding(.leading, 1)
+            .padding(.trailing, 3)
+            .frame(height: 34)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(mutedCardFillColor)
@@ -408,7 +427,8 @@ struct AgentPanelView: View {
             }
             .help("Smart task generation is currently using \(smartTaskProviderLabel).")
         }
-        .padding(.horizontal, 12)
+        .padding(.leading, 6)
+        .padding(.trailing, 12)
         .frame(height: 40)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
