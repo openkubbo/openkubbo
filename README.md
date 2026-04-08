@@ -1,30 +1,80 @@
 # OpenKubbo
 
-OpenKubbo is a macOS menu bar app focused on lightweight GitHub and repository workflows.
+OpenKubbo is a macOS menu bar app for lightweight developer workflows around repositories, task cards, and CLI-backed AI assistance.
 
-It is currently distributed as a notarized macOS app outside the Mac App Store. The project is in active development and some areas are still demo-level or intentionally incomplete.
+It ships outside the Mac App Store as a notarized macOS app and is designed to stay close to the menu bar instead of behaving like a full Dock-first app.
 
-## What It Does
+## What It Does Today
 
-- Lives in the macOS menu bar instead of behaving like a standard Dock-first app.
-- Opens a task panel, settings window, and repository panel from the menu bar.
-- Supports GitHub device-flow login.
-- Loads GitHub account and repository data.
-- Includes local repository and worktree-oriented actions for repositories configured on disk.
-- Persists app settings locally on the machine.
+### Menu Bar Launcher
 
-## Current Status
+The menu bar entry can open:
 
-This project is usable, but it is not a fully polished product release yet.
+- `Kubbo Task`
+- `Repository`
+- `Terminal`
+- `Kubbo Agent`
+- `Settings`
 
-- The app is best understood as a working demo / early utility.
-- Some views and controls are still under construction.
-- GitHub login currently depends on a GitHub OAuth App Client ID being configured.
-- Some repository actions assume local developer tools and repository paths are already set up.
+It also includes a quick theme toggle.
+
+### Kubbo Task
+
+The task window is a compact floating panel for short-lived task management:
+
+- add tasks quickly
+- edit, reorder, complete, and delete tasks
+- generate smart task cards from a single idea
+- open multiple task windows
+
+Task generation is backed by the AI provider selected in Settings.
+
+### Kubbo Agent
+
+The agent window combines a CLI-backed chat surface with a task sidebar:
+
+- sends prompts through Codex or Gemini
+- keeps provider sessions alive while the window stays open
+- lets you switch providers with `/codex` or `/gemini`
+- includes a small task list beside the conversation
+- can generate task cards from an idea without leaving the window
+
+### Repository
+
+The repository window is focused on GitHub-backed repository workflows plus local actions:
+
+- load repository data from GitHub after sign-in
+- inspect issues, pull requests, branches, CI runs, tags, releases, discussions, contributors, and open commits
+- open a repository on GitHub
+- open a repository in Finder or Terminal when a local repositories folder is configured
+- clone missing repositories into the configured local root
+- switch worktrees and open Kubbo Agent from the repository panel
+
+### Settings
+
+Settings currently cover:
+
+- theme mode and accent color
+- app version and update checks
+- AI provider configuration for Codex and Gemini
+- GitHub device-flow login
+- local repositories folder selection
+
+`General` and `Shortcuts` are still marked as under construction in the UI.
+
+## Current Scope
+
+OpenKubbo is usable today, but it is still a focused utility rather than a fully polished desktop product.
+
+Current constraints to be aware of:
+
+- macOS only
+- direct distribution only; not a Mac App Store app
+- GitHub-backed features require a GitHub OAuth App Client ID
+- local repository actions assume developer tools and a local repositories root are already set up
+- task windows are created with in-memory task state per window session
 
 ## Download
-
-The recommended distribution format is a notarized `.zip` that contains `OpenKubbo.app`.
 
 Primary website:
 
@@ -33,107 +83,134 @@ Primary website:
 Typical installation flow:
 
 1. Download `OpenKubbo.zip`.
-2. Unzip the file.
+2. Unzip the archive.
 3. Move `OpenKubbo.app` to `/Applications`.
 4. Open the app.
 5. Look for the OpenKubbo icon in the macOS menu bar.
 
-Because OpenKubbo is configured as a menu bar app, it may not behave like a normal Dock app.
+## Requirements
 
-## macOS Requirements
+### Runtime
 
 - macOS 26.2 or later
 - Apple Silicon or Intel Mac
 
-## Development
+### Development
 
-### Requirements
+- Xcode 26.2 or newer
+- a macOS machine
+- an Apple Developer account if you want to sign and notarize release builds
 
-- Xcode 26 or newer
-- A macOS machine
-- Apple Developer account if you want to sign and notarize distribution builds
+Optional but useful for local development:
 
-### Open The Project
+- `codex` CLI
+- `gemini` CLI
+- `node` when either CLI is installed through a JavaScript launcher
+
+## Run Locally
+
+Open the project in Xcode:
 
 ```sh
-open /Users/docs/openkubbo/OpenKubbo.xcodeproj
+open OpenKubbo.xcodeproj
 ```
 
-Or open [OpenKubbo.xcodeproj](/Users/docs/openkubbo/OpenKubbo.xcodeproj) directly in Xcode.
-
-### Run Locally
+Then:
 
 1. Select the `OpenKubbo` scheme.
 2. Choose `My Mac`.
-3. Build and run from Xcode.
+3. Build and run.
 
 The app launches as a menu bar extra.
 
 ## GitHub Setup
 
-OpenKubbo uses GitHub device flow for authentication.
+OpenKubbo uses GitHub Device Flow for authentication.
 
-To use GitHub-backed features:
+To enable GitHub-backed features:
 
-1. Open the Settings window.
-2. Go to the GitHub section.
-3. Provide a GitHub OAuth App Client ID.
-4. Start the GitHub login flow.
-5. Complete authorization on GitHub.
+1. Open `Settings`.
+2. Go to the `GitHub` section.
+3. Paste a GitHub OAuth App Client ID.
+4. Start `Login with GitHub`.
+5. Complete authorization on GitHub's device page.
 
-GitHub tokens are stored in the macOS Keychain, not in the repository.
+GitHub tokens are stored in the macOS Keychain.
+
+## AI Provider Setup
+
+OpenKubbo supports two provider paths for task generation, and Kubbo Agent can talk through the same CLIs.
+
+### Codex
+
+OpenKubbo prefers a local Codex CLI session.
+
+Recommended setup:
+
+1. Install `codex`.
+2. In Terminal, run `codex login`.
+3. Choose ChatGPT.
+4. In OpenKubbo Settings, confirm the detected executable path.
+
+You can also store an OpenAI API key in Keychain as a fallback.
+
+### Gemini
+
+OpenKubbo can also generate task cards and answer prompts through Gemini CLI.
+
+Recommended setup:
+
+1. Install `gemini`.
+2. Run `gemini` once in Terminal and sign in with Google.
+3. In OpenKubbo Settings, confirm the detected executable path.
+
+You can also store a Gemini API key in Keychain for headless execution.
+
+### Node Runtime
+
+If your Codex or Gemini executable is a JavaScript launcher, configure a `node` executable in Settings so OpenKubbo can launch it reliably.
 
 ## Project Structure
 
-- [OpenKubbo/App](/Users/docs/openkubbo/OpenKubbo/App): app entry point and dependency wiring
-- [OpenKubbo/Core](/Users/docs/openkubbo/OpenKubbo/Core): GitHub services, persistence, theme, and shared logic
-- [OpenKubbo/Features/MenuBar](/Users/docs/openkubbo/OpenKubbo/Features/MenuBar): menu bar entry and actions
-- [OpenKubbo/Features/Task](/Users/docs/openkubbo/OpenKubbo/Features/Task): task panel UI
-- [OpenKubbo/Features/Settings](/Users/docs/openkubbo/OpenKubbo/Features/Settings): settings UI and GitHub configuration
-- [OpenKubbo/Features/Repository](/Users/docs/openkubbo/OpenKubbo/Features/Repository): repository browsing and local repository actions
+- [`OpenKubbo/App`](OpenKubbo/App): app entry point, scenes, and dependency wiring
+- [`OpenKubbo/Core`](OpenKubbo/Core): GitHub services, persistence, updates, AI provider integrations, and shared logic
+- [`OpenKubbo/Features/MenuBar`](OpenKubbo/Features/MenuBar): menu bar UI and actions
+- [`OpenKubbo/Features/Task`](OpenKubbo/Features/Task): floating task panel
+- [`OpenKubbo/Features/Agent`](OpenKubbo/Features/Agent): agent window and CLI-backed chat flow
+- [`OpenKubbo/Features/Repository`](OpenKubbo/Features/Repository): repository browser and local repository actions
+- [`OpenKubbo/Features/Settings`](OpenKubbo/Features/Settings): settings UI and provider configuration
 
-## Direct Distribution
+## Distribution And Updates
 
-This project is intended to be distributed outside the Mac App Store.
+OpenKubbo is intended to be distributed outside the Mac App Store.
 
-Release flow:
+Typical release flow:
 
 1. Archive the app in Xcode.
 2. Distribute using `Direct Distribution`.
-3. Upload to Apple notarization.
-4. Wait for `Ready to distribute`.
-5. Export the notarized app.
-6. Zip `OpenKubbo.app`.
-7. Publish the zip on [openkubbo.com](https://openkubbo.com) or attach it to a GitHub Release.
+3. Submit for notarization.
+4. Export the notarized app.
+5. Zip `OpenKubbo.app`.
+6. Publish the archive and release notes.
 
-## In-App Updates
+The app is configured for Sparkle-based in-app updates.
 
-OpenKubbo is wired to support in-app updates with Sparkle.
+Relevant release assets and settings:
 
-- The app expects an appcast feed at `https://openkubbo.com/appcast.xml`.
-- The app expects the Sparkle public EdDSA key in the `SPARKLE_PUBLIC_ED_KEY` build setting.
-- While `SPARKLE_PUBLIC_ED_KEY` is empty, the Settings update button falls back to the latest GitHub release page.
-- Use `./scripts/release/sparkle_setup_keys.sh` to generate or fetch the Sparkle key from Keychain and write the public key into the project.
-- Use `./scripts/release/sparkle_generate_appcast.sh <archives-dir> <download-url-prefix> [release-notes-url-prefix]` to build `appcast.xml` from exported release archives.
-
-Typical setup:
-
-1. Generate Sparkle keys once and store the private key outside the repository.
-2. Copy the public key into the `SPARKLE_PUBLIC_ED_KEY` build setting for the app target.
-3. Export the notarized `OpenKubbo.app` as a zip.
-4. Generate a signed `appcast.xml` for the released zip with Sparkle's publishing tools.
-5. Publish both the zip and `appcast.xml` to a stable public URL.
+- appcast feed: `https://openkubbo.com/appcast.xml`
+- Sparkle helper scripts: [`scripts/release`](scripts/release)
+- app metadata: [`OpenKubbo-Info.plist`](OpenKubbo-Info.plist)
 
 ## Versioning
 
-Recommended release flow:
+Recommended versioning flow:
 
 1. Commit the release-ready changes.
-2. Create a tag such as `v1.0.0`.
+2. Create a tag such as `v1.1.2`.
 3. Create a GitHub Release from that tag.
 4. Attach the notarized `OpenKubbo.zip`.
 
 ## Notes
 
-- `README` should track the product as it actually exists, not the intended long-term vision.
-- If you change the authentication flow, distribution flow, or minimum macOS version, update this file.
+- Keep this README aligned with the current product, not the intended long-term vision.
+- If you change authentication, AI provider setup, distribution, or minimum macOS version, update this file in the same branch.
