@@ -27,7 +27,7 @@ The task window is a compact floating panel for short-lived task management:
 - generate smart task cards from a single idea
 - open multiple task windows
 
-Task generation is backed by the AI provider selected in Settings.
+Task generation is backed by the AI provider selected in Settings. Codex can use a local CLI session or an OpenAI API key fallback. Gemini task generation currently depends on launching the local Gemini CLI.
 
 ### Kubbo Agent
 
@@ -39,12 +39,15 @@ The agent window combines a CLI-backed chat surface with a task sidebar:
 - includes a small task list beside the conversation
 - can generate task cards from an idea without leaving the window
 
+Today, those CLI-backed actions are only available in unsandboxed runs such as the `Debug` build from Xcode.
+
 ### Repository
 
 The repository window is focused on GitHub-backed repository workflows plus local actions:
 
 - load repository data from GitHub after sign-in
 - inspect issues, pull requests, branches, CI runs, tags, releases, discussions, contributors, and open commits
+- create issues, add issue comments, create issue branches, and open pull requests
 - open a repository on GitHub
 - open a repository in Finder or Terminal when a local repositories folder is configured
 - clone missing repositories into the configured local root
@@ -55,8 +58,8 @@ The repository window is focused on GitHub-backed repository workflows plus loca
 Settings currently cover:
 
 - theme mode and accent color
-- app version and update checks
-- AI provider configuration for Codex and Gemini
+- app version and Sparkle update checks
+- AI provider configuration for Codex, Gemini, and optional `node` runtime overrides
 - GitHub device-flow login
 - local repositories folder selection
 
@@ -70,6 +73,8 @@ Current constraints to be aware of:
 
 - macOS only
 - direct distribution only; not a Mac App Store app
+- the direct-distribution `Release` build is sandboxed, so Kubbo Agent and Gemini CLI-backed flows currently require the unsandboxed `Debug` build from Xcode
+- Codex task generation can still work in sandboxed builds when an OpenAI API key fallback is configured
 - GitHub-backed features require a GitHub OAuth App Client ID
 - local repository actions assume developer tools and a local repositories root are already set up
 - task windows are created with in-memory task state per window session
@@ -121,7 +126,7 @@ Then:
 2. Choose `My Mac`.
 3. Build and run.
 
-The app launches as a menu bar extra.
+The app launches as a menu bar extra. Use the `Debug` configuration when you want local Codex or Gemini CLI integration.
 
 ## GitHub Setup
 
@@ -139,11 +144,11 @@ GitHub tokens are stored in the macOS Keychain.
 
 ## AI Provider Setup
 
-OpenKubbo supports two provider paths for task generation, and Kubbo Agent can talk through the same CLIs.
+OpenKubbo supports two provider paths for task generation. Kubbo Agent uses local CLI execution directly, so the full agent experience currently requires an unsandboxed run.
 
 ### Codex
 
-OpenKubbo prefers a local Codex CLI session.
+OpenKubbo prefers a local Codex CLI session in unsandboxed runs.
 
 Recommended setup:
 
@@ -152,7 +157,7 @@ Recommended setup:
 3. Choose ChatGPT.
 4. In OpenKubbo Settings, confirm the detected executable path.
 
-You can also store an OpenAI API key in Keychain as a fallback.
+You can also store an OpenAI API key in Keychain as a fallback for task generation when local CLI launching is unavailable.
 
 ### Gemini
 
@@ -164,17 +169,18 @@ Recommended setup:
 2. Run `gemini` once in Terminal and sign in with Google.
 3. In OpenKubbo Settings, confirm the detected executable path.
 
-You can also store a Gemini API key in Keychain for headless execution.
+You can also store a Gemini API key in Keychain so OpenKubbo can inject `GEMINI_API_KEY` when it launches Gemini CLI. Gemini features still depend on being able to launch the local CLI, so they are currently limited to unsandboxed runs such as the `Debug` build.
 
 ### Node Runtime
 
-If your Codex or Gemini executable is a JavaScript launcher, configure a `node` executable in Settings so OpenKubbo can launch it reliably.
+If your Codex or Gemini executable is a JavaScript launcher, configure a `node` executable in Settings so OpenKubbo can launch it reliably in unsandboxed runs.
 
 ## Project Structure
 
 - [`OpenKubbo/App`](OpenKubbo/App): app entry point, scenes, and dependency wiring
 - [`OpenKubbo/Core`](OpenKubbo/Core): GitHub services, persistence, updates, AI provider integrations, and shared logic
 - [`OpenKubbo/Features/MenuBar`](OpenKubbo/Features/MenuBar): menu bar UI and actions
+- [`OpenKubbo/Features/Home`](OpenKubbo/Features/Home): placeholder root content kept from the project template
 - [`OpenKubbo/Features/Task`](OpenKubbo/Features/Task): floating task panel
 - [`OpenKubbo/Features/Agent`](OpenKubbo/Features/Agent): agent window and CLI-backed chat flow
 - [`OpenKubbo/Features/Repository`](OpenKubbo/Features/Repository): repository browser and local repository actions
@@ -194,6 +200,8 @@ Typical release flow:
 6. Publish the archive and release notes.
 
 The app is configured for Sparkle-based in-app updates.
+
+The current direct-distribution `Release` build is still sandboxed, so local CLI-backed features should be validated in the unsandboxed `Debug` build.
 
 Relevant release assets and settings:
 
